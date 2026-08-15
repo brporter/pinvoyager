@@ -1,0 +1,294 @@
+/* ==========================================================================
+   Preview chrome — the scaffolding around design specimens.
+
+   This file styles the DOCUMENTATION, not the product. Anything here is for
+   presenting specimens: page headers, spec labels, swatch grids, state
+   tables, device frames. Product component styles live in the component
+   preview files themselves.
+
+   Nothing in here should ever be ported into the application.
+   ========================================================================== */
+
+@import url("tokens.css");
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--pv-bg-sunken);
+  color: var(--pv-text);
+  font-family: var(--pv-font-sans);
+  font-size: var(--pv-text-base);
+  line-height: var(--pv-leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pv-doc {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--pv-space-8) var(--pv-space-4) var(--pv-space-24);
+}
+
+/* --- Page header ------------------------------------------------------- */
+
+.pv-doc-head { margin-bottom: var(--pv-space-10); }
+
+.pv-doc-eyebrow {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-wide);
+  text-transform: uppercase;
+  color: var(--pv-accent-text);
+  margin: 0 0 var(--pv-space-2);
+}
+
+.pv-doc-title {
+  font-size: var(--pv-text-3xl);
+  font-weight: var(--pv-weight-bold);
+  letter-spacing: var(--pv-tracking-tight);
+  line-height: var(--pv-leading-tight);
+  margin: 0 0 var(--pv-space-3);
+}
+
+.pv-doc-intro {
+  font-size: var(--pv-text-lg);
+  color: var(--pv-text-muted);
+  max-width: 68ch;
+  margin: 0;
+}
+
+/* --- Sections ---------------------------------------------------------- */
+
+.pv-section { margin-top: var(--pv-space-12); }
+
+.pv-section > h2 {
+  font-size: var(--pv-text-xl);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-tight);
+  margin: 0 0 var(--pv-space-2);
+  padding-bottom: var(--pv-space-2);
+  border-bottom: 1px solid var(--pv-border);
+}
+
+.pv-section > h3 {
+  font-size: var(--pv-text-base);
+  font-weight: var(--pv-weight-semibold);
+  margin: var(--pv-space-8) 0 var(--pv-space-3);
+}
+
+.pv-note {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+  max-width: 78ch;
+  margin: var(--pv-space-3) 0 var(--pv-space-5);
+}
+
+.pv-note strong { color: var(--pv-text); font-weight: var(--pv-weight-semibold); }
+
+.pv-callout {
+  border-left: 3px solid var(--pv-accent);
+  background: var(--pv-accent-subtle);
+  padding: var(--pv-space-3) var(--pv-space-4);
+  border-radius: 0 var(--pv-radius-md) var(--pv-radius-md) 0;
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  max-width: 78ch;
+  margin: var(--pv-space-4) 0;
+}
+
+.pv-callout--warn {
+  border-left-color: var(--pv-warning);
+  background: var(--pv-warning-bg);
+}
+
+/* --- Specimen surface -------------------------------------------------- */
+
+.pv-specimen {
+  background: var(--pv-bg);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-lg);
+  padding: var(--pv-space-6);
+  margin-bottom: var(--pv-space-4);
+}
+
+.pv-specimen--sunken { background: var(--pv-bg-sunken); }
+
+.pv-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pv-space-4);
+  align-items: center;
+}
+
+.pv-stack { display: flex; flex-direction: column; gap: var(--pv-space-4); }
+
+/* A labeled specimen cell — the caption sits under the thing it names. */
+.pv-cell { display: flex; flex-direction: column; gap: var(--pv-space-2); }
+
+.pv-label {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-2xs);
+  color: var(--pv-text-subtle);
+  letter-spacing: var(--pv-tracking-wide);
+  text-transform: uppercase;
+}
+
+.pv-token {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-2xs);
+  color: var(--pv-text-muted);
+  background: var(--pv-bg-sunken);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* --- Contrast badges --------------------------------------------------- */
+
+.pv-ratio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-2xs);
+  font-weight: var(--pv-weight-semibold);
+  border-radius: var(--pv-radius-full);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.pv-ratio--pass { background: var(--pv-success-bg); color: var(--pv-success); }
+.pv-ratio--fail { background: var(--pv-danger-bg);  color: var(--pv-danger); }
+.pv-ratio--na   { background: var(--pv-bg-sunken);  color: var(--pv-text-subtle); }
+
+/* --- Tables ------------------------------------------------------------ */
+
+.pv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--pv-text-sm);
+}
+
+.pv-table th {
+  text-align: left;
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
+  letter-spacing: var(--pv-tracking-wide);
+  text-transform: uppercase;
+  padding: var(--pv-space-2) var(--pv-space-3);
+  border-bottom: 1px solid var(--pv-border-strong);
+}
+
+.pv-table td {
+  padding: var(--pv-space-3);
+  border-bottom: 1px solid var(--pv-border);
+  vertical-align: middle;
+}
+
+.pv-table code {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+}
+
+/* Wide content must scroll inside its own container, never the page. */
+.pv-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* --- Device frames ----------------------------------------------------- */
+
+.pv-frames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pv-space-8);
+  align-items: flex-start;
+}
+
+.pv-frame { display: flex; flex-direction: column; gap: var(--pv-space-2); }
+
+.pv-frame-caption {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-2xs);
+  color: var(--pv-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-wide);
+}
+
+/* The viewport itself. Width is fixed to the breakpoint being demonstrated;
+   the inner document is laid out at that width honestly rather than being
+   scaled down, so what is shown is what renders. */
+.pv-viewport {
+  background: var(--pv-bg);
+  border: 1px solid var(--pv-border-strong);
+  border-radius: var(--pv-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--pv-shadow-2);
+  position: relative;
+}
+
+.pv-viewport--mobile  { width: 390px; height: 844px; }
+.pv-viewport--desktop { width: 1180px; height: 800px; }
+
+/* Desktop frames exceed the doc width on smaller displays — let the frame
+   row scroll rather than the page body. */
+@media (max-width: 1240px) {
+  .pv-frames--wide { overflow-x: auto; padding-bottom: var(--pv-space-3); }
+}
+
+.pv-viewport-scroll { height: 100%; overflow: hidden; position: relative; }
+
+/* --- Annotations ------------------------------------------------------- */
+
+.pv-annot {
+  display: flex;
+  gap: var(--pv-space-2);
+  align-items: flex-start;
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+  margin: var(--pv-space-2) 0;
+  max-width: 62ch;
+}
+
+.pv-annot-num {
+  flex: none;
+  width: 20px; height: 20px;
+  border-radius: var(--pv-radius-full);
+  background: var(--pv-accent);
+  color: var(--pv-text-on-accent);
+  font-size: var(--pv-text-2xs);
+  font-weight: var(--pv-weight-bold);
+  display: grid; place-items: center;
+  margin-top: 1px;
+}
+
+/* --- Index page -------------------------------------------------------- */
+
+.pv-index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--pv-space-3);
+}
+
+.pv-index-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: var(--pv-bg);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-lg);
+  padding: var(--pv-space-4);
+  transition: border-color var(--pv-duration-fast) var(--pv-ease-out),
+              box-shadow var(--pv-duration-fast) var(--pv-ease-out);
+}
+
+.pv-index-card:hover { border-color: var(--pv-accent); box-shadow: var(--pv-shadow-2); }
+.pv-index-card:focus-visible { outline: none; box-shadow: var(--pv-focus-ring); }
+
+.pv-index-card strong { display: block; font-size: var(--pv-text-base); margin-bottom: 2px; }
+.pv-index-card span { font-size: var(--pv-text-sm); color: var(--pv-text-muted); }
+
+@media (max-width: 480px) {
+  .pv-doc { padding: var(--pv-space-6) var(--pv-space-3) var(--pv-space-16); }
+  .pv-doc-title { font-size: var(--pv-text-2xl); }
+}

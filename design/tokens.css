@@ -1,0 +1,401 @@
+/* ==========================================================================
+   PinVoyager design tokens
+   --------------------------------------------------------------------------
+   The single source of truth for color, type, spacing, radii, elevation, and
+   motion. The React application imports THIS FILE. Values are never
+   transcribed into a JavaScript theme object — editing a token here must
+   change the running application, or the design system is decorative.
+
+   Structure:
+     1. Primitives   — raw ramps. Components must not use these directly.
+     2. Semantics    — role-named tokens. This is what components use.
+     3. Type / space / radius / elevation / motion
+     4. Dark theme   — semantics remapped; primitives never change.
+
+   Theme resolution is three-state: an explicit choice stamps
+   data-theme="dark" | "light" on <html>; the default "system" setting stamps
+   nothing and falls through to prefers-color-scheme.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------------
+     1. PRIMITIVES — do not reference these from components.
+
+     A warm neutral ramp. The chrome is deliberately desaturated: photographs
+     are the content of this product, and saturated interface color competes
+     with them. Exactly one accent hue carries interaction, and a separate
+     warm hue is reserved for map pins so that a pin never reads as a button.
+     --------------------------------------------------------------------- */
+
+  --pv-neutral-0:   #ffffff;
+  --pv-neutral-25:  #fafaf9;
+  --pv-neutral-50:  #f5f4f2;
+  --pv-neutral-100: #ebe9e6;
+  --pv-neutral-200: #d9d6d2;
+  --pv-neutral-300: #bcb8b3;
+  --pv-neutral-400: #8f8a85;
+  --pv-neutral-500: #6e6963;
+  --pv-neutral-600: #57524d;
+  --pv-neutral-700: #423d39;
+  --pv-neutral-800: #2c2825;
+  --pv-neutral-900: #1b1817;
+  --pv-neutral-950: #0f0d0c;
+
+  /* Accent — deep teal. Interaction, links, focus, selection. */
+  --pv-accent-50:  #eefbf8;
+  --pv-accent-100: #d2f4ee;
+  --pv-accent-200: #a8e8de;
+  --pv-accent-300: #6dd3c6;
+  --pv-accent-400: #34b3a5;
+  --pv-accent-500: #14988b;
+  --pv-accent-600: #0c7a71;
+  --pv-accent-700: #0c615b;
+  --pv-accent-800: #0d4d49;
+  --pv-accent-900: #0c3f3c;
+
+  /* Pin — warm amber-orange. Map markers only. Reads clearly against a
+     desaturated basemap and is never used for interactive chrome. */
+  --pv-pin-100: #ffedd5;
+  --pv-pin-300: #fdba74;
+  --pv-pin-500: #f27318;
+  --pv-pin-600: #d95c09;
+  --pv-pin-700: #b04708;
+  --pv-pin-800: #8a3907;
+
+  /* Semantic hues */
+  --pv-green-100: #d9f2e2;
+  --pv-green-600: #17803f;
+  --pv-green-700: #126433;
+  --pv-amber-100: #fdf0d2;
+  --pv-amber-600: #a86209;
+  --pv-amber-700: #874d07;
+  --pv-red-100:   #fbe0de;
+  --pv-red-500:   #d93a34;
+  --pv-red-600:   #b8302b;
+  --pv-red-700:   #962622;
+
+  /* ---------------------------------------------------------------------
+     2. SEMANTIC TOKENS — light theme. Components use only these.
+     --------------------------------------------------------------------- */
+
+  /* Surfaces */
+  --pv-bg:            var(--pv-neutral-0);
+  --pv-bg-subtle:     var(--pv-neutral-25);
+  --pv-bg-sunken:     var(--pv-neutral-50);
+  --pv-bg-raised:     var(--pv-neutral-0);
+  --pv-bg-hover:      var(--pv-neutral-50);
+  --pv-bg-active:     var(--pv-neutral-100);
+  --pv-bg-inverse:    var(--pv-neutral-900);
+
+  /* Text */
+  --pv-text:          var(--pv-neutral-900);
+  --pv-text-muted:    var(--pv-neutral-600);
+  --pv-text-subtle:   var(--pv-neutral-500);
+  --pv-text-inverse:  var(--pv-neutral-0);
+  --pv-text-on-accent: var(--pv-neutral-0);
+
+  /* Borders
+     --pv-border        decorative dividers and card edges. Low contrast by
+                        design; WCAG exempts purely decorative separators.
+     --pv-border-strong REQUIRED for any control boundary — inputs, selects,
+                        checkboxes, secondary buttons. Meets the 3:1
+                        non-text contrast floor (measured 3.42:1 on --pv-bg,
+                        3.11:1 on --pv-bg-sunken). Do not substitute
+                        --pv-border here; a 1.45:1 input outline is invisible
+                        to a large number of people. */
+  --pv-border:        var(--pv-neutral-200);
+  --pv-border-strong: var(--pv-neutral-400);
+  --pv-border-inverse: var(--pv-neutral-700);
+
+  /* Accent / interaction */
+  --pv-accent:        var(--pv-accent-600);
+  --pv-accent-hover:  var(--pv-accent-700);
+  --pv-accent-active: var(--pv-accent-800);
+  --pv-accent-subtle: var(--pv-accent-50);
+  --pv-accent-border: var(--pv-accent-200);
+  --pv-accent-text:   var(--pv-accent-700);
+
+  /* Focus — always visible, never removed. 3:1 minimum against both the
+     component and the surface behind it. */
+  --pv-focus:         var(--pv-accent-600);
+  --pv-focus-ring:    0 0 0 2px var(--pv-bg), 0 0 0 4px var(--pv-focus);
+
+  /* Map
+     A bare pin carries no text, so --pv-pin only needs the 3:1 non-text
+     floor against the basemap (measured 3.83:1 on white). Cluster bubbles DO
+     carry a count, so they use the darker --pv-cluster-bg, which reaches
+     5.60:1 against --pv-pin-text. Never place text on --pv-pin directly. */
+  --pv-pin:           var(--pv-pin-600);
+  --pv-pin-selected:  var(--pv-accent-600);
+  --pv-pin-text:      var(--pv-neutral-0);
+  --pv-pin-stroke:    var(--pv-neutral-0);
+  --pv-cluster-bg:    var(--pv-pin-700);
+  --pv-map-area-fill:   rgb(12 122 113 / 0.14);
+  --pv-map-area-stroke: rgb(12 122 113 / 0.55);
+
+  /* Status */
+  --pv-success:       var(--pv-green-600);
+  --pv-success-bg:    var(--pv-green-100);
+  --pv-warning:       var(--pv-amber-600);
+  --pv-warning-bg:    var(--pv-amber-100);
+  --pv-danger:        var(--pv-red-600);
+  --pv-danger-hover:  var(--pv-red-700);
+  --pv-danger-bg:     var(--pv-red-100);
+
+  /* Overlays — lightbox scrim, sheet backdrop, image gradients */
+  --pv-overlay:        rgb(15 13 12 / 0.62);
+  --pv-overlay-strong: rgb(15 13 12 / 0.88);
+  --pv-scrim-gradient: linear-gradient(to top, rgb(15 13 12 / 0.78) 0%, rgb(15 13 12 / 0) 62%);
+
+  /* ---------------------------------------------------------------------
+     3a. TYPOGRAPHY
+
+     System font stack only. The design project enforces a strict CSP that
+     blocks external hosts, so a webfont would silently fail to load — and
+     a system stack is the right call for a photo product anyway: no layout
+     shift, no render-blocking request.
+     --------------------------------------------------------------------- */
+
+  --pv-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+                  "Helvetica Neue", Arial, sans-serif;
+  --pv-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                  "Liberation Mono", monospace;
+
+  /* Type scale — 1.25 major third, rounded to whole pixels at 16px root */
+  --pv-text-2xs:  0.6875rem;  /* 11px — metadata, pin counts */
+  --pv-text-xs:   0.75rem;    /* 12px — captions, labels */
+  --pv-text-sm:   0.875rem;   /* 14px — secondary UI */
+  --pv-text-base: 1rem;       /* 16px — body. Never smaller on mobile inputs,
+                                 or iOS zooms the viewport on focus. */
+  --pv-text-lg:   1.125rem;   /* 18px — lead paragraphs */
+  --pv-text-xl:   1.375rem;   /* 22px — card and section titles */
+  --pv-text-2xl:  1.75rem;    /* 28px — screen titles */
+  --pv-text-3xl:  2.25rem;    /* 36px — voyage titles */
+  --pv-text-4xl:  3rem;       /* 48px — landing hero */
+
+  --pv-leading-tight:   1.15;
+  --pv-leading-snug:    1.3;
+  --pv-leading-normal:  1.5;
+  --pv-leading-relaxed: 1.65;
+
+  --pv-weight-normal:   400;
+  --pv-weight-medium:   500;
+  --pv-weight-semibold: 600;
+  --pv-weight-bold:     700;
+
+  --pv-tracking-tight:  -0.02em;
+  --pv-tracking-normal: 0;
+  --pv-tracking-wide:   0.04em;
+
+  /* ---------------------------------------------------------------------
+     3b. SPACING — 4px base
+     --------------------------------------------------------------------- */
+
+  --pv-space-0:  0;
+  --pv-space-1:  0.25rem;  /*  4px */
+  --pv-space-2:  0.5rem;   /*  8px */
+  --pv-space-3:  0.75rem;  /* 12px */
+  --pv-space-4:  1rem;     /* 16px */
+  --pv-space-5:  1.25rem;  /* 20px */
+  --pv-space-6:  1.5rem;   /* 24px */
+  --pv-space-8:  2rem;     /* 32px */
+  --pv-space-10: 2.5rem;   /* 40px */
+  --pv-space-12: 3rem;     /* 48px */
+  --pv-space-16: 4rem;     /* 64px */
+  --pv-space-24: 6rem;     /* 96px */
+
+  /* ---------------------------------------------------------------------
+     3c. RADII
+     --------------------------------------------------------------------- */
+
+  --pv-radius-sm:   4px;
+  --pv-radius-md:   8px;
+  --pv-radius-lg:   12px;
+  --pv-radius-xl:   18px;
+  --pv-radius-2xl:  26px;
+  --pv-radius-full: 9999px;
+
+  /* ---------------------------------------------------------------------
+     3d. ELEVATION
+
+     Four levels, no more. Shadows are warm-tinted rather than pure black so
+     they sit correctly on the warm neutral surfaces.
+     --------------------------------------------------------------------- */
+
+  --pv-shadow-1: 0 1px 2px rgb(27 24 23 / 0.06),
+                 0 1px 3px rgb(27 24 23 / 0.08);
+  --pv-shadow-2: 0 2px 4px rgb(27 24 23 / 0.05),
+                 0 4px 10px rgb(27 24 23 / 0.09);
+  --pv-shadow-3: 0 6px 14px rgb(27 24 23 / 0.10),
+                 0 12px 28px rgb(27 24 23 / 0.11);
+  --pv-shadow-4: 0 12px 24px rgb(27 24 23 / 0.13),
+                 0 28px 60px rgb(27 24 23 / 0.17);
+
+  /* ---------------------------------------------------------------------
+     3e. MOTION
+
+     Short and purposeful. Every duration below is overridden to ~0 under
+     prefers-reduced-motion at the bottom of this file.
+     --------------------------------------------------------------------- */
+
+  --pv-duration-instant: 80ms;
+  --pv-duration-fast:    140ms;
+  --pv-duration-base:    220ms;
+  --pv-duration-slow:    360ms;
+
+  --pv-ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --pv-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --pv-ease-sheet:  cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ---------------------------------------------------------------------
+     3f. LAYOUT
+
+     Breakpoints are documented here as values but must be written literally
+     in media queries — custom properties are not valid in media conditions.
+       sm 480px | md 768px | lg 1024px | xl 1280px
+     --------------------------------------------------------------------- */
+
+  --pv-container-max:   1280px;
+  --pv-container-pad:   var(--pv-space-4);
+  --pv-container-pad-lg: var(--pv-space-8);
+
+  --pv-header-h:        56px;
+  --pv-tabbar-h:        60px;   /* mobile bottom nav */
+  --pv-touch-min:       44px;   /* minimum touch target, every platform */
+  --pv-sheet-peek:      168px;  /* collapsed photo sheet height */
+}
+
+/* ==========================================================================
+   4. DARK THEME
+
+   Semantics remap; primitives are untouched. Surfaces lift as they come
+   forward rather than dropping — shadow reads poorly on dark, so elevation
+   is carried by surface lightness. The accent lightens because a 600-weight
+   teal has insufficient contrast on a near-black background.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pv-bg:            var(--pv-neutral-950);
+    --pv-bg-subtle:     var(--pv-neutral-900);
+    --pv-bg-sunken:     #080706;
+    --pv-bg-raised:     var(--pv-neutral-900);
+    --pv-bg-hover:      var(--pv-neutral-800);
+    --pv-bg-active:     var(--pv-neutral-700);
+    --pv-bg-inverse:    var(--pv-neutral-50);
+
+    --pv-text:          var(--pv-neutral-50);
+    --pv-text-muted:    var(--pv-neutral-300);
+    --pv-text-subtle:   var(--pv-neutral-400);
+    --pv-text-inverse:  var(--pv-neutral-900);
+    --pv-text-on-accent: var(--pv-neutral-950);
+
+    --pv-border:        var(--pv-neutral-800);
+    --pv-border-strong: var(--pv-neutral-500);
+    --pv-border-inverse: var(--pv-neutral-200);
+
+    --pv-accent:        var(--pv-accent-300);
+    --pv-accent-hover:  var(--pv-accent-200);
+    --pv-accent-active: var(--pv-accent-100);
+    --pv-accent-subtle: var(--pv-accent-900);
+    --pv-accent-border: var(--pv-accent-800);
+    --pv-accent-text:   var(--pv-accent-300);
+
+    --pv-focus:         var(--pv-accent-300);
+
+    --pv-pin:           var(--pv-pin-500);
+    --pv-pin-selected:  var(--pv-accent-300);
+    --pv-pin-text:      var(--pv-neutral-950);
+    --pv-pin-stroke:    var(--pv-neutral-950);
+    --pv-cluster-bg:    var(--pv-pin-600);
+    --pv-map-area-fill:   rgb(109 211 198 / 0.16);
+    --pv-map-area-stroke: rgb(109 211 198 / 0.60);
+
+    --pv-success:       #5cc98a;
+    --pv-success-bg:    #10301d;
+    --pv-warning:       #e9a943;
+    --pv-warning-bg:    #35240a;
+    --pv-danger:        #f08a84;
+    --pv-danger-hover:  #f6a9a4;
+    --pv-danger-bg:     #3a1614;
+
+    --pv-overlay:        rgb(0 0 0 / 0.72);
+    --pv-overlay-strong: rgb(0 0 0 / 0.92);
+
+    --pv-shadow-1: 0 1px 2px rgb(0 0 0 / 0.5);
+    --pv-shadow-2: 0 2px 6px rgb(0 0 0 / 0.55);
+    --pv-shadow-3: 0 8px 20px rgb(0 0 0 / 0.6);
+    --pv-shadow-4: 0 16px 40px rgb(0 0 0 / 0.68);
+  }
+}
+
+/* Explicit dark choice — duplicated so the toggle wins over system in both
+   directions. Any change above must be mirrored here. */
+:root[data-theme="dark"] {
+  --pv-bg:            var(--pv-neutral-950);
+  --pv-bg-subtle:     var(--pv-neutral-900);
+  --pv-bg-sunken:     #080706;
+  --pv-bg-raised:     var(--pv-neutral-900);
+  --pv-bg-hover:      var(--pv-neutral-800);
+  --pv-bg-active:     var(--pv-neutral-700);
+  --pv-bg-inverse:    var(--pv-neutral-50);
+
+  --pv-text:          var(--pv-neutral-50);
+  --pv-text-muted:    var(--pv-neutral-300);
+  --pv-text-subtle:   var(--pv-neutral-400);
+  --pv-text-inverse:  var(--pv-neutral-900);
+  --pv-text-on-accent: var(--pv-neutral-950);
+
+  --pv-border:        var(--pv-neutral-800);
+  --pv-border-strong: var(--pv-neutral-500);
+  --pv-border-inverse: var(--pv-neutral-200);
+
+  --pv-accent:        var(--pv-accent-300);
+  --pv-accent-hover:  var(--pv-accent-200);
+  --pv-accent-active: var(--pv-accent-100);
+  --pv-accent-subtle: var(--pv-accent-900);
+  --pv-accent-border: var(--pv-accent-800);
+  --pv-accent-text:   var(--pv-accent-300);
+
+  --pv-focus:         var(--pv-accent-300);
+
+  --pv-pin:           var(--pv-pin-500);
+  --pv-pin-selected:  var(--pv-accent-300);
+  --pv-pin-text:      var(--pv-neutral-950);
+  --pv-pin-stroke:    var(--pv-neutral-950);
+  --pv-cluster-bg:    var(--pv-pin-600);
+  --pv-map-area-fill:   rgb(109 211 198 / 0.16);
+  --pv-map-area-stroke: rgb(109 211 198 / 0.60);
+
+  --pv-success:       #5cc98a;
+  --pv-success-bg:    #10301d;
+  --pv-warning:       #e9a943;
+  --pv-warning-bg:    #35240a;
+  --pv-danger:        #f08a84;
+  --pv-danger-hover:  #f6a9a4;
+  --pv-danger-bg:     #3a1614;
+
+  --pv-overlay:        rgb(0 0 0 / 0.72);
+  --pv-overlay-strong: rgb(0 0 0 / 0.92);
+
+  --pv-shadow-1: 0 1px 2px rgb(0 0 0 / 0.5);
+  --pv-shadow-2: 0 2px 6px rgb(0 0 0 / 0.55);
+  --pv-shadow-3: 0 8px 20px rgb(0 0 0 / 0.6);
+  --pv-shadow-4: 0 16px 40px rgb(0 0 0 / 0.68);
+}
+
+/* ==========================================================================
+   REDUCED MOTION
+
+   Collapse durations at the token level so every component inherits the
+   preference without each one re-implementing the media query.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pv-duration-instant: 1ms;
+    --pv-duration-fast:    1ms;
+    --pv-duration-base:    1ms;
+    --pv-duration-slow:    1ms;
+  }
+}

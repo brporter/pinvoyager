@@ -1,0 +1,171 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Typography — PinVoyager Foundations</title>
+<link rel="stylesheet" href="../preview.css">
+<style>
+  .type-row {
+    display: flex; align-items: baseline; gap: var(--pv-space-4);
+    padding: var(--pv-space-3) 0;
+    border-bottom: 1px solid var(--pv-border);
+  }
+  .type-row:last-child { border-bottom: 0; }
+  .type-meta { flex: none; width: 150px; }
+  .type-sample { flex: 1; min-width: 0; }
+  .role-4xl  { font-size: var(--pv-text-4xl);  font-weight: var(--pv-weight-bold);     line-height: var(--pv-leading-tight); letter-spacing: var(--pv-tracking-tight); }
+  .role-3xl  { font-size: var(--pv-text-3xl);  font-weight: var(--pv-weight-bold);     line-height: var(--pv-leading-tight); letter-spacing: var(--pv-tracking-tight); }
+  .role-2xl  { font-size: var(--pv-text-2xl);  font-weight: var(--pv-weight-semibold); line-height: var(--pv-leading-snug);  letter-spacing: var(--pv-tracking-tight); }
+  .role-xl   { font-size: var(--pv-text-xl);   font-weight: var(--pv-weight-semibold); line-height: var(--pv-leading-snug); }
+  .role-lg   { font-size: var(--pv-text-lg);   font-weight: var(--pv-weight-normal);   line-height: var(--pv-leading-relaxed); }
+  .role-base { font-size: var(--pv-text-base); font-weight: var(--pv-weight-normal);   line-height: var(--pv-leading-normal); }
+  .role-sm   { font-size: var(--pv-text-sm);   font-weight: var(--pv-weight-normal);   line-height: var(--pv-leading-normal); }
+  .role-xs   { font-size: var(--pv-text-xs);   font-weight: var(--pv-weight-medium);   line-height: var(--pv-leading-normal); }
+  .role-2xs  { font-size: var(--pv-text-2xs);  font-weight: var(--pv-weight-semibold); letter-spacing: var(--pv-tracking-wide); text-transform: uppercase; }
+  .measure-demo { max-width: 68ch; }
+  .weights { display: flex; flex-wrap: wrap; gap: var(--pv-space-6); }
+</style>
+</head>
+<body>
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Foundations</p>
+    <h1 class="pv-doc-title">Typography</h1>
+    <p class="pv-doc-intro">
+      A system font stack and a nine-step scale. No webfonts: the design project blocks
+      external hosts outright, and a photo-heavy product has better uses for that request
+      budget than a typeface.
+    </p>
+  </header>
+
+  <div class="pv-callout">
+    <strong>Why system fonts, beyond the CSP.</strong> No render-blocking request, no flash of
+    unstyled or invisible text, no layout shift when a face swaps in, and native rendering on
+    every platform. The cost is that the product does not have a distinctive typographic
+    voice — a real tradeoff, and one worth revisiting if a brand direction emerges.
+  </div>
+
+  <section class="pv-section">
+    <h2>Scale</h2>
+    <p class="pv-note">
+      A 1.25 major-third ratio, rounded to whole pixels at a 16px root. Each step lists the
+      role it serves — the roles are the point, not the numbers.
+    </p>
+
+    <div class="pv-specimen">
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">4xl · 48px</div><div class="pv-token">--pv-text-4xl</div></div>
+        <div class="type-sample"><div class="role-4xl">Voyages</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">3xl · 36px</div><div class="pv-token">--pv-text-3xl</div></div>
+        <div class="type-sample"><div class="role-3xl">Three weeks in Hokkaido</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">2xl · 28px</div><div class="pv-token">--pv-text-2xl</div></div>
+        <div class="type-sample"><div class="role-2xl">Screen title</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">xl · 22px</div><div class="pv-token">--pv-text-xl</div></div>
+        <div class="type-sample"><div class="role-xl">Card and section title</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">lg · 18px</div><div class="pv-token">--pv-text-lg</div></div>
+        <div class="type-sample"><div class="role-lg">Lead paragraph, voyage description</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">base · 16px</div><div class="pv-token">--pv-text-base</div></div>
+        <div class="type-sample"><div class="role-base">Body text and every form input</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">sm · 14px</div><div class="pv-token">--pv-text-sm</div></div>
+        <div class="type-sample"><div class="role-sm">Secondary interface text, buttons</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">xs · 12px</div><div class="pv-token">--pv-text-xs</div></div>
+        <div class="type-sample"><div class="role-xs">Captions, field labels, timestamps</div></div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="pv-label">2xs · 11px</div><div class="pv-token">--pv-text-2xs</div></div>
+        <div class="type-sample"><div class="role-2xs">Eyebrow · pin count · metadata</div></div>
+      </div>
+    </div>
+
+    <div class="pv-callout pv-callout--warn">
+      <strong>Form inputs never go below 16px on mobile.</strong> iOS Safari zooms the viewport
+      when a focused input has a font size under 16px, which throws the layout off and is
+      jarring mid-form. Use <code>--pv-text-base</code> for the input itself and
+      <code>--pv-text-xs</code> for its label.
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Weights</h2>
+    <div class="pv-specimen">
+      <div class="weights">
+        <div class="pv-cell">
+          <div style="font-size:var(--pv-text-xl);font-weight:400">Regular</div>
+          <span class="pv-token">--pv-weight-normal · 400</span>
+          <span class="pv-label">Body</span>
+        </div>
+        <div class="pv-cell">
+          <div style="font-size:var(--pv-text-xl);font-weight:500">Medium</div>
+          <span class="pv-token">--pv-weight-medium · 500</span>
+          <span class="pv-label">Labels, buttons</span>
+        </div>
+        <div class="pv-cell">
+          <div style="font-size:var(--pv-text-xl);font-weight:600">Semibold</div>
+          <span class="pv-token">--pv-weight-semibold · 600</span>
+          <span class="pv-label">Headings</span>
+        </div>
+        <div class="pv-cell">
+          <div style="font-size:var(--pv-text-xl);font-weight:700">Bold</div>
+          <span class="pv-token">--pv-weight-bold · 700</span>
+          <span class="pv-label">Display only</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Line height and measure</h2>
+    <p class="pv-note">
+      Four line-height steps: <code>tight</code> 1.15 for display, <code>snug</code> 1.3 for
+      headings, <code>normal</code> 1.5 for interface text, <code>relaxed</code> 1.65 for
+      sustained reading.
+    </p>
+
+    <div class="pv-specimen">
+      <p class="pv-label" style="margin-top:0">Measure capped at 68ch</p>
+      <p class="measure-demo" style="line-height:var(--pv-leading-relaxed);color:var(--pv-text-muted)">
+        Voyage descriptions are the only long-form text in the product, and they are capped at
+        roughly 68 characters per line. Beyond about 75 characters the eye loses its place on
+        the return sweep; below about 45 it breaks the rhythm of reading. Everything else in
+        the interface is short enough that measure does not come up.
+      </p>
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Roles in context</h2>
+    <p class="pv-note">The scale as it actually appears on a voyage card.</p>
+    <div class="pv-specimen">
+      <div style="max-width:420px">
+        <div class="role-2xs" style="color:var(--pv-accent-text)">Voyage</div>
+        <div class="role-2xl" style="margin:var(--pv-space-1) 0 var(--pv-space-2)">Three weeks in Hokkaido</div>
+        <div class="role-base" style="color:var(--pv-text-muted);margin-bottom:var(--pv-space-3)">
+          Late winter, mostly on foot, mostly in the snow.
+        </div>
+        <div class="role-xs" style="color:var(--pv-text-subtle)">
+          48 photos · 12 places · updated 3 days ago
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

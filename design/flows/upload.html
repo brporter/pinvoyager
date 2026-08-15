@@ -1,0 +1,244 @@
+<!-- @dsCard group="Flows" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload pipeline — PinVoyager Flows</title>
+<link rel="stylesheet" href="../preview.css">
+<style>
+  .flow { background: var(--pv-bg); border: 1px solid var(--pv-border); border-radius: var(--pv-radius-lg); padding: var(--pv-space-4); }
+  .flow svg { display: block; min-width: 940px; }
+  .fl-node   { fill: var(--pv-bg-subtle); stroke: var(--pv-border-strong); stroke-width: 1.5; }
+  .fl-start  { fill: var(--pv-accent-subtle); stroke: var(--pv-accent); stroke-width: 1.5; }
+  .fl-decide { fill: var(--pv-bg); stroke: var(--pv-accent); stroke-width: 1.5; stroke-dasharray: 5 3; }
+  .fl-fail   { fill: var(--pv-danger-bg); stroke: var(--pv-danger); stroke-width: 1.5; }
+  .fl-warn   { fill: var(--pv-warning-bg); stroke: var(--pv-warning); stroke-width: 1.5; }
+  .fl-ok     { fill: var(--pv-success-bg); stroke: var(--pv-success); stroke-width: 1.5; }
+  .fl-t      { font-family: var(--pv-font-sans); font-size: 12.5px; fill: var(--pv-text); }
+  .fl-t-b    { font-weight: 600; }
+  .fl-t-s    { font-size: 11px; fill: var(--pv-text-muted); }
+  .fl-edge   { stroke: var(--pv-text-subtle); stroke-width: 1.5; fill: none; }
+  .fl-label  { font-family: var(--pv-font-mono); font-size: 10px; fill: var(--pv-text-subtle); }
+  .fl-arrow  { fill: var(--pv-text-subtle); }
+</style>
+</head>
+<body>
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Flows</p>
+    <h1 class="pv-doc-title">Upload pipeline</h1>
+    <p class="pv-doc-intro">
+      From file selection to a photo placed on a map. Most of this diagram is rejection paths,
+      which is the correct proportion — an upload endpoint that accepts arbitrary bytes from
+      the internet is the most exposed surface in the product.
+    </p>
+  </header>
+
+  <div class="pv-callout pv-callout--warn">
+    <strong>Two branches here are load-bearing and easy to skip.</strong> The variant
+    re-encode must strip all metadata, or the granularity feature is decorative and leaks exact
+    GPS to anyone who downloads a file. And the no-GPS branch is not an error case — it is the
+    normal outcome for screenshots, scans, and any camera with location services off.
+  </div>
+
+  <section class="pv-section">
+    <h2>Ingest and validation</h2>
+
+    <div class="flow pv-scroll">
+      <svg viewBox="0 0 940 900" role="img" aria-label="Upload validation and processing flow">
+        <defs>
+          <marker id="au" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" class="fl-arrow"/>
+          </marker>
+        </defs>
+
+        <rect class="fl-start" x="40" y="24" width="300" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="190" y="51" text-anchor="middle">User selects or drops files</text>
+
+        <rect class="fl-node" x="40" y="100" width="300" height="58" rx="8"/>
+        <text class="fl-t" x="190" y="123" text-anchor="middle">Client-side filter — a courtesy only</text>
+        <text class="fl-t fl-t-s" x="190" y="141" text-anchor="middle">Never trusted by the server</text>
+
+        <rect class="fl-node" x="40" y="190" width="300" height="58" rx="8"/>
+        <text class="fl-t" x="190" y="213" text-anchor="middle">POST /api/photos · multipart</text>
+        <text class="fl-t fl-t-s" x="190" y="231" text-anchor="middle">Streamed to disk, not buffered in memory</text>
+
+        <rect class="fl-decide" x="40" y="280" width="300" height="52" rx="8"/>
+        <text class="fl-t fl-t-b" x="190" y="305" text-anchor="middle">Within the size cap?</text>
+        <text class="fl-t fl-t-s" x="190" y="322" text-anchor="middle">Checked before reading the body</text>
+
+        <rect class="fl-fail" x="440" y="278" width="280" height="56" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="301" text-anchor="middle">413 Payload Too Large</text>
+        <text class="fl-t fl-t-s" x="580" y="319" text-anchor="middle">Honest status, not a reset connection</text>
+
+        <rect class="fl-decide" x="40" y="364" width="300" height="66" rx="8"/>
+        <text class="fl-t fl-t-b" x="190" y="387" text-anchor="middle">Magic bytes say it is an image?</text>
+        <text class="fl-t fl-t-s" x="190" y="405" text-anchor="middle">Extension and client Content-Type</text>
+        <text class="fl-t fl-t-s" x="190" y="421" text-anchor="middle">are ignored entirely</text>
+
+        <rect class="fl-fail" x="440" y="367" width="280" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="390" text-anchor="middle">415 — not an image</text>
+        <text class="fl-t fl-t-s" x="580" y="408" text-anchor="middle">A .jpg containing HTML lands here.</text>
+        <text class="fl-t fl-t-s" x="580" y="424" text-anchor="middle">This is the stored-XSS defence.</text>
+
+        <rect class="fl-decide" x="40" y="462" width="300" height="66" rx="8"/>
+        <text class="fl-t fl-t-b" x="190" y="485" text-anchor="middle">Dimensions within limits?</text>
+        <text class="fl-t fl-t-s" x="190" y="503" text-anchor="middle">Header read only — pixel count checked</text>
+        <text class="fl-t fl-t-s" x="190" y="519" text-anchor="middle">before any full decode</text>
+
+        <rect class="fl-fail" x="440" y="465" width="280" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="488" text-anchor="middle">422 — rejected</text>
+        <text class="fl-t fl-t-s" x="580" y="506" text-anchor="middle">A 50,000 × 50,000 PNG never gets</text>
+        <text class="fl-t fl-t-s" x="580" y="522" text-anchor="middle">decoded. Decompression-bomb guard.</text>
+
+        <rect class="fl-node" x="40" y="560" width="300" height="58" rx="8"/>
+        <text class="fl-t" x="190" y="583" text-anchor="middle">Hash content → store at sharded path</text>
+        <text class="fl-t fl-t-s" x="190" y="601" text-anchor="middle">Never a user-supplied filename</text>
+
+        <rect class="fl-node" x="440" y="560" width="280" height="58" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="583" text-anchor="middle">Identical bytes already stored?</text>
+        <text class="fl-t fl-t-s" x="580" y="601" text-anchor="middle">Reuse the file · reference-count it</text>
+
+        <rect class="fl-node" x="40" y="650" width="300" height="58" rx="8"/>
+        <text class="fl-t" x="190" y="673" text-anchor="middle">Read EXIF: time, GPS, orientation</text>
+        <text class="fl-t fl-t-s" x="190" y="691" text-anchor="middle">Absent GPS is expected, not an error</text>
+
+        <rect class="fl-ok" x="40" y="740" width="300" height="76" rx="8"/>
+        <text class="fl-t fl-t-b" x="190" y="763" text-anchor="middle">Generate variants — metadata stripped</text>
+        <text class="fl-t fl-t-s" x="190" y="781" text-anchor="middle">Re-encoded from decoded pixels.</text>
+        <text class="fl-t fl-t-s" x="190" y="797" text-anchor="middle">Orientation baked in. No GPS, no time,</text>
+        <text class="fl-t fl-t-s" x="190" y="813" text-anchor="middle">no camera model survives.</text>
+
+        <rect class="fl-warn" x="440" y="740" width="280" height="76" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="763" text-anchor="middle">Why this box is not optional</text>
+        <text class="fl-t fl-t-s" x="580" y="781" text-anchor="middle">Every voyage is public. If the served</text>
+        <text class="fl-t fl-t-s" x="580" y="797" text-anchor="middle">file keeps its GPS EXIF, granularity</text>
+        <text class="fl-t fl-t-s" x="580" y="813" text-anchor="middle">is cosmetic and leaks exact position.</text>
+
+        <rect class="fl-ok" x="40" y="846" width="300" height="40" rx="20"/>
+        <text class="fl-t fl-t-b" x="190" y="871" text-anchor="middle">Photo ready → review step</text>
+
+        <path class="fl-edge" d="M190,68 L190,96"   marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,158 L190,186" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,248 L190,276" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,332 L190,360" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,430 L190,458" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,528 L190,556" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,618 L190,646" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,708 L190,736" marker-end="url(#au)"/>
+        <path class="fl-edge" d="M190,816 L190,842" marker-end="url(#au)"/>
+
+        <path class="fl-edge" d="M340,306 L436,306" marker-end="url(#au)"/>
+        <text class="fl-label" x="368" y="300">no</text>
+        <path class="fl-edge" d="M340,397 L436,397" marker-end="url(#au)"/>
+        <text class="fl-label" x="368" y="391">no</text>
+        <path class="fl-edge" d="M340,495 L436,495" marker-end="url(#au)"/>
+        <text class="fl-label" x="368" y="489">no</text>
+        <path class="fl-edge" d="M340,589 L436,589" marker-end="url(#au)"/>
+      </svg>
+    </div>
+
+    <div class="pv-annot"><span class="pv-annot-num">1</span><span><strong>Validation is ordered cheapest-first.</strong> Size cap before body read, magic bytes before decode, dimensions before full decode. Each gate is there so the expensive operation behind it never runs on hostile input.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">2</span><span><strong>Content-addressed paths remove path traversal as a category.</strong> No user-supplied string ever reaches the filesystem, so there is no <code>../</code> to defend against.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">3</span><span><strong>Deduplication requires reference counting.</strong> Two users can upload identical bytes and share one file — so deleting one photo must not remove the file another photo still points at.</span></div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Placement — including the no-GPS branch</h2>
+
+    <div class="flow pv-scroll">
+      <svg viewBox="0 0 940 400" role="img" aria-label="Photo placement flow including photos without GPS">
+        <defs>
+          <marker id="au2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" class="fl-arrow"/>
+          </marker>
+        </defs>
+
+        <rect class="fl-start" x="40" y="24" width="280" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="180" y="51" text-anchor="middle">Photo stored and processed</text>
+
+        <rect class="fl-decide" x="40" y="106" width="280" height="52" rx="8"/>
+        <text class="fl-t fl-t-b" x="180" y="137" text-anchor="middle">Did EXIF carry GPS coordinates?</text>
+
+        <!-- yes -->
+        <rect class="fl-node" x="40" y="196" width="280" height="58" rx="8"/>
+        <text class="fl-t" x="180" y="219" text-anchor="middle">Apply voyage granularity on read</text>
+        <text class="fl-t fl-t-s" x="180" y="237" text-anchor="middle">Stable rounding — same input, same output</text>
+
+        <rect class="fl-ok" x="40" y="292" width="280" height="58" rx="8"/>
+        <text class="fl-t fl-t-b" x="180" y="315" text-anchor="middle">Appears on the map</text>
+        <text class="fl-t fl-t-s" x="180" y="333" text-anchor="middle">Pin, or an area if granularity is coarse</text>
+
+        <!-- no -->
+        <rect class="fl-warn" x="430" y="102" width="300" height="76" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="125" text-anchor="middle">Marked unplaced — a normal outcome</text>
+        <text class="fl-t fl-t-s" x="580" y="143" text-anchor="middle">Screenshots, scans, and location-services-off</text>
+        <text class="fl-t fl-t-s" x="580" y="159" text-anchor="middle">cameras all land here. Often a large share</text>
+        <text class="fl-t fl-t-s" x="580" y="175" text-anchor="middle">of a real photo library.</text>
+
+        <rect class="fl-node" x="430" y="216" width="300" height="76" rx="8"/>
+        <text class="fl-t fl-t-b" x="580" y="239" text-anchor="middle">Visible in the “unplaced” affordance</text>
+        <text class="fl-t fl-t-s" x="580" y="257" text-anchor="middle">Counted in the upload summary, badged in</text>
+        <text class="fl-t fl-t-s" x="580" y="273" text-anchor="middle">the grid, and given a home at the bottom</text>
+        <text class="fl-t fl-t-s" x="580" y="289" text-anchor="middle">of the voyage rail. Never silently dropped.</text>
+
+        <rect class="fl-node" x="430" y="322" width="300" height="44" rx="8"/>
+        <text class="fl-t fl-t-s" x="580" y="341" text-anchor="middle">Future: manual placement lets the user</text>
+        <text class="fl-t fl-t-s" x="580" y="357" text-anchor="middle">put these on the map themselves</text>
+
+        <path class="fl-edge" d="M180,68 L180,102"  marker-end="url(#au2)"/>
+        <path class="fl-edge" d="M180,158 L180,192" marker-end="url(#au2)"/>
+        <path class="fl-edge" d="M180,254 L180,288" marker-end="url(#au2)"/>
+        <path class="fl-edge" d="M320,132 L426,132" marker-end="url(#au2)"/>
+        <text class="fl-label" x="352" y="126">no</text>
+        <text class="fl-label" x="188" y="182">yes</text>
+        <path class="fl-edge" d="M580,178 L580,212" marker-end="url(#au2)"/>
+        <path class="fl-edge" d="M580,292 L580,318" marker-end="url(#au2)" stroke-dasharray="4 3"/>
+      </svg>
+    </div>
+
+    <div class="pv-annot"><span class="pv-annot-num">4</span><span><strong>Rounding must be stable.</strong> Reading the same photo twice returns identical coordinates. Re-sampling per request makes pins jitter between loads and — worse — lets repeated observation average the noise away, recovering the true position.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">5</span><span><strong>Where granularity is applied is an open question with a deadline.</strong> Rounding at read time keeps exact coordinates in the database but allows the precision to be loosened later; rounding at ingest discards them permanently. It has to be decided before real data exists, because it is not reversible afterwards.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">6</span><span><strong>Stale GPS fixes happen.</strong> A camera holding a fix from a previous city will place a photo hundreds of kilometres away with full confidence. The review step exists so the user sees this before publishing rather than after.</span></div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Serving — never from disk directly</h2>
+    <div class="flow pv-scroll">
+      <svg viewBox="0 0 940 250" role="img" aria-label="Image serving flow">
+        <defs>
+          <marker id="au3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" class="fl-arrow"/>
+          </marker>
+        </defs>
+
+        <rect class="fl-start" x="40" y="30" width="250" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="165" y="57" text-anchor="middle">GET /api/photos/{id}/{variant}</text>
+
+        <rect class="fl-node" x="350" y="24" width="250" height="58" rx="8"/>
+        <text class="fl-t" x="475" y="47" text-anchor="middle">Rust handler resolves the variant</text>
+        <text class="fl-t fl-t-s" x="475" y="65" text-anchor="middle">Authorization applied here</text>
+
+        <rect class="fl-ok" x="660" y="24" width="250" height="58" rx="8"/>
+        <text class="fl-t fl-t-b" x="785" y="47" text-anchor="middle">Stream from disk</text>
+        <text class="fl-t fl-t-s" x="785" y="65" text-anchor="middle">Range requests supported</text>
+
+        <rect class="fl-node" x="350" y="130" width="560" height="90" rx="8"/>
+        <text class="fl-t fl-t-b" x="630" y="153" text-anchor="middle">Headers the handler sets — and a static file server would not</text>
+        <text class="fl-t fl-t-s" x="630" y="173" text-anchor="middle">Content-Type determined by the server, never echoed from the upload</text>
+        <text class="fl-t fl-t-s" x="630" y="189" text-anchor="middle">X-Content-Type-Options: nosniff · restrictive Content-Disposition</text>
+        <text class="fl-t fl-t-s" x="630" y="205" text-anchor="middle">ETag · long-lived immutable caching, safe because the ID is content-derived</text>
+
+        <path class="fl-edge" d="M290,52 L346,52" marker-end="url(#au3)"/>
+        <path class="fl-edge" d="M600,52 L656,52" marker-end="url(#au3)"/>
+        <path class="fl-edge" d="M475,82 L475,126" marker-end="url(#au3)"/>
+      </svg>
+    </div>
+    <div class="pv-annot"><span class="pv-annot-num">7</span><span><strong>The failure mode being avoided is a stored XSS.</strong> A user uploads a file the browser sniffs as HTML, it is served from our origin, and it executes against another user's session. The magic-byte check and these response headers are the two defences, and both require a handler in the path.</span></div>
+  </section>
+
+</main>
+</body>
+</html>

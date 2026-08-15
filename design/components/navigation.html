@@ -1,0 +1,137 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Navigation — PinVoyager Components</title>
+<link rel="stylesheet" href="../preview.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  .nav-demo { border: 1px solid var(--pv-border); border-radius: var(--pv-radius-lg); overflow: hidden; }
+  .nav-demo--mobile { width: 390px; max-width: 100%; }
+</style>
+</head>
+<body class="pv-app">
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Components</p>
+    <h1 class="pv-doc-title">Navigation</h1>
+    <p class="pv-doc-intro">
+      A top bar on desktop, a bottom tab bar on mobile. Four destinations, because a fifth
+      would push the tab labels below a readable size.
+    </p>
+  </header>
+
+  <section class="pv-section">
+    <h2>Desktop top bar — signed in</h2>
+    <div class="pv-specimen">
+      <div class="nav-demo">
+        <nav class="pv-topnav">
+          <a class="pv-brand" href="#">
+            <svg class="pv-brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/>
+            </svg>
+            PinVoyager
+          </a>
+          <div class="pv-navlinks">
+            <a class="pv-navlink" href="#" aria-current="page">Discover</a>
+            <a class="pv-navlink" href="#">My voyages</a>
+          </div>
+          <div class="pv-spacer"></div>
+          <button class="pv-btn pv-btn--secondary pv-btn--sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            New voyage
+          </button>
+          <div class="pv-avatar" title="Signed in as Bryan">BP</div>
+        </nav>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Desktop top bar — signed out</h2>
+    <p class="pv-note">
+      Every voyage is public, so a signed-out visitor is a first-class user rather than a
+      locked-out one. The bar offers a way in without demanding it.
+    </p>
+    <div class="pv-specimen">
+      <div class="nav-demo">
+        <nav class="pv-topnav">
+          <a class="pv-brand" href="#">
+            <svg class="pv-brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/>
+            </svg>
+            PinVoyager
+          </a>
+          <div class="pv-navlinks">
+            <a class="pv-navlink" href="#" aria-current="page">Discover</a>
+          </div>
+          <div class="pv-spacer"></div>
+          <button class="pv-btn pv-btn--primary pv-btn--sm">Sign in</button>
+        </nav>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Mobile tab bar</h2>
+    <div class="pv-specimen">
+      <div class="nav-demo nav-demo--mobile">
+        <nav class="pv-tabbar">
+          <a class="pv-tab" href="#" aria-current="page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            Discover
+          </a>
+          <a class="pv-tab" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            Voyages
+          </a>
+          <a class="pv-tab" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5-5 5 5"/><path d="M12 5v12"/></svg>
+            Upload
+          </a>
+          <a class="pv-tab" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            Profile
+          </a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="pv-callout">
+      <strong>The tab bar reserves <code>env(safe-area-inset-bottom)</code>.</strong> On phones
+      with a home indicator, a bar that stops at the viewport edge puts its controls underneath
+      the system gesture area — taps get intercepted and the bottom row becomes unreliable.
+      This is invisible in a desktop browser and obvious on hardware, which is why phase 8
+      requires device testing rather than a resized window.
+    </div>
+
+    <p class="pv-note">
+      Icon plus label on every tab. Icon-only tab bars force users to learn an arbitrary
+      pictogram vocabulary, and "Discover" versus "Voyages" is not a distinction any icon
+      pair conveys on its own.
+    </p>
+  </section>
+
+  <section class="pv-section">
+    <h2>Avatars</h2>
+    <div class="pv-specimen">
+      <div class="pv-row">
+        <div class="pv-cell"><div class="pv-avatar">BP</div><span class="pv-label">Initials fallback</span></div>
+        <div class="pv-cell"><div class="pv-avatar pv-img-4" style="color:transparent">·</div><span class="pv-label">Provider avatar</span></div>
+        <div class="pv-cell"><div class="pv-avatar pv-avatar--lg">BP</div><span class="pv-label">Large — profile header</span></div>
+      </div>
+    </div>
+    <p class="pv-note">
+      The initials fallback is not an edge case. Providers do not reliably return an avatar,
+      and Apple in particular returns the user's name only on first authorization — so an
+      account may legitimately have neither a picture nor a name to derive initials from. The
+      component must survive both being absent.
+    </p>
+  </section>
+
+</main>
+</body>
+</html>

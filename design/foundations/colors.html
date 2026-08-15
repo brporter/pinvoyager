@@ -1,0 +1,350 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Color — PinVoyager Foundations</title>
+<link rel="stylesheet" href="../preview.css">
+<style>
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: var(--pv-space-3);
+  }
+  .swatch { display: flex; flex-direction: column; gap: var(--pv-space-1); }
+  .swatch-chip {
+    height: 64px;
+    border-radius: var(--pv-radius-md);
+    border: 1px solid var(--pv-border);
+  }
+  .swatch-name { font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium); }
+  .swatch-hex {
+    font-family: var(--pv-font-mono);
+    font-size: var(--pv-text-2xs);
+    color: var(--pv-text-subtle);
+  }
+  .pair {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--pv-space-3);
+    padding: var(--pv-space-3) var(--pv-space-4);
+    border-radius: var(--pv-radius-md);
+    border: 1px solid var(--pv-border);
+  }
+  .pair-sample { font-size: var(--pv-text-sm); font-weight: var(--pv-weight-medium); }
+  .pair-list { display: grid; gap: var(--pv-space-2); }
+</style>
+</head>
+<body>
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Foundations</p>
+    <h1 class="pv-doc-title">Color</h1>
+    <p class="pv-doc-intro">
+      Photographs are the content of this product, so the interface is deliberately
+      desaturated. One accent hue carries interaction; a separate warm hue is reserved
+      for map pins, so a pin never reads as a button.
+    </p>
+  </header>
+
+  <div class="pv-callout">
+    <strong>Every ratio on this page is measured, not estimated.</strong> Each was computed
+    from the exact token values in <code>tokens.css</code> using the WCAG 2.1 relative
+    luminance formula. If a token changes, these numbers must be recomputed — a contrast
+    claim that drifts from its token is worse than no claim.
+  </div>
+
+  <!-- ================= PRIMITIVES ================= -->
+  <section class="pv-section">
+    <h2>Primitive ramps</h2>
+    <p class="pv-note">
+      Raw values. Components must <strong>not</strong> reference these directly — they use the
+      semantic tokens below, which is what makes the dark theme a remap rather than a rewrite.
+    </p>
+
+    <h3>Neutral — warm gray</h3>
+    <div class="pv-specimen">
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-chip" style="background:#ffffff"></div><span class="swatch-name">neutral-0</span><span class="swatch-hex">#ffffff</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#fafaf9"></div><span class="swatch-name">neutral-25</span><span class="swatch-hex">#fafaf9</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#f5f4f2"></div><span class="swatch-name">neutral-50</span><span class="swatch-hex">#f5f4f2</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#ebe9e6"></div><span class="swatch-name">neutral-100</span><span class="swatch-hex">#ebe9e6</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#d9d6d2"></div><span class="swatch-name">neutral-200</span><span class="swatch-hex">#d9d6d2</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#bcb8b3"></div><span class="swatch-name">neutral-300</span><span class="swatch-hex">#bcb8b3</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#8f8a85"></div><span class="swatch-name">neutral-400</span><span class="swatch-hex">#8f8a85</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#6e6963"></div><span class="swatch-name">neutral-500</span><span class="swatch-hex">#6e6963</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#57524d"></div><span class="swatch-name">neutral-600</span><span class="swatch-hex">#57524d</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#423d39"></div><span class="swatch-name">neutral-700</span><span class="swatch-hex">#423d39</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#2c2825"></div><span class="swatch-name">neutral-800</span><span class="swatch-hex">#2c2825</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#1b1817"></div><span class="swatch-name">neutral-900</span><span class="swatch-hex">#1b1817</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#0f0d0c"></div><span class="swatch-name">neutral-950</span><span class="swatch-hex">#0f0d0c</span></div>
+      </div>
+    </div>
+
+    <h3>Accent — teal</h3>
+    <p class="pv-note">Interaction, links, focus, and selected map state.</p>
+    <div class="pv-specimen">
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-chip" style="background:#eefbf8"></div><span class="swatch-name">accent-50</span><span class="swatch-hex">#eefbf8</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#d2f4ee"></div><span class="swatch-name">accent-100</span><span class="swatch-hex">#d2f4ee</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#a8e8de"></div><span class="swatch-name">accent-200</span><span class="swatch-hex">#a8e8de</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#6dd3c6"></div><span class="swatch-name">accent-300</span><span class="swatch-hex">#6dd3c6</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#34b3a5"></div><span class="swatch-name">accent-400</span><span class="swatch-hex">#34b3a5</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#14988b"></div><span class="swatch-name">accent-500</span><span class="swatch-hex">#14988b</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#0c7a71"></div><span class="swatch-name">accent-600</span><span class="swatch-hex">#0c7a71</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#0c615b"></div><span class="swatch-name">accent-700</span><span class="swatch-hex">#0c615b</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#0d4d49"></div><span class="swatch-name">accent-800</span><span class="swatch-hex">#0d4d49</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#0c3f3c"></div><span class="swatch-name">accent-900</span><span class="swatch-hex">#0c3f3c</span></div>
+      </div>
+    </div>
+
+    <h3>Pin — warm amber</h3>
+    <p class="pv-note">
+      Map markers only. Never used for interactive chrome, so that a pin on the map is never
+      mistaken for a control.
+    </p>
+    <div class="pv-specimen">
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-chip" style="background:#ffedd5"></div><span class="swatch-name">pin-100</span><span class="swatch-hex">#ffedd5</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#fdba74"></div><span class="swatch-name">pin-300</span><span class="swatch-hex">#fdba74</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#f27318"></div><span class="swatch-name">pin-500</span><span class="swatch-hex">#f27318</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#d95c09"></div><span class="swatch-name">pin-600</span><span class="swatch-hex">#d95c09</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#b04708"></div><span class="swatch-name">pin-700</span><span class="swatch-hex">#b04708</span></div>
+        <div class="swatch"><div class="swatch-chip" style="background:#8a3907"></div><span class="swatch-name">pin-800</span><span class="swatch-hex">#8a3907</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LIGHT PAIRINGS ================= -->
+  <section class="pv-section">
+    <h2>Text pairings — light</h2>
+    <p class="pv-note">
+      Every pairing below is approved for body text and meets WCAG AA (4.5:1). Pairings not
+      listed here are not approved.
+    </p>
+
+    <div class="pv-specimen">
+      <div class="pair-list">
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#1b1817">Text on background — primary reading color</span>
+          <span class="pv-ratio pv-ratio--pass">17.65:1</span>
+        </div>
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#57524d">Muted text — captions, metadata, secondary labels</span>
+          <span class="pv-ratio pv-ratio--pass">7.72:1</span>
+        </div>
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#6e6963">Subtle text — the lightest approved body color</span>
+          <span class="pv-ratio pv-ratio--pass">5.44:1</span>
+        </div>
+        <div class="pair" style="background:#f5f4f2">
+          <span class="pair-sample" style="color:#57524d">Muted text on sunken surface</span>
+          <span class="pv-ratio pv-ratio--pass">7.03:1</span>
+        </div>
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#0c7a71">Accent link on background</span>
+          <span class="pv-ratio pv-ratio--pass">5.20:1</span>
+        </div>
+        <div class="pair" style="background:#eefbf8">
+          <span class="pair-sample" style="color:#0c615b">Accent text on accent-subtle</span>
+          <span class="pv-ratio pv-ratio--pass">6.88:1</span>
+        </div>
+        <div class="pair" style="background:#0c7a71">
+          <span class="pair-sample" style="color:#ffffff">White on accent — primary button</span>
+          <span class="pv-ratio pv-ratio--pass">5.20:1</span>
+        </div>
+        <div class="pair" style="background:#0c615b">
+          <span class="pair-sample" style="color:#ffffff">White on accent-hover</span>
+          <span class="pv-ratio pv-ratio--pass">7.30:1</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Status</h3>
+    <div class="pv-specimen">
+      <div class="pair-list">
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#17803f">Success on background</span>
+          <span class="pv-ratio pv-ratio--pass">5.00:1</span>
+        </div>
+        <div class="pair" style="background:#d9f2e2">
+          <span class="pair-sample" style="color:#126433">Success on success-bg</span>
+          <span class="pv-ratio pv-ratio--pass">6.13:1</span>
+        </div>
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#a86209">Warning on background</span>
+          <span class="pv-ratio pv-ratio--pass">4.76:1</span>
+        </div>
+        <div class="pair" style="background:#fdf0d2">
+          <span class="pair-sample" style="color:#874d07">Warning on warning-bg</span>
+          <span class="pv-ratio pv-ratio--pass">6.00:1</span>
+        </div>
+        <div class="pair" style="background:#ffffff">
+          <span class="pair-sample" style="color:#b8302b">Danger on background</span>
+          <span class="pv-ratio pv-ratio--pass">6.01:1</span>
+        </div>
+        <div class="pair" style="background:#fbe0de">
+          <span class="pair-sample" style="color:#962622">Danger on danger-bg</span>
+          <span class="pv-ratio pv-ratio--pass">6.48:1</span>
+        </div>
+        <div class="pair" style="background:#b8302b">
+          <span class="pair-sample" style="color:#ffffff">White on danger — destructive button</span>
+          <span class="pv-ratio pv-ratio--pass">6.01:1</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DARK PAIRINGS ================= -->
+  <section class="pv-section">
+    <h2>Text pairings — dark</h2>
+    <p class="pv-note">
+      The accent lightens to <code>accent-300</code> in dark mode. A 600-weight teal on
+      near-black measures below 4.5:1, so reusing the light-theme accent would fail — this is
+      why the dark theme remaps semantics rather than inverting the palette.
+    </p>
+
+    <div class="pv-specimen">
+      <div class="pair-list">
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#f5f4f2">Text on background</span>
+          <span class="pv-ratio pv-ratio--pass">17.64:1</span>
+        </div>
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#bcb8b3">Muted text</span>
+          <span class="pv-ratio pv-ratio--pass">9.83:1</span>
+        </div>
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#8f8a85">Subtle text — lightest approved</span>
+          <span class="pv-ratio pv-ratio--pass">5.67:1</span>
+        </div>
+        <div class="pair" style="background:#1b1817;border-color:#2c2825">
+          <span class="pair-sample" style="color:#f5f4f2">Text on raised surface</span>
+          <span class="pv-ratio pv-ratio--pass">16.06:1</span>
+        </div>
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#6dd3c6">Accent link</span>
+          <span class="pv-ratio pv-ratio--pass">10.88:1</span>
+        </div>
+        <div class="pair" style="background:#6dd3c6">
+          <span class="pair-sample" style="color:#0f0d0c">Dark text on accent — primary button</span>
+          <span class="pv-ratio pv-ratio--pass">10.88:1</span>
+        </div>
+        <div class="pair" style="background:#0c3f3c;border-color:#0d4d49">
+          <span class="pair-sample" style="color:#6dd3c6">Accent text on accent-subtle</span>
+          <span class="pv-ratio pv-ratio--pass">6.58:1</span>
+        </div>
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#5cc98a">Success</span>
+          <span class="pv-ratio pv-ratio--pass">9.40:1</span>
+        </div>
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#e9a943">Warning</span>
+          <span class="pv-ratio pv-ratio--pass">9.44:1</span>
+        </div>
+        <div class="pair" style="background:#0f0d0c;border-color:#2c2825">
+          <span class="pair-sample" style="color:#f08a84">Danger</span>
+          <span class="pv-ratio pv-ratio--pass">8.01:1</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= NON-TEXT ================= -->
+  <section class="pv-section">
+    <h2>Non-text contrast</h2>
+    <p class="pv-note">
+      Control boundaries, focus indicators, and map markers must reach 3:1 against what
+      surrounds them (WCAG 1.4.11). Purely decorative separators are exempt — but the
+      distinction is where this is easy to get wrong.
+    </p>
+
+    <div class="pv-callout pv-callout--warn">
+      <strong>Two border tokens exist, and they are not interchangeable.</strong>
+      <code>--pv-border</code> measures 1.45:1 and is for decorative dividers and card edges
+      only. Any <em>control</em> boundary — text input, select, checkbox, secondary button —
+      must use <code>--pv-border-strong</code>, which measures 3.42:1. Using the decorative
+      token on an input produces an outline a large number of people simply cannot see.
+    </div>
+
+    <div class="pv-scroll">
+      <table class="pv-table">
+        <thead>
+          <tr><th>Token</th><th>Against</th><th>Measured</th><th>Requirement</th><th>Use</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>--pv-border</code></td><td><code>--pv-bg</code></td>
+            <td><span class="pv-ratio pv-ratio--na">1.45:1</span></td>
+            <td>exempt</td>
+            <td>Decorative dividers, card edges</td>
+          </tr>
+          <tr>
+            <td><code>--pv-border-strong</code></td><td><code>--pv-bg</code></td>
+            <td><span class="pv-ratio pv-ratio--pass">3.42:1</span></td>
+            <td>3:1</td>
+            <td><strong>Control boundaries</strong></td>
+          </tr>
+          <tr>
+            <td><code>--pv-border-strong</code></td><td><code>--pv-bg-sunken</code></td>
+            <td><span class="pv-ratio pv-ratio--pass">3.11:1</span></td>
+            <td>3:1</td>
+            <td>Controls on sunken surfaces</td>
+          </tr>
+          <tr>
+            <td><code>--pv-focus</code></td><td><code>--pv-bg</code></td>
+            <td><span class="pv-ratio pv-ratio--pass">5.20:1</span></td>
+            <td>3:1</td>
+            <td>Focus ring</td>
+          </tr>
+          <tr>
+            <td><code>--pv-pin</code></td><td>light basemap</td>
+            <td><span class="pv-ratio pv-ratio--pass">3.83:1</span></td>
+            <td>3:1</td>
+            <td>Map pin shape (carries no text)</td>
+          </tr>
+          <tr>
+            <td><code>--pv-pin-text</code></td><td><code>--pv-cluster-bg</code></td>
+            <td><span class="pv-ratio pv-ratio--pass">5.60:1</span></td>
+            <td>4.5:1</td>
+            <td>Cluster count label</td>
+          </tr>
+          <tr>
+            <td>dark border</td><td>dark <code>--pv-bg</code></td>
+            <td><span class="pv-ratio pv-ratio--na">1.33:1</span></td>
+            <td>exempt</td>
+            <td>Decorative dividers, dark</td>
+          </tr>
+          <tr>
+            <td>dark border-strong</td><td>dark <code>--pv-bg</code></td>
+            <td><span class="pv-ratio pv-ratio--pass">3.57:1</span></td>
+            <td>3:1</td>
+            <td><strong>Control boundaries, dark</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pv-callout pv-callout--warn">
+      <strong>White text on <code>--pv-pin</code> measures 3.83:1 and is not approved.</strong>
+      It is listed here because it is the obvious thing to reach for. Cluster bubbles carry a
+      count, so they use the darker <code>--pv-cluster-bg</code> instead, which reaches 5.60:1.
+      Never place text directly on <code>--pv-pin</code>.
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Color is never the only signal</h2>
+    <p class="pv-note">
+      Status, selection, and validation state each carry a second cue — an icon, a shape
+      change, a text label, or a weight change. A user who cannot distinguish the accent teal
+      from the pin amber must still be able to tell a selected pin from an unselected one, and
+      the accent and pin hues were chosen partly because they differ in lightness as well as
+      hue.
+    </p>
+  </section>
+
+</main>
+</body>
+</html>

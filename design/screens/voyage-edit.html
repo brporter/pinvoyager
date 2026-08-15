@@ -1,0 +1,230 @@
+<!-- @dsCard group="Screens" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voyage create &amp; edit — PinVoyager Screens</title>
+<link rel="stylesheet" href="../preview.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  .ve-shell { height: 100%; display: flex; flex-direction: column; }
+  .ve-scroll { flex: 1; overflow-y: auto; padding: var(--pv-space-6); }
+  .ve-scroll-m { flex: 1; overflow-y: auto; padding: var(--pv-space-4); }
+  .ve-cols { display: grid; grid-template-columns: 1fr 360px; gap: var(--pv-space-8); max-width: 900px; margin: 0 auto; }
+</style>
+</head>
+<body class="pv-app">
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Screens</p>
+    <h1 class="pv-doc-title">Voyage create &amp; edit</h1>
+    <p class="pv-doc-intro">
+      Metadata on the left, publishing decisions on the right. Create and edit are the same
+      screen — the only difference is whether the voyage has ever been published.
+    </p>
+  </header>
+
+  <div class="pv-callout pv-callout--warn">
+    <strong>Publishing is the irreversible-feeling moment</strong>, so it is deliberately not a
+    quiet toggle at the bottom of a form. Every voyage is public once published, and the
+    granularity control sits directly above the publish button because that is the decision the
+    user needs to have made first.
+  </div>
+
+  <section class="pv-section">
+    <h2>Desktop — editing a draft</h2>
+    <div class="pv-frames pv-frames--wide">
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Desktop · 1180px</span>
+        <div class="pv-viewport pv-viewport--desktop">
+          <div class="ve-shell">
+            <nav class="pv-topnav">
+              <a class="pv-brand" href="#">
+                <svg class="pv-brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                PinVoyager
+              </a>
+              <div class="pv-spacer"></div>
+              <span class="pv-badge pv-badge--draft">Draft</span>
+              <button class="pv-btn pv-btn--ghost pv-btn--sm">Discard</button>
+              <button class="pv-btn pv-btn--secondary pv-btn--sm">Save draft</button>
+              <div class="pv-avatar">BP</div>
+            </nav>
+
+            <div class="ve-scroll">
+              <div class="ve-cols">
+                <div class="pv-stack-6">
+                  <h1 class="pv-h2">Edit voyage</h1>
+
+                  <div class="pv-field">
+                    <label class="pv-field-label" for="vt">Title <span class="pv-field-req" aria-hidden="true">*</span></label>
+                    <input class="pv-input" id="vt" value="Three weeks in Hokkaido">
+                  </div>
+
+                  <div class="pv-field">
+                    <label class="pv-field-label" for="vd">Description</label>
+                    <textarea class="pv-textarea" id="vd">Late winter, mostly on foot, mostly in the snow.</textarea>
+                    <span class="pv-field-help">Optional. Shown under the title on the voyage page.</span>
+                  </div>
+
+                  <div>
+                    <div class="pv-inline-2" style="justify-content:space-between;margin-bottom:var(--pv-space-3)">
+                      <span class="pv-field-label">Photos · 48</span>
+                      <div class="pv-inline-2">
+                        <select class="pv-select" style="width:auto;min-height:32px;font-size:var(--pv-text-sm)">
+                          <option>Capture time — oldest first</option>
+                          <option>Capture time — newest first</option>
+                          <option>Manual</option>
+                        </select>
+                        <button class="pv-btn pv-btn--secondary pv-btn--sm">Add photos</button>
+                      </div>
+                    </div>
+                    <div class="pv-photo-grid" style="grid-template-columns:repeat(4,1fr)">
+                      <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-1"></div></div>
+                      <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-3"></div></div>
+                      <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-2"></div></div>
+                      <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-4"></div></div>
+                      <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-5"></div></div>
+                      <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-8"></div></div>
+                      <div class="pv-photo pv-photo--square" data-unplaced="true"><div class="pv-photo-img pv-img-6"></div></div>
+                      <div class="pv-photo pv-photo--square" data-unplaced="true"><div class="pv-photo-img pv-img-7"></div></div>
+                    </div>
+                    <p class="pv-xs pv-muted" style="margin-top:var(--pv-space-3)">
+                      Dashed outlines mark the 6 photos with no location data. They belong to
+                      the voyage but will not appear on the map.
+                    </p>
+                  </div>
+                </div>
+
+                <aside class="pv-stack-6">
+                  <div class="pv-card" style="padding:var(--pv-space-4)">
+                    <h2 class="pv-h3" style="font-size:var(--pv-text-base);margin-bottom:var(--pv-space-3)">Location precision</h2>
+                    <div class="pv-gran">
+                      <div class="pv-gran-steps">
+                        <button class="pv-gran-step" aria-pressed="false">Exact</button>
+                        <button class="pv-gran-step" aria-pressed="true">~1 km</button>
+                        <button class="pv-gran-step" aria-pressed="false">~10 km</button>
+                        <button class="pv-gran-step" aria-pressed="false">~50 km</button>
+                      </div>
+                      <div class="pv-gran-preview pv-map">
+                        <div class="pv-map-area" style="left:50%;top:52%;width:62px;height:62px"></div>
+                        <div class="pv-attribution">© OpenStreetMap contributors</div>
+                      </div>
+                      <p class="pv-gran-explain">
+                        Photos appear somewhere within about a kilometre — enough to show the
+                        neighbourhood, not the address.
+                      </p>
+                      <div class="pv-gran-guarantee">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+                        <div><strong>Location data is removed from the files themselves.</strong>
+                        Served images are re-encoded with all EXIF metadata stripped.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="pv-card" style="padding:var(--pv-space-4)">
+                    <h2 class="pv-h3" style="font-size:var(--pv-text-base);margin-bottom:var(--pv-space-2)">Publish</h2>
+                    <p class="pv-xs pv-muted" style="margin-bottom:var(--pv-space-4)">
+                      Publishing makes this voyage visible to everyone, including people who are
+                      not signed in. You can unpublish it later.
+                    </p>
+                    <button class="pv-btn pv-btn--primary" style="width:100%">Publish voyage</button>
+                  </div>
+
+                  <div class="pv-card" style="padding:var(--pv-space-4);border-color:var(--pv-danger-bg)">
+                    <h2 class="pv-h3" style="font-size:var(--pv-text-base);margin-bottom:var(--pv-space-2)">Delete</h2>
+                    <p class="pv-xs pv-muted" style="margin-bottom:var(--pv-space-3)">
+                      Deleting removes the voyage. Its photos return to your library.
+                    </p>
+                    <button class="pv-btn pv-btn--danger pv-btn--sm" style="width:100%">Delete voyage</button>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Mobile — stacked</h2>
+    <div class="pv-frames">
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Mobile · 390px</span>
+        <div class="pv-viewport pv-viewport--mobile">
+          <div class="ve-shell">
+            <nav class="pv-topnav">
+              <button class="pv-btn pv-btn--ghost pv-btn--icon pv-btn--sm" aria-label="Back">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <span style="font-weight:var(--pv-weight-semibold)">Edit voyage</span>
+              <div class="pv-spacer"></div>
+              <span class="pv-badge pv-badge--draft">Draft</span>
+            </nav>
+
+            <div class="ve-scroll-m pv-stack-6">
+              <div class="pv-field">
+                <label class="pv-field-label" for="mvt">Title <span class="pv-field-req" aria-hidden="true">*</span></label>
+                <input class="pv-input" id="mvt" value="Three weeks in Hokkaido">
+              </div>
+
+              <div class="pv-field">
+                <label class="pv-field-label" for="mvd">Description</label>
+                <textarea class="pv-textarea" id="mvd">Late winter, mostly on foot, mostly in the snow.</textarea>
+              </div>
+
+              <div>
+                <span class="pv-field-label">Location precision</span>
+                <div class="pv-gran" style="margin-top:var(--pv-space-2)">
+                  <div class="pv-gran-steps">
+                    <button class="pv-gran-step" aria-pressed="false">Exact</button>
+                    <button class="pv-gran-step" aria-pressed="true">~1 km</button>
+                    <button class="pv-gran-step" aria-pressed="false">~10 km</button>
+                    <button class="pv-gran-step" aria-pressed="false">~50 km</button>
+                  </div>
+                  <div class="pv-gran-preview pv-map" style="height:140px">
+                    <div class="pv-map-area" style="left:50%;top:52%;width:56px;height:56px"></div>
+                    <div class="pv-attribution">© OpenStreetMap contributors</div>
+                  </div>
+                  <div class="pv-gran-guarantee">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <div><strong>Location data is removed from the files themselves.</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="pv-inline-2" style="justify-content:space-between;margin-bottom:var(--pv-space-2)">
+                  <span class="pv-field-label">Photos · 48</span>
+                  <button class="pv-btn pv-btn--secondary pv-btn--sm">Add</button>
+                </div>
+                <div class="pv-photo-grid" style="grid-template-columns:repeat(3,1fr)">
+                  <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-1"></div></div>
+                  <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-3"></div></div>
+                  <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-2"></div></div>
+                  <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-4"></div></div>
+                  <div class="pv-photo pv-photo--square"><div class="pv-photo-img pv-img-5"></div></div>
+                  <div class="pv-photo pv-photo--square" data-unplaced="true"><div class="pv-photo-img pv-img-6"></div></div>
+                </div>
+              </div>
+
+              <button class="pv-btn pv-btn--primary pv-btn--lg" style="width:100%">Publish voyage</button>
+              <button class="pv-btn pv-btn--secondary" style="width:100%">Save draft</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Annotations</h3>
+    <div class="pv-annot"><span class="pv-annot-num">1</span><span><strong>Granularity sits directly above Publish on both breakpoints.</strong> Adjacency is the argument: the last thing seen before making a voyage public is the precision it will be published at.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">2</span><span><strong>Unplaced photos are visible in the editor grid</strong> with a dashed outline and a count, so the discrepancy between "48 photos" and the number of pins on the map has an explanation on the same screen.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">3</span><span><strong>Delete says where the photos go.</strong> "Its photos return to your library" removes the fear that deleting a voyage destroys the pictures — which is the reason people leave dead voyages lying around.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">4</span><span><strong>The draft badge is in the header on both breakpoints</strong>, persistent rather than inferred from a toggle position.</span></div>
+  </section>
+
+</main>
+</body>
+</html>

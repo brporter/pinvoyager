@@ -1,0 +1,126 @@
+<!-- @dsCard group="Screens" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo lightbox — PinVoyager Screens</title>
+<link rel="stylesheet" href="../preview.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  .lb-stage-img { width: 100%; height: 100%; border-radius: var(--pv-radius-md); }
+  .lb-meta { color: rgb(255 255 255 / 0.72); font-size: var(--pv-text-xs); }
+  .lb-strip { padding: var(--pv-space-3) var(--pv-space-4); }
+  .lb-strip .pv-photo { border-radius: var(--pv-radius-sm); }
+</style>
+</head>
+<body class="pv-app">
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Screens</p>
+    <h1 class="pv-doc-title">Photo lightbox</h1>
+    <p class="pv-doc-intro">
+      One photograph, as large as the viewport allows, with the chrome receding. The only
+      metadata shown is what PinVoyager actually knows — capture time and coordinates at the
+      granularity in force.
+    </p>
+  </header>
+
+  <section class="pv-section">
+    <h2>Desktop and mobile</h2>
+    <div class="pv-frames pv-frames--wide">
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Desktop · 1180px</span>
+        <div class="pv-viewport pv-viewport--desktop">
+          <div class="pv-lightbox">
+            <div class="pv-lightbox-bar">
+              <div>
+                <div style="font-weight:var(--pv-weight-semibold);font-size:var(--pv-text-sm)">14 February 2026, 09:12</div>
+                <div class="lb-meta">43.06°, 141.35° · shown to ~1 km · photo 12 of 48</div>
+              </div>
+              <div class="pv-inline-2">
+                <button class="pv-lightbox-btn" aria-label="Show on map">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                </button>
+                <button class="pv-lightbox-btn" aria-label="Close">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="pv-lightbox-stage">
+              <div class="pv-inline-3" style="width:100%;height:100%;gap:var(--pv-space-4);flex-wrap:nowrap">
+                <button class="pv-lightbox-btn" aria-label="Previous photo">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <div style="flex:1;height:100%;display:grid;place-items:center">
+                  <div class="pv-img-3 lb-stage-img" style="max-width:820px;aspect-ratio:4/3;height:auto;width:100%"></div>
+                </div>
+                <button class="pv-lightbox-btn" aria-label="Next photo">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="lb-strip">
+              <div class="pv-filmstrip">
+                <div class="pv-photo pv-photo--square" style="width:64px"><div class="pv-photo-img pv-img-1"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:64px"><div class="pv-photo-img pv-img-2"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:64px" data-selected="true"><div class="pv-photo-img pv-img-3"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:64px"><div class="pv-photo-img pv-img-4"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:64px"><div class="pv-photo-img pv-img-5"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:64px"><div class="pv-photo-img pv-img-8"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:64px"><div class="pv-photo-img pv-img-7"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Mobile · unplaced photo</span>
+        <div class="pv-viewport pv-viewport--mobile">
+          <div class="pv-lightbox">
+            <div class="pv-lightbox-bar">
+              <div>
+                <div style="font-weight:var(--pv-weight-semibold);font-size:var(--pv-text-sm)">14 February 2026</div>
+                <div class="lb-meta">No location data · photo 41 of 48</div>
+              </div>
+              <button class="pv-lightbox-btn" aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div class="pv-lightbox-stage">
+              <div class="pv-img-6 lb-stage-img" style="width:100%;aspect-ratio:3/4;height:auto"></div>
+            </div>
+
+            <div class="lb-strip">
+              <div class="pv-inline-2" style="justify-content:center;margin-bottom:var(--pv-space-3)">
+                <span class="pv-badge pv-badge--unplaced">No location</span>
+              </div>
+              <div class="pv-filmstrip">
+                <div class="pv-photo pv-photo--square" style="width:52px"><div class="pv-photo-img pv-img-4"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:52px"><div class="pv-photo-img pv-img-5"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:52px" data-selected="true"><div class="pv-photo-img pv-img-6"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:52px"><div class="pv-photo-img pv-img-7"></div></div>
+                <div class="pv-photo pv-photo--square" style="width:52px"><div class="pv-photo-img pv-img-8"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Annotations</h3>
+    <div class="pv-annot"><span class="pv-annot-num">1</span><span><strong>"shown to ~1 km" appears beside the coordinates.</strong> Displaying a rounded coordinate without saying it is rounded invites the reader to treat it as exact — which is precisely the misreading the granularity feature exists to prevent.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">2</span><span><strong>"Show on map" closes the lightbox and selects the pin.</strong> The bidirectional selection from voyage detail continues to work from here rather than dead-ending.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">3</span><span><strong>An unplaced photo says so plainly</strong> where the coordinates would be, rather than showing a blank field that reads as a loading failure.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">4</span><span><strong>Camera make and model are absent.</strong> They are stripped from the served files per the D6 guarantee, so the interface has nothing to display — and showing them would contradict the promise made at upload.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">5</span><span><strong>Keyboard: arrows navigate, Escape closes, focus is trapped inside the dialog</strong> and returns to the originating thumbnail on close. Phase 6 owns this; it is stated here so it does not get discovered late.</span></div>
+  </section>
+
+</main>
+</body>
+</html>

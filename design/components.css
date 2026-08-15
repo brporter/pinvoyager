@@ -1,0 +1,894 @@
+/* ==========================================================================
+   PinVoyager component layer
+
+   These are PRODUCT styles, not documentation styles. Phase 6 implements
+   React components against these class names, and the screen mockups in
+   design/screens compose from this same file — so a screen and the real
+   application are built from one definition, not two that drift.
+
+   Everything here consumes tokens.css. No literal color, spacing, radius,
+   or duration values appear below.
+   ========================================================================== */
+
+@import url("tokens.css");
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+.pv-app {
+  font-family: var(--pv-font-sans);
+  color: var(--pv-text);
+  background: var(--pv-bg);
+  font-size: var(--pv-text-base);
+  line-height: var(--pv-leading-normal);
+}
+
+/* Focus is never removed, only replaced. Every interactive element below
+   relies on this being consistent. */
+.pv-app :focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+  border-radius: var(--pv-radius-sm);
+}
+
+/* Visually hidden but available to assistive technology. */
+.pv-sr {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.pv-btn {
+  --btn-h: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pv-space-2);
+  min-height: var(--btn-h);
+  min-width: var(--pv-touch-min);
+  padding: 0 var(--pv-space-4);
+  border-radius: var(--pv-radius-md);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color var(--pv-duration-fast) var(--pv-ease-out),
+              border-color var(--pv-duration-fast) var(--pv-ease-out),
+              color var(--pv-duration-fast) var(--pv-ease-out);
+}
+
+.pv-btn--sm { --btn-h: 32px; padding: 0 var(--pv-space-3); font-size: var(--pv-text-xs); }
+.pv-btn--lg { --btn-h: 48px; padding: 0 var(--pv-space-6); font-size: var(--pv-text-base); }
+
+/* Icon-only buttons keep the 44px hit area even though they look smaller. */
+.pv-btn--icon {
+  padding: 0;
+  width: var(--btn-h);
+  min-width: var(--pv-touch-min);
+  min-height: var(--pv-touch-min);
+}
+
+.pv-btn--primary {
+  background: var(--pv-accent);
+  color: var(--pv-text-on-accent);
+}
+.pv-btn--primary:hover  { background: var(--pv-accent-hover); }
+.pv-btn--primary:active { background: var(--pv-accent-active); }
+
+.pv-btn--secondary {
+  background: var(--pv-bg);
+  color: var(--pv-text);
+  border-color: var(--pv-border-strong); /* control boundary — 3:1 token */
+}
+.pv-btn--secondary:hover  { background: var(--pv-bg-hover); }
+.pv-btn--secondary:active { background: var(--pv-bg-active); }
+
+.pv-btn--ghost {
+  background: transparent;
+  color: var(--pv-text-muted);
+}
+.pv-btn--ghost:hover  { background: var(--pv-bg-hover); color: var(--pv-text); }
+.pv-btn--ghost:active { background: var(--pv-bg-active); }
+
+.pv-btn--danger {
+  background: var(--pv-danger);
+  color: var(--pv-neutral-0);
+}
+.pv-btn--danger:hover { background: var(--pv-danger-hover); }
+
+.pv-btn:disabled,
+.pv-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Loading keeps the button's width so the layout does not jump. */
+.pv-btn[data-loading="true"] { pointer-events: none; }
+.pv-btn[data-loading="true"] .pv-btn-label { opacity: 0.6; }
+
+.pv-spinner {
+  width: 14px; height: 14px; flex: none;
+  border-radius: var(--pv-radius-full);
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: pv-spin 700ms linear infinite;
+}
+@keyframes pv-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-spinner { animation-duration: 2s; }
+}
+
+/* ==========================================================================
+   Provider sign-in buttons
+
+   Google and Apple both publish mandatory branding rules — specific
+   wordmarks, minimum sizes, permitted color variants. These follow the
+   published specs rather than a house style, because non-compliance is
+   grounds for rejection during provider app review.
+
+   Shared geometry, per-provider skin. All four are the same height and the
+   same label grammar ("Continue with X") so the sign-in screen reads as one
+   set of choices rather than four vendors shouting.
+   ========================================================================== */
+
+.pv-provider {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: 0 var(--pv-space-4);
+  border-radius: var(--pv-radius-md);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--pv-duration-fast) var(--pv-ease-out),
+              box-shadow var(--pv-duration-fast) var(--pv-ease-out);
+}
+
+.pv-provider-icon { width: 20px; height: 20px; flex: none; }
+.pv-provider-label { flex: 1; text-align: left; }
+
+/* Google: white button, #747775 border, Roboto-ish label, per Google's
+   "Sign in with Google" branding guidelines. */
+.pv-provider--google {
+  background: #ffffff;
+  color: #1f1f1f;
+  border-color: #747775;
+}
+.pv-provider--google:hover { background: #f7f8f8; }
+
+/* Apple: black button with the Apple logo, per Apple's Human Interface
+   Guidelines for Sign in with Apple. White and outlined variants are also
+   permitted; black is used here for contrast against the light sign-in card. */
+.pv-provider--apple {
+  background: #000000;
+  color: #ffffff;
+}
+.pv-provider--apple:hover { background: #1a1a1a; }
+
+/* Microsoft: white button with the four-square logo, per the Microsoft
+   identity branding guidelines. Segoe UI where available. */
+.pv-provider--microsoft {
+  background: #ffffff;
+  color: #5e5e5e;
+  border-color: #8c8c8c;
+  font-family: "Segoe UI", var(--pv-font-sans);
+}
+.pv-provider--microsoft:hover { background: #f3f3f3; }
+
+/* Facebook: brand blue #1877F2 with the white f mark. */
+.pv-provider--facebook {
+  background: #1877f2;
+  color: #ffffff;
+}
+.pv-provider--facebook:hover { background: #166fe0; }
+
+.pv-provider:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* In dark mode the Google and Microsoft buttons keep their light treatment —
+   both providers' guidelines permit a dark variant, but mixing a dark Google
+   button with a black Apple button makes them indistinguishable at a glance. */
+
+/* ==========================================================================
+   Form controls
+   ========================================================================== */
+
+.pv-field { display: flex; flex-direction: column; gap: var(--pv-space-2); }
+
+.pv-field-label {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-muted);
+}
+
+.pv-field-req { color: var(--pv-danger); margin-left: 2px; }
+
+.pv-input,
+.pv-textarea,
+.pv-select {
+  width: 100%;
+  min-height: 40px;
+  padding: var(--pv-space-2) var(--pv-space-3);
+  background: var(--pv-bg);
+  color: var(--pv-text);
+  border: 1px solid var(--pv-border-strong);
+  border-radius: var(--pv-radius-md);
+  font-family: inherit;
+  /* 16px minimum — anything smaller makes iOS Safari zoom the viewport on
+     focus, which shifts the whole layout mid-form. */
+  font-size: var(--pv-text-base);
+  line-height: var(--pv-leading-normal);
+  transition: border-color var(--pv-duration-fast) var(--pv-ease-out);
+}
+
+.pv-input::placeholder,
+.pv-textarea::placeholder { color: var(--pv-text-subtle); }
+
+.pv-input:hover, .pv-textarea:hover, .pv-select:hover { border-color: var(--pv-text-subtle); }
+.pv-input:focus, .pv-textarea:focus, .pv-select:focus { border-color: var(--pv-accent); }
+
+.pv-textarea { min-height: 96px; resize: vertical; }
+
+.pv-input[aria-invalid="true"],
+.pv-textarea[aria-invalid="true"] { border-color: var(--pv-danger); }
+
+.pv-input:disabled, .pv-textarea:disabled, .pv-select:disabled {
+  background: var(--pv-bg-sunken);
+  color: var(--pv-text-subtle);
+  cursor: not-allowed;
+}
+
+.pv-field-help  { font-size: var(--pv-text-xs); color: var(--pv-text-subtle); }
+.pv-field-error {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-danger);
+  display: flex; align-items: center; gap: var(--pv-space-1);
+}
+
+/* Checkbox and switch — color is never the only state signal, so both carry
+   a shape change as well. */
+.pv-check { display: flex; align-items: flex-start; gap: var(--pv-space-2); cursor: pointer; }
+.pv-check-box {
+  width: 18px; height: 18px; flex: none; margin-top: 2px;
+  border: 1px solid var(--pv-border-strong);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-bg);
+  display: grid; place-items: center;
+}
+.pv-check input:checked + .pv-check-box {
+  background: var(--pv-accent);
+  border-color: var(--pv-accent);
+}
+.pv-check-text { font-size: var(--pv-text-sm); }
+
+.pv-switch {
+  width: 40px; height: 24px; flex: none;
+  border-radius: var(--pv-radius-full);
+  background: var(--pv-border-strong);
+  position: relative; cursor: pointer;
+  transition: background-color var(--pv-duration-fast) var(--pv-ease-out);
+}
+.pv-switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: var(--pv-radius-full);
+  background: var(--pv-neutral-0); box-shadow: var(--pv-shadow-1);
+  transition: transform var(--pv-duration-fast) var(--pv-ease-out);
+}
+.pv-switch[data-on="true"] { background: var(--pv-accent); }
+.pv-switch[data-on="true"]::after { transform: translateX(16px); }
+
+/* ==========================================================================
+   Navigation
+   ========================================================================== */
+
+.pv-topnav {
+  height: var(--pv-header-h);
+  display: flex; align-items: center; gap: var(--pv-space-4);
+  padding: 0 var(--pv-space-4);
+  background: var(--pv-bg);
+  border-bottom: 1px solid var(--pv-border);
+}
+
+.pv-brand {
+  font-weight: var(--pv-weight-bold);
+  font-size: var(--pv-text-lg);
+  letter-spacing: var(--pv-tracking-tight);
+  color: var(--pv-text);
+  text-decoration: none;
+  display: flex; align-items: center; gap: var(--pv-space-2);
+}
+
+.pv-brand-mark {
+  width: 22px; height: 22px; flex: none;
+  color: var(--pv-accent);
+}
+
+.pv-navlinks { display: flex; gap: var(--pv-space-1); margin-left: var(--pv-space-4); }
+
+.pv-navlink {
+  padding: var(--pv-space-2) var(--pv-space-3);
+  border-radius: var(--pv-radius-md);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+  text-decoration: none;
+}
+.pv-navlink:hover { background: var(--pv-bg-hover); color: var(--pv-text); }
+.pv-navlink[aria-current="page"] { color: var(--pv-text); font-weight: var(--pv-weight-medium); }
+
+.pv-tabbar {
+  height: var(--pv-tabbar-h);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: var(--pv-bg);
+  border-top: 1px solid var(--pv-border);
+  /* Home-indicator inset on modern iPhones; without this the last row of
+     controls sits under the system gesture bar. */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.pv-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px;
+  font-size: var(--pv-text-2xs);
+  color: var(--pv-text-subtle);
+  text-decoration: none;
+  min-height: var(--pv-touch-min);
+}
+.pv-tab[aria-current="page"] { color: var(--pv-accent-text); font-weight: var(--pv-weight-semibold); }
+.pv-tab svg { width: 22px; height: 22px; }
+
+.pv-avatar {
+  width: 32px; height: 32px; flex: none;
+  border-radius: var(--pv-radius-full);
+  background: var(--pv-accent-200);
+  color: var(--pv-accent-900);
+  display: grid; place-items: center;
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  overflow: hidden;
+}
+.pv-avatar--lg { width: 64px; height: 64px; font-size: var(--pv-text-xl); }
+
+/* ==========================================================================
+   Photos
+
+   Real images are not used in these mockups. The design project blocks
+   external hosts, so photo stand-ins are CSS gradients — deterministic, no
+   network, and they make composition legible without pretending to be art
+   direction.
+   ========================================================================== */
+
+.pv-photo {
+  position: relative;
+  border-radius: var(--pv-radius-lg);
+  overflow: hidden;
+  background: var(--pv-bg-sunken);
+  aspect-ratio: 4 / 3;
+}
+
+.pv-photo--square { aspect-ratio: 1 / 1; }
+.pv-photo--tall   { aspect-ratio: 3 / 4; }
+
+.pv-photo-img { position: absolute; inset: 0; }
+
+/* Stand-in "photographs" */
+.pv-img-1 { background: linear-gradient(150deg, #5b8fa8 0%, #a8c0cc 45%, #e8dfd0 100%); }
+.pv-img-2 { background: linear-gradient(160deg, #2f4858 0%, #6b8f8a 55%, #cfd8c8 100%); }
+.pv-img-3 { background: linear-gradient(135deg, #8a6a4f 0%, #c99a68 50%, #f0e0c4 100%); }
+.pv-img-4 { background: linear-gradient(200deg, #3d4a5c 0%, #7d8ba0 60%, #d8dde5 100%); }
+.pv-img-5 { background: linear-gradient(120deg, #6b5b73 0%, #a89bb0 50%, #e6dfe8 100%); }
+.pv-img-6 { background: linear-gradient(170deg, #4a5d4e 0%, #8fa885 55%, #dde5cf 100%); }
+.pv-img-7 { background: linear-gradient(140deg, #7a4b4b 0%, #c08a7a 50%, #f0d8cc 100%); }
+.pv-img-8 { background: linear-gradient(190deg, #34505c 0%, #7fa3ab 55%, #d5e3e5 100%); }
+
+.pv-photo-scrim {
+  position: absolute; inset: 0;
+  background: var(--pv-scrim-gradient);
+  pointer-events: none;
+}
+
+.pv-photo-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: var(--pv-space-3);
+  color: var(--pv-neutral-0);
+  font-size: var(--pv-text-xs);
+}
+
+.pv-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--pv-space-3);
+}
+
+/* Selected photo — a ring plus an offset, so selection survives being
+   rendered on top of an arbitrary photograph. */
+.pv-photo[data-selected="true"] {
+  outline: 3px solid var(--pv-accent);
+  outline-offset: 2px;
+}
+
+.pv-filmstrip {
+  display: flex; gap: var(--pv-space-2);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--pv-space-2);
+}
+.pv-filmstrip > * { flex: none; width: 112px; scroll-snap-align: start; }
+
+/* Photos with no GPS EXIF. Common — screenshots, scans, cameras with
+   location services off — and they need a visible home, not silent
+   omission. */
+.pv-photo[data-unplaced="true"]::after {
+  content: "";
+  position: absolute; inset: 0;
+  border: 2px dashed var(--pv-warning);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Cards
+   ========================================================================== */
+
+.pv-card {
+  background: var(--pv-bg-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-lg);
+  overflow: hidden;
+}
+
+.pv-voyage-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: var(--pv-bg-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-lg);
+  overflow: hidden;
+  transition: box-shadow var(--pv-duration-fast) var(--pv-ease-out),
+              border-color var(--pv-duration-fast) var(--pv-ease-out);
+}
+.pv-voyage-card:hover { box-shadow: var(--pv-shadow-2); border-color: var(--pv-border-strong); }
+
+.pv-voyage-card-body { padding: var(--pv-space-4); }
+.pv-voyage-card-title {
+  font-size: var(--pv-text-xl);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-tight);
+  margin: 0 0 var(--pv-space-1);
+}
+.pv-voyage-card-meta {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-subtle);
+  display: flex; align-items: center; gap: var(--pv-space-2);
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Map primitives
+   ========================================================================== */
+
+/* Static basemap stand-in. Phase 7 replaces this with MapLibre; the shape
+   and dimensions here are what that map has to fit into. */
+.pv-map {
+  position: relative;
+  background:
+    repeating-linear-gradient(0deg,   rgb(0 0 0 / 0.035) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg,  rgb(0 0 0 / 0.035) 0 1px, transparent 1px 44px),
+    linear-gradient(160deg, #dfe6e2 0%, #eef0e9 40%, #e4e9ef 100%);
+  overflow: hidden;
+}
+
+:root[data-theme="dark"] .pv-map,
+.pv-map[data-theme="dark"] {
+  background:
+    repeating-linear-gradient(0deg,  rgb(255 255 255 / 0.04) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.04) 0 1px, transparent 1px 44px),
+    linear-gradient(160deg, #1d2422 0%, #171a18 40%, #1a1e24 100%);
+}
+
+/* A pin looks like a 26px marker but accepts a 44px tap. Dense clusters are
+   unusable on a phone otherwise. */
+.pv-pin {
+  position: absolute;
+  width: var(--pv-touch-min);
+  height: var(--pv-touch-min);
+  margin-left: calc(var(--pv-touch-min) / -2);
+  margin-top: calc(var(--pv-touch-min) * -1);
+  display: grid;
+  place-items: end center;
+  border: 0; background: none; padding: 0;
+  cursor: pointer;
+}
+
+.pv-pin-shape {
+  width: 26px; height: 26px;
+  border-radius: var(--pv-radius-full) var(--pv-radius-full) 2px var(--pv-radius-full);
+  transform: rotate(45deg);
+  background: var(--pv-pin);
+  border: 2px solid var(--pv-pin-stroke);
+  box-shadow: var(--pv-shadow-2);
+  transition: transform var(--pv-duration-fast) var(--pv-ease-out),
+              background-color var(--pv-duration-fast) var(--pv-ease-out);
+}
+
+.pv-pin:hover .pv-pin-shape { transform: rotate(45deg) scale(1.12); }
+
+/* Selection changes hue AND size AND adds a halo — three signals, because
+   hue alone fails for a meaningful number of users. */
+.pv-pin[data-selected="true"] .pv-pin-shape {
+  background: var(--pv-pin-selected);
+  transform: rotate(45deg) scale(1.25);
+  box-shadow: var(--pv-shadow-3), 0 0 0 4px var(--pv-map-area-fill);
+}
+
+.pv-cluster {
+  position: absolute;
+  min-width: 38px; height: 38px;
+  margin-left: -19px; margin-top: -19px;
+  padding: 0 var(--pv-space-2);
+  border-radius: var(--pv-radius-full);
+  background: var(--pv-cluster-bg);
+  color: var(--pv-pin-text);
+  border: 2px solid var(--pv-pin-stroke);
+  box-shadow: var(--pv-shadow-2);
+  display: grid; place-items: center;
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-bold);
+  cursor: pointer;
+}
+.pv-cluster--md { min-width: 46px; height: 46px; margin-left: -23px; margin-top: -23px; font-size: var(--pv-text-sm); }
+.pv-cluster--lg { min-width: 56px; height: 56px; margin-left: -28px; margin-top: -28px; font-size: var(--pv-text-base); }
+
+/* Coarse granularity draws an AREA, not a point. A sharp pin at the centre
+   of a 10km rounding is a precision claim the data cannot support, and it
+   visually undoes the choice the user made. */
+.pv-map-area {
+  position: absolute;
+  border-radius: var(--pv-radius-full);
+  background: var(--pv-map-area-fill);
+  border: 2px dashed var(--pv-map-area-stroke);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* OpenStreetMap attribution is an ODbL license requirement, not a courtesy.
+   It appears on every map instance. */
+.pv-attribution {
+  position: absolute; right: 0; bottom: 0;
+  padding: 2px var(--pv-space-2);
+  background: rgb(255 255 255 / 0.82);
+  color: #3d3d3d;
+  font-size: var(--pv-text-2xs);
+  border-top-left-radius: var(--pv-radius-sm);
+}
+.pv-attribution a { color: inherit; }
+
+/* Attribution over a dark basemap. Kept as its own modifier rather than a
+   theme override, because the basemap's darkness is independent of the page
+   theme — a dark map can appear on a light page. */
+.pv-attribution--dark {
+  background: rgb(15 13 12 / 0.8);
+  color: var(--pv-neutral-200);
+}
+
+.pv-map-controls {
+  position: absolute; top: var(--pv-space-3); right: var(--pv-space-3);
+  display: flex; flex-direction: column; gap: 1px;
+  border-radius: var(--pv-radius-md);
+  overflow: hidden;
+  box-shadow: var(--pv-shadow-2);
+}
+.pv-map-ctrl {
+  width: var(--pv-touch-min); height: var(--pv-touch-min);
+  background: var(--pv-bg); color: var(--pv-text);
+  border: 0; cursor: pointer;
+  display: grid; place-items: center;
+  font-size: var(--pv-text-lg);
+}
+.pv-map-ctrl:hover { background: var(--pv-bg-hover); }
+
+/* ==========================================================================
+   Upload
+   ========================================================================== */
+
+.pv-dropzone {
+  border: 2px dashed var(--pv-border-strong);
+  border-radius: var(--pv-radius-lg);
+  background: var(--pv-bg-subtle);
+  padding: var(--pv-space-10) var(--pv-space-6);
+  text-align: center;
+  transition: border-color var(--pv-duration-fast) var(--pv-ease-out),
+              background-color var(--pv-duration-fast) var(--pv-ease-out);
+}
+
+.pv-dropzone[data-state="dragover"] {
+  border-color: var(--pv-accent);
+  background: var(--pv-accent-subtle);
+}
+
+/* Rejecting: the drag carries something that is not an image. Signalled
+   before the drop, so the user does not have to complete a doomed action. */
+.pv-dropzone[data-state="reject"] {
+  border-color: var(--pv-danger);
+  background: var(--pv-danger-bg);
+}
+
+.pv-dropzone-icon { color: var(--pv-text-subtle); margin-bottom: var(--pv-space-3); }
+.pv-dropzone[data-state="dragover"] .pv-dropzone-icon { color: var(--pv-accent); }
+.pv-dropzone[data-state="reject"]   .pv-dropzone-icon { color: var(--pv-danger); }
+
+.pv-dropzone-title { font-weight: var(--pv-weight-semibold); margin: 0 0 var(--pv-space-1); }
+.pv-dropzone-hint  { font-size: var(--pv-text-sm); color: var(--pv-text-muted); margin: 0; }
+
+.pv-upload-row {
+  display: flex; align-items: center; gap: var(--pv-space-3);
+  padding: var(--pv-space-3);
+  border-bottom: 1px solid var(--pv-border);
+}
+.pv-upload-row:last-child { border-bottom: 0; }
+
+.pv-upload-thumb {
+  width: 44px; height: 44px; flex: none;
+  border-radius: var(--pv-radius-md);
+  overflow: hidden;
+  background: var(--pv-bg-sunken);
+  position: relative;
+}
+
+.pv-upload-info { flex: 1; min-width: 0; }
+.pv-upload-name {
+  font-size: var(--pv-text-sm);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pv-upload-sub { font-size: var(--pv-text-xs); color: var(--pv-text-subtle); }
+.pv-upload-sub--error { color: var(--pv-danger); }
+
+.pv-progress {
+  height: 4px;
+  background: var(--pv-bg-active);
+  border-radius: var(--pv-radius-full);
+  overflow: hidden;
+  margin-top: var(--pv-space-1);
+}
+.pv-progress-bar {
+  height: 100%;
+  background: var(--pv-accent);
+  border-radius: inherit;
+  transition: width var(--pv-duration-base) var(--pv-ease-out);
+}
+
+/* ==========================================================================
+   Granularity selector
+
+   The one genuinely novel control in this product. It must make the privacy
+   consequence legible BEFORE the voyage is published, because every voyage
+   is public and this setting is the only thing standing between an EXIF
+   coordinate and the world.
+   ========================================================================== */
+
+.pv-gran { display: flex; flex-direction: column; gap: var(--pv-space-3); }
+
+.pv-gran-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--pv-space-1);
+  padding: var(--pv-space-1);
+  background: var(--pv-bg-sunken);
+  border-radius: var(--pv-radius-md);
+}
+
+.pv-gran-step {
+  padding: var(--pv-space-2) var(--pv-space-1);
+  border: 0; background: transparent;
+  border-radius: var(--pv-radius-sm);
+  font-family: inherit;
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-muted);
+  cursor: pointer;
+  min-height: var(--pv-touch-min);
+  transition: background-color var(--pv-duration-fast) var(--pv-ease-out);
+}
+.pv-gran-step:hover { background: var(--pv-bg-hover); }
+.pv-gran-step[aria-pressed="true"] {
+  background: var(--pv-bg);
+  color: var(--pv-text);
+  box-shadow: var(--pv-shadow-1);
+}
+
+.pv-gran-preview {
+  height: 168px;
+  border-radius: var(--pv-radius-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.pv-gran-explain {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+}
+
+/* The stripping guarantee. Per D6, coarse granularity is meaningless if the
+   served file still carries its original GPS EXIF — so the promise is stated
+   where the choice is made, not buried in a policy page. */
+.pv-gran-guarantee {
+  display: flex; gap: var(--pv-space-2);
+  padding: var(--pv-space-3);
+  background: var(--pv-success-bg);
+  border-radius: var(--pv-radius-md);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text);
+  line-height: var(--pv-leading-normal);
+}
+.pv-gran-guarantee svg { flex: none; color: var(--pv-success); margin-top: 1px; }
+
+/* ==========================================================================
+   Feedback: badges, toasts, empty states, skeletons
+   ========================================================================== */
+
+.pv-badge {
+  display: inline-flex; align-items: center; gap: var(--pv-space-1);
+  padding: 2px var(--pv-space-2);
+  border-radius: var(--pv-radius-full);
+  font-size: var(--pv-text-2xs);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-wide);
+  text-transform: uppercase;
+  background: var(--pv-bg-sunken);
+  color: var(--pv-text-muted);
+}
+.pv-badge--draft   { background: var(--pv-warning-bg); color: var(--pv-warning); }
+.pv-badge--public  { background: var(--pv-success-bg); color: var(--pv-success); }
+.pv-badge--unplaced{ background: var(--pv-warning-bg); color: var(--pv-warning); }
+.pv-badge--accent  { background: var(--pv-accent-subtle); color: var(--pv-accent-text); }
+
+.pv-toast {
+  display: flex; align-items: flex-start; gap: var(--pv-space-3);
+  padding: var(--pv-space-3) var(--pv-space-4);
+  background: var(--pv-bg-raised);
+  border: 1px solid var(--pv-border);
+  border-left: 3px solid var(--pv-text-subtle);
+  border-radius: var(--pv-radius-md);
+  box-shadow: var(--pv-shadow-3);
+  max-width: 420px;
+}
+.pv-toast--success { border-left-color: var(--pv-success); }
+.pv-toast--error   { border-left-color: var(--pv-danger); }
+.pv-toast--warning { border-left-color: var(--pv-warning); }
+
+.pv-toast-title { font-size: var(--pv-text-sm); font-weight: var(--pv-weight-semibold); }
+.pv-toast-body  { font-size: var(--pv-text-xs); color: var(--pv-text-muted); }
+
+.pv-empty {
+  text-align: center;
+  padding: var(--pv-space-16) var(--pv-space-6);
+  max-width: 46ch;
+  margin: 0 auto;
+}
+.pv-empty-icon { color: var(--pv-text-subtle); margin-bottom: var(--pv-space-4); }
+.pv-empty-title {
+  font-size: var(--pv-text-xl);
+  font-weight: var(--pv-weight-semibold);
+  margin: 0 0 var(--pv-space-2);
+}
+.pv-empty-body { color: var(--pv-text-muted); font-size: var(--pv-text-sm); margin: 0 0 var(--pv-space-5); }
+
+.pv-skeleton {
+  background: linear-gradient(90deg,
+    var(--pv-bg-sunken) 0%, var(--pv-bg-active) 50%, var(--pv-bg-sunken) 100%);
+  background-size: 200% 100%;
+  animation: pv-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--pv-radius-md);
+}
+@keyframes pv-shimmer { to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-skeleton { animation: none; background: var(--pv-bg-sunken); }
+}
+
+/* ==========================================================================
+   Bottom sheet — the mobile half of the voyage detail layout
+   ========================================================================== */
+
+.pv-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--pv-bg-raised);
+  border-radius: var(--pv-radius-2xl) var(--pv-radius-2xl) 0 0;
+  box-shadow: var(--pv-shadow-4);
+  display: flex; flex-direction: column;
+  transition: height var(--pv-duration-slow) var(--pv-ease-sheet);
+  /* The sheet, not the page, owns vertical scrolling here — this is what
+     keeps a drag on the sheet from also panning the map underneath. */
+  touch-action: pan-y;
+}
+
+.pv-sheet-grip {
+  padding: var(--pv-space-2) 0 var(--pv-space-1);
+  display: grid; place-items: center;
+  flex: none;
+  cursor: grab;
+  min-height: 28px;
+}
+.pv-sheet-grip::before {
+  content: "";
+  width: 36px; height: 4px;
+  border-radius: var(--pv-radius-full);
+  background: var(--pv-border-strong);
+}
+
+.pv-sheet-head {
+  padding: 0 var(--pv-space-4) var(--pv-space-3);
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--pv-space-3);
+}
+
+.pv-sheet-body { flex: 1; overflow-y: auto; padding: 0 var(--pv-space-4) var(--pv-space-4); }
+
+/* ==========================================================================
+   Lightbox
+   ========================================================================== */
+
+.pv-lightbox {
+  position: absolute; inset: 0;
+  background: var(--pv-overlay-strong);
+  display: flex; flex-direction: column;
+}
+.pv-lightbox-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--pv-space-3);
+  padding: var(--pv-space-3) var(--pv-space-4);
+  color: var(--pv-neutral-0);
+}
+.pv-lightbox-stage { flex: 1; display: grid; place-items: center; padding: var(--pv-space-4); min-height: 0; }
+.pv-lightbox-btn {
+  width: var(--pv-touch-min); height: var(--pv-touch-min);
+  border-radius: var(--pv-radius-full);
+  background: rgb(255 255 255 / 0.14);
+  color: var(--pv-neutral-0);
+  border: 0; cursor: pointer;
+  display: grid; place-items: center;
+}
+.pv-lightbox-btn:hover { background: rgb(255 255 255 / 0.24); }
+
+/* ==========================================================================
+   Utility
+   ========================================================================== */
+
+.pv-container {
+  max-width: var(--pv-container-max);
+  margin: 0 auto;
+  padding: 0 var(--pv-container-pad);
+  width: 100%;
+}
+
+.pv-stack-2 { display: flex; flex-direction: column; gap: var(--pv-space-2); }
+.pv-stack-3 { display: flex; flex-direction: column; gap: var(--pv-space-3); }
+.pv-stack-4 { display: flex; flex-direction: column; gap: var(--pv-space-4); }
+.pv-stack-6 { display: flex; flex-direction: column; gap: var(--pv-space-6); }
+.pv-inline-2 { display: flex; align-items: center; gap: var(--pv-space-2); flex-wrap: wrap; }
+.pv-inline-3 { display: flex; align-items: center; gap: var(--pv-space-3); flex-wrap: wrap; }
+.pv-spacer { flex: 1; }
+
+.pv-h1 { font-size: var(--pv-text-3xl); font-weight: var(--pv-weight-bold); letter-spacing: var(--pv-tracking-tight); line-height: var(--pv-leading-tight); margin: 0; }
+.pv-h2 { font-size: var(--pv-text-2xl); font-weight: var(--pv-weight-semibold); letter-spacing: var(--pv-tracking-tight); line-height: var(--pv-leading-snug); margin: 0; }
+.pv-h3 { font-size: var(--pv-text-xl); font-weight: var(--pv-weight-semibold); margin: 0; }
+.pv-muted { color: var(--pv-text-muted); }
+.pv-subtle { color: var(--pv-text-subtle); }
+.pv-sm { font-size: var(--pv-text-sm); }
+.pv-xs { font-size: var(--pv-text-xs); }

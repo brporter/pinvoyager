@@ -1,0 +1,272 @@
+<!-- @dsCard group="Flows" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication flow — PinVoyager Flows</title>
+<link rel="stylesheet" href="../preview.css">
+<style>
+  .flow { background: var(--pv-bg); border: 1px solid var(--pv-border); border-radius: var(--pv-radius-lg); padding: var(--pv-space-4); }
+  .flow svg { display: block; min-width: 940px; }
+  .fl-node    { fill: var(--pv-bg-subtle); stroke: var(--pv-border-strong); stroke-width: 1.5; }
+  .fl-start   { fill: var(--pv-accent-subtle); stroke: var(--pv-accent); stroke-width: 1.5; }
+  .fl-decide  { fill: var(--pv-bg); stroke: var(--pv-accent); stroke-width: 1.5; stroke-dasharray: 5 3; }
+  .fl-fail    { fill: var(--pv-danger-bg); stroke: var(--pv-danger); stroke-width: 1.5; }
+  .fl-ok      { fill: var(--pv-success-bg); stroke: var(--pv-success); stroke-width: 1.5; }
+  .fl-t       { font-family: var(--pv-font-sans); font-size: 12.5px; fill: var(--pv-text); }
+  .fl-t-b     { font-weight: 600; }
+  .fl-t-s     { font-size: 11px; fill: var(--pv-text-muted); }
+  .fl-edge    { stroke: var(--pv-text-subtle); stroke-width: 1.5; fill: none; }
+  .fl-label   { font-family: var(--pv-font-mono); font-size: 10px; fill: var(--pv-text-subtle); }
+  .fl-arrow   { fill: var(--pv-text-subtle); }
+</style>
+</head>
+<body>
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Flows</p>
+    <h1 class="pv-doc-title">Authentication</h1>
+    <p class="pv-doc-intro">
+      Sign-in end to end, with the failure branches drawn. Nothing here stores a credential —
+      the ID token is verified, consumed, and discarded, and what persists is only the fact of
+      the identity.
+    </p>
+  </header>
+
+  <div class="pv-callout pv-callout--warn">
+    <strong>Verifying a token is not the same as decoding one.</strong> Every dashed decision
+    below is a check that must actually run: JWKS signature, issuer, audience, expiry, nonce,
+    and a <code>state</code> match against a server-side pending attempt. Skipping any one of
+    them turns delegated authentication into an open door, and a decoded-but-unverified token
+    looks identical to a valid one in a debugger.
+  </div>
+
+  <section class="pv-section">
+    <h2>Sign-in, first and returning</h2>
+
+    <div class="flow pv-scroll">
+      <svg viewBox="0 0 940 1030" role="img" aria-label="Authentication flow diagram">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" class="fl-arrow"/>
+          </marker>
+        </defs>
+
+        <!-- N1 start -->
+        <rect class="fl-start" x="40" y="24" width="280" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="180" y="51" text-anchor="middle">User taps “Continue with Google”</text>
+
+        <!-- N2 -->
+        <rect class="fl-node" x="40" y="100" width="280" height="58" rx="8"/>
+        <text class="fl-t" x="180" y="123" text-anchor="middle">Generate state, nonce, PKCE challenge</text>
+        <text class="fl-t fl-t-s" x="180" y="141" text-anchor="middle">Store pending attempt server-side · 10 min TTL</text>
+
+        <!-- N3 -->
+        <rect class="fl-node" x="40" y="190" width="280" height="44" rx="8"/>
+        <text class="fl-t" x="180" y="217" text-anchor="middle">302 → provider authorize endpoint</text>
+
+        <!-- D1 -->
+        <rect class="fl-decide" x="40" y="266" width="280" height="52" rx="8"/>
+        <text class="fl-t fl-t-b" x="180" y="297" text-anchor="middle">User consents at the provider?</text>
+
+        <!-- B1 cancelled -->
+        <rect class="fl-node" x="420" y="262" width="250" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="545" y="285" text-anchor="middle">“Sign-in cancelled”</text>
+        <text class="fl-t fl-t-s" x="545" y="303" text-anchor="middle">Nothing was created. Neutral tone.</text>
+
+        <!-- N4 -->
+        <rect class="fl-node" x="40" y="350" width="280" height="44" rx="8"/>
+        <text class="fl-t" x="180" y="377" text-anchor="middle">Redirect back with code + state</text>
+
+        <!-- D2 -->
+        <rect class="fl-decide" x="40" y="426" width="280" height="52" rx="8"/>
+        <text class="fl-t fl-t-b" x="180" y="451" text-anchor="middle">state matches a pending attempt?</text>
+        <text class="fl-t fl-t-s" x="180" y="468" text-anchor="middle">CSRF check · single use</text>
+
+        <!-- B2 -->
+        <rect class="fl-fail" x="420" y="422" width="250" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="545" y="445" text-anchor="middle">Reject — “Could not complete”</text>
+        <text class="fl-t fl-t-s" x="545" y="463" text-anchor="middle">Generic message + reference ID</text>
+
+        <!-- N5 -->
+        <rect class="fl-node" x="40" y="510" width="280" height="58" rx="8"/>
+        <text class="fl-t" x="180" y="533" text-anchor="middle">Exchange code with PKCE verifier</text>
+        <text class="fl-t fl-t-s" x="180" y="551" text-anchor="middle">Facebook: no ID token — Graph /me instead</text>
+
+        <!-- D3 -->
+        <rect class="fl-decide" x="40" y="600" width="280" height="66" rx="8"/>
+        <text class="fl-t fl-t-b" x="180" y="623" text-anchor="middle">ID token verifies?</text>
+        <text class="fl-t fl-t-s" x="180" y="640" text-anchor="middle">JWKS signature · iss · aud</text>
+        <text class="fl-t fl-t-s" x="180" y="656" text-anchor="middle">exp · nonce</text>
+
+        <!-- B3 -->
+        <rect class="fl-fail" x="420" y="603" width="250" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="545" y="626" text-anchor="middle">Reject — same generic screen</text>
+        <text class="fl-t fl-t-s" x="545" y="644" text-anchor="middle">Real cause to the log only</text>
+
+        <!-- D4 -->
+        <rect class="fl-decide" x="40" y="698" width="280" height="52" rx="8"/>
+        <text class="fl-t fl-t-b" x="180" y="729" text-anchor="middle">Identity (provider, sub) known?</text>
+
+        <!-- B4 existing -->
+        <rect class="fl-node" x="420" y="702" width="250" height="44" rx="8"/>
+        <text class="fl-t" x="545" y="729" text-anchor="middle">Load existing user</text>
+
+        <!-- N6 -->
+        <rect class="fl-node" x="40" y="782" width="280" height="58" rx="8"/>
+        <text class="fl-t" x="180" y="805" text-anchor="middle">Create users row + identities row</text>
+        <text class="fl-t fl-t-s" x="180" y="823" text-anchor="middle">No credential stored, ever</text>
+
+        <!-- N7 -->
+        <rect class="fl-node" x="40" y="872" width="280" height="58" rx="8"/>
+        <text class="fl-t" x="180" y="895" text-anchor="middle">Create server-side session</text>
+        <text class="fl-t fl-t-s" x="180" y="913" text-anchor="middle">HttpOnly · Secure · SameSite=Lax cookie</text>
+
+        <!-- N8 end -->
+        <rect class="fl-ok" x="40" y="962" width="280" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="180" y="989" text-anchor="middle">Signed in → Discover</text>
+
+        <!-- main edges -->
+        <path class="fl-edge" d="M180,68 L180,96"   marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,158 L180,186" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,234 L180,262" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,318 L180,346" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,394 L180,422" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,478 L180,506" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,568 L180,596" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,666 L180,694" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,750 L180,778" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,840 L180,868" marker-end="url(#ah)"/>
+        <path class="fl-edge" d="M180,930 L180,958" marker-end="url(#ah)"/>
+
+        <!-- branch edges -->
+        <path class="fl-edge" d="M320,292 L416,292" marker-end="url(#ah)"/>
+        <text class="fl-label" x="352" y="286">no</text>
+        <text class="fl-label" x="188" y="336">yes</text>
+
+        <path class="fl-edge" d="M320,452 L416,452" marker-end="url(#ah)"/>
+        <text class="fl-label" x="352" y="446">no</text>
+        <text class="fl-label" x="188" y="498">yes</text>
+
+        <path class="fl-edge" d="M320,633 L416,633" marker-end="url(#ah)"/>
+        <text class="fl-label" x="352" y="627">no</text>
+        <text class="fl-label" x="188" y="688">yes</text>
+
+        <path class="fl-edge" d="M320,724 L416,724" marker-end="url(#ah)"/>
+        <text class="fl-label" x="352" y="718">yes</text>
+        <text class="fl-label" x="188" y="770">no — first sign-in</text>
+
+        <!-- existing user rejoins before session creation -->
+        <path class="fl-edge" d="M545,746 L545,901 L324,901" marker-end="url(#ah)"/>
+      </svg>
+    </div>
+
+    <div class="pv-annot"><span class="pv-annot-num">1</span><span><strong>There is no separate signup path.</strong> The only difference between a first sign-in and a returning one is whether the identity lookup finds a row. Both converge on the same session creation.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">2</span><span><strong>Both failure branches land on the same generic screen.</strong> A rejected state, a bad signature, an expired token, and a nonce mismatch are indistinguishable to the user. Telling them apart would also tell an attacker probing the endpoint apart; the real cause goes to the log with a reference ID.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">3</span><span><strong>Facebook diverges at the exchange step.</strong> It is not OIDC-conformant and returns no ID token, so the verification box does not apply — it exchanges the code and then calls the Graph API, using the app-scoped ID as the subject.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">4</span><span><strong>Apple diverges at the callback.</strong> Its redirect is a form POST rather than a GET, and it returns the user's name only on this first pass through the diagram — never again.</span></div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Linking a second provider</h2>
+
+    <div class="flow pv-scroll">
+      <svg viewBox="0 0 940 560" role="img" aria-label="Provider linking flow diagram">
+        <defs>
+          <marker id="ah2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" class="fl-arrow"/>
+          </marker>
+        </defs>
+
+        <rect class="fl-start" x="40" y="24" width="300" height="58" rx="22"/>
+        <text class="fl-t fl-t-b" x="190" y="47" text-anchor="middle">Signed-in user taps “Link Apple”</text>
+        <text class="fl-t fl-t-s" x="190" y="65" text-anchor="middle">in Settings → Sign-in methods</text>
+
+        <rect class="fl-node" x="40" y="114" width="300" height="58" rx="8"/>
+        <text class="fl-t" x="190" y="137" text-anchor="middle">Full OIDC round trip, as above</text>
+        <text class="fl-t fl-t-s" x="190" y="155" text-anchor="middle">Session A stays active throughout</text>
+
+        <rect class="fl-decide" x="40" y="204" width="300" height="66" rx="8"/>
+        <text class="fl-t fl-t-b" x="190" y="227" text-anchor="middle">Is this (provider, sub) already</text>
+        <text class="fl-t fl-t-b" x="190" y="244" text-anchor="middle">attached to another account?</text>
+        <text class="fl-t fl-t-s" x="190" y="261" text-anchor="middle">Checked on subject, never on email</text>
+
+        <rect class="fl-fail" x="440" y="198" width="290" height="78" rx="8"/>
+        <text class="fl-t fl-t-b" x="585" y="221" text-anchor="middle">“That Apple ID is already in use”</text>
+        <text class="fl-t fl-t-s" x="585" y="239" text-anchor="middle">Refuse. Change nothing on either</text>
+        <text class="fl-t fl-t-s" x="585" y="255" text-anchor="middle">account. Tell the user to unlink it</text>
+        <text class="fl-t fl-t-s" x="585" y="271" text-anchor="middle">from the other account first.</text>
+
+        <rect class="fl-node" x="40" y="312" width="300" height="58" rx="8"/>
+        <text class="fl-t" x="190" y="335" text-anchor="middle">Insert identities row → user A</text>
+        <text class="fl-t fl-t-s" x="190" y="353" text-anchor="middle">Unique on (provider, subject)</text>
+
+        <rect class="fl-ok" x="40" y="410" width="300" height="58" rx="22"/>
+        <text class="fl-t fl-t-b" x="190" y="433" text-anchor="middle">Either provider now signs in</text>
+        <text class="fl-t fl-t-s" x="190" y="451" text-anchor="middle">to the same account</text>
+
+        <path class="fl-edge" d="M190,82 L190,110"   marker-end="url(#ah2)"/>
+        <path class="fl-edge" d="M190,172 L190,200"  marker-end="url(#ah2)"/>
+        <path class="fl-edge" d="M190,270 L190,308"  marker-end="url(#ah2)"/>
+        <path class="fl-edge" d="M190,370 L190,406"  marker-end="url(#ah2)"/>
+        <path class="fl-edge" d="M340,237 L436,237"  marker-end="url(#ah2)"/>
+        <text class="fl-label" x="372" y="231">yes</text>
+        <text class="fl-label" x="198" y="294">no</text>
+
+        <rect class="fl-fail" x="440" y="330" width="290" height="96" rx="8"/>
+        <text class="fl-t fl-t-b" x="585" y="353" text-anchor="middle">What must never happen</text>
+        <text class="fl-t fl-t-s" x="585" y="373" text-anchor="middle">Matching two accounts because both</text>
+        <text class="fl-t fl-t-s" x="585" y="389" text-anchor="middle">providers returned the same email.</text>
+        <text class="fl-t fl-t-s" x="585" y="405" text-anchor="middle">Not every provider verifies address</text>
+        <text class="fl-t fl-t-s" x="585" y="421" text-anchor="middle">ownership — this is a takeover path.</text>
+      </svg>
+    </div>
+
+    <div class="pv-annot"><span class="pv-annot-num">5</span><span><strong>Linking always flows through the already-authenticated account.</strong> The user proves control of account A, then adds provider B to it. The reverse — proving B and claiming A — is exactly what makes email-based merging exploitable.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">6</span><span><strong>A refused link changes nothing.</strong> The failure screen says so explicitly, because the user's first fear is that something got half-merged.</span></div>
+  </section>
+
+  <section class="pv-section">
+    <h2>Session expiry and sign-out</h2>
+    <div class="flow pv-scroll">
+      <svg viewBox="0 0 940 300" role="img" aria-label="Session expiry and sign-out flow">
+        <defs>
+          <marker id="ah3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 z" class="fl-arrow"/>
+          </marker>
+        </defs>
+
+        <rect class="fl-start" x="40" y="24" width="250" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="165" y="51" text-anchor="middle">Request with session cookie</text>
+
+        <rect class="fl-decide" x="40" y="106" width="250" height="52" rx="8"/>
+        <text class="fl-t fl-t-b" x="165" y="137" text-anchor="middle">Session row still valid?</text>
+
+        <rect class="fl-node" x="390" y="102" width="270" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="525" y="125" text-anchor="middle">401 → “Your session expired”</text>
+        <text class="fl-t fl-t-s" x="525" y="143" text-anchor="middle">Queued uploads preserved and stated</text>
+
+        <rect class="fl-ok" x="40" y="196" width="250" height="44" rx="22"/>
+        <text class="fl-t fl-t-b" x="165" y="223" text-anchor="middle">Proceed as the user</text>
+
+        <rect class="fl-node" x="700" y="102" width="200" height="60" rx="8"/>
+        <text class="fl-t fl-t-b" x="800" y="125" text-anchor="middle">Sign out</text>
+        <text class="fl-t fl-t-s" x="800" y="143" text-anchor="middle">Delete the session row,</text>
+        <text class="fl-t fl-t-s" x="800" y="159" text-anchor="middle">not just the cookie</text>
+
+        <path class="fl-edge" d="M165,68 L165,102"  marker-end="url(#ah3)"/>
+        <path class="fl-edge" d="M165,158 L165,192" marker-end="url(#ah3)"/>
+        <path class="fl-edge" d="M290,132 L386,132" marker-end="url(#ah3)"/>
+        <text class="fl-label" x="322" y="126">no</text>
+        <text class="fl-label" x="173" y="180">yes</text>
+      </svg>
+    </div>
+    <div class="pv-annot"><span class="pv-annot-num">7</span><span><strong>Sessions are server-side so they can be revoked.</strong> A stateless JWT session cannot be invalidated before expiry, which matters more here than usual: the account <em>is</em> the identity, and there is no password to change if something goes wrong.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">8</span><span><strong>Expiry mid-upload preserves the queue.</strong> Without that guarantee stated in the message, the reasonable assumption is that a large batch was lost.</span></div>
+  </section>
+
+</main>
+</body>
+</html>

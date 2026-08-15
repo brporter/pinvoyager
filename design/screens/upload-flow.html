@@ -1,0 +1,265 @@
+<!-- @dsCard group="Screens" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload flow — PinVoyager Screens</title>
+<link rel="stylesheet" href="../preview.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+  .uf-shell { height: 100%; display: flex; flex-direction: column; }
+  .uf-scroll { flex: 1; overflow-y: auto; padding: var(--pv-space-6); }
+  .uf-scroll-m { flex: 1; overflow-y: auto; padding: var(--pv-space-4); }
+  .uf-steps { display: flex; gap: var(--pv-space-2); align-items: center; margin-bottom: var(--pv-space-6); }
+  .uf-step { display: flex; align-items: center; gap: var(--pv-space-2); font-size: var(--pv-text-sm); color: var(--pv-text-subtle); }
+  .uf-step[data-state="done"], .uf-step[data-state="current"] { color: var(--pv-text); }
+  .uf-dot {
+    width: 22px; height: 22px; border-radius: var(--pv-radius-full);
+    display: grid; place-items: center; flex: none;
+    font-size: var(--pv-text-2xs); font-weight: var(--pv-weight-bold);
+    background: var(--pv-bg-sunken); color: var(--pv-text-subtle);
+  }
+  .uf-step[data-state="done"] .uf-dot { background: var(--pv-success); color: #fff; }
+  .uf-step[data-state="current"] .uf-dot { background: var(--pv-accent); color: var(--pv-text-on-accent); }
+  .uf-sep { flex: 1; height: 1px; background: var(--pv-border); }
+</style>
+</head>
+<body class="pv-app">
+<main class="pv-doc">
+
+  <header class="pv-doc-head">
+    <p class="pv-doc-eyebrow">Screens</p>
+    <h1 class="pv-doc-title">Upload flow</h1>
+    <p class="pv-doc-intro">
+      Three steps: choose files, watch them process, review where they landed. The review step
+      exists because EXIF is unreliable, and a user needs to see what was actually derived
+      before it becomes public.
+    </p>
+  </header>
+
+  <section class="pv-section">
+    <h2>Step 1 — Choose</h2>
+    <div class="pv-frames pv-frames--wide">
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Desktop · empty dropzone</span>
+        <div class="pv-viewport pv-viewport--desktop">
+          <div class="uf-shell">
+            <nav class="pv-topnav">
+              <a class="pv-brand" href="#">
+                <svg class="pv-brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                PinVoyager
+              </a>
+              <div class="pv-navlinks">
+                <a class="pv-navlink" href="#">Discover</a>
+                <a class="pv-navlink" href="#">My voyages</a>
+              </div>
+              <div class="pv-spacer"></div>
+              <div class="pv-avatar">BP</div>
+            </nav>
+
+            <div class="uf-scroll">
+              <div style="max-width:720px;margin:0 auto">
+                <h1 class="pv-h2" style="margin-bottom:var(--pv-space-5)">Upload photos</h1>
+
+                <div class="uf-steps">
+                  <div class="uf-step" data-state="current"><span class="uf-dot">1</span> Choose</div>
+                  <div class="uf-sep"></div>
+                  <div class="uf-step"><span class="uf-dot">2</span> Process</div>
+                  <div class="uf-sep"></div>
+                  <div class="uf-step"><span class="uf-dot">3</span> Review</div>
+                </div>
+
+                <div class="pv-dropzone">
+                  <div class="pv-dropzone-icon">
+                    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5-5 5 5"/><path d="M12 5v12"/></svg>
+                  </div>
+                  <p class="pv-dropzone-title">Drop photos here</p>
+                  <p class="pv-dropzone-hint">or <a href="#">choose files</a> · JPEG, PNG, WebP · up to 25 MB each</p>
+                </div>
+
+                <div class="pv-gran-guarantee" style="margin-top:var(--pv-space-5)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <div>
+                    <strong>Your originals are never published.</strong>
+                    PinVoyager reads the location and time from each photo, then serves
+                    re-encoded copies with all metadata removed.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="pv-note">
+      The stripping guarantee appears at the point of upload as well as at the granularity
+      control. This is the moment a user is deciding whether to trust the product with their
+      camera roll, so it is the moment the promise is worth the space.
+    </p>
+  </section>
+
+  <section class="pv-section">
+    <h2>Step 2 — Process</h2>
+    <div class="pv-frames pv-frames--wide">
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Desktop · mixed batch in flight</span>
+        <div class="pv-viewport pv-viewport--desktop">
+          <div class="uf-shell">
+            <nav class="pv-topnav">
+              <a class="pv-brand" href="#">
+                <svg class="pv-brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                PinVoyager
+              </a>
+              <div class="pv-spacer"></div>
+              <div class="pv-avatar">BP</div>
+            </nav>
+
+            <div class="uf-scroll">
+              <div style="max-width:720px;margin:0 auto">
+                <h1 class="pv-h2" style="margin-bottom:var(--pv-space-5)">Uploading 6 photos</h1>
+
+                <div class="uf-steps">
+                  <div class="uf-step" data-state="done"><span class="uf-dot">✓</span> Choose</div>
+                  <div class="uf-sep"></div>
+                  <div class="uf-step" data-state="current"><span class="uf-dot">2</span> Process</div>
+                  <div class="uf-sep"></div>
+                  <div class="uf-step"><span class="uf-dot">3</span> Review</div>
+                </div>
+
+                <div class="pv-card">
+                  <div class="pv-upload-row">
+                    <div class="pv-upload-thumb"><div class="pv-photo-img pv-img-1"></div></div>
+                    <div class="pv-upload-info">
+                      <div class="pv-upload-name">IMG_4821.jpg</div>
+                      <div class="pv-upload-sub">4.2 MB · uploading</div>
+                      <div class="pv-progress"><div class="pv-progress-bar" style="width:68%"></div></div>
+                    </div>
+                    <button class="pv-btn pv-btn--ghost pv-btn--icon pv-btn--sm" aria-label="Cancel IMG_4821.jpg">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                  <div class="pv-upload-row">
+                    <div class="pv-upload-thumb"><div class="pv-photo-img pv-img-2"></div></div>
+                    <div class="pv-upload-info">
+                      <div class="pv-upload-name">IMG_4822.jpg</div>
+                      <div class="pv-upload-sub">3.8 MB · reading location data</div>
+                      <div class="pv-progress"><div class="pv-progress-bar" style="width:100%"></div></div>
+                    </div>
+                    <span class="pv-spinner" style="color:var(--pv-text-subtle)"></span>
+                  </div>
+                  <div class="pv-upload-row">
+                    <div class="pv-upload-thumb"><div class="pv-photo-img pv-img-3"></div></div>
+                    <div class="pv-upload-info">
+                      <div class="pv-upload-name">IMG_4823.jpg</div>
+                      <div class="pv-upload-sub">2.1 MB · 43.06°, 141.35°</div>
+                    </div>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pv-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Done"><path d="M20 6 9 17l-5-5"/></svg>
+                  </div>
+                  <div class="pv-upload-row">
+                    <div class="pv-upload-thumb"><div class="pv-photo-img pv-img-6"></div></div>
+                    <div class="pv-upload-info">
+                      <div class="pv-upload-name">Screenshot 2026-02-14.png</div>
+                      <div class="pv-upload-sub"><span class="pv-badge pv-badge--unplaced">No location</span> uploaded, needs placing</div>
+                    </div>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--pv-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Done"><path d="M20 6 9 17l-5-5"/></svg>
+                  </div>
+                  <div class="pv-upload-row">
+                    <div class="pv-upload-thumb" style="display:grid;place-items:center;color:var(--pv-danger)">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+                    </div>
+                    <div class="pv-upload-info">
+                      <div class="pv-upload-name">notes.pdf</div>
+                      <div class="pv-upload-sub pv-upload-sub--error">Not an image file — skipped</div>
+                    </div>
+                  </div>
+                  <div class="pv-upload-row">
+                    <div class="pv-upload-thumb" style="display:grid;place-items:center;color:var(--pv-danger)">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+                    </div>
+                    <div class="pv-upload-info">
+                      <div class="pv-upload-name">DSC_0099.tif</div>
+                      <div class="pv-upload-sub pv-upload-sub--error">Too large — 68 MB, limit is 25 MB</div>
+                    </div>
+                    <button class="pv-btn pv-btn--ghost pv-btn--sm">Retry</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="pv-note">
+      A real batch is mixed. Two files fail here for different reasons, one has no location,
+      and three succeed — and each outcome is legible on its own row rather than collapsed into
+      a single batch-level verdict.
+    </p>
+  </section>
+
+  <section class="pv-section">
+    <h2>Step 3 — Review</h2>
+    <div class="pv-frames">
+      <div class="pv-frame">
+        <span class="pv-frame-caption">Mobile · review and assign</span>
+        <div class="pv-viewport pv-viewport--mobile">
+          <div class="uf-shell">
+            <nav class="pv-topnav">
+              <button class="pv-btn pv-btn--ghost pv-btn--icon pv-btn--sm" aria-label="Back">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <span style="font-weight:var(--pv-weight-semibold)">Review</span>
+              <div class="pv-spacer"></div>
+            </nav>
+
+            <div class="uf-scroll-m">
+              <div class="pv-card" style="padding:var(--pv-space-3);margin-bottom:var(--pv-space-4)">
+                <div class="pv-sm" style="font-weight:var(--pv-weight-semibold)">4 of 6 photos uploaded</div>
+                <div class="pv-xs pv-muted">1 has no location · 2 were skipped</div>
+              </div>
+
+              <div class="pv-map" style="height:180px;border-radius:var(--pv-radius-lg);margin-bottom:var(--pv-space-4);position:relative">
+                <button class="pv-pin" style="left:38%;top:44%"><span class="pv-pin-shape"></span></button>
+                <button class="pv-pin" style="left:58%;top:56%"><span class="pv-pin-shape"></span></button>
+                <button class="pv-pin" style="left:48%;top:34%"><span class="pv-pin-shape"></span></button>
+                <div class="pv-attribution">© OpenStreetMap contributors</div>
+              </div>
+
+              <div class="pv-field" style="margin-bottom:var(--pv-space-4)">
+                <label class="pv-field-label" for="vsel">Add to voyage</label>
+                <select class="pv-select" id="vsel">
+                  <option>Three weeks in Hokkaido</option>
+                  <option>Create a new voyage…</option>
+                  <option>Leave in my library</option>
+                </select>
+              </div>
+
+              <div class="pv-card" style="padding:var(--pv-space-3);background:var(--pv-warning-bg);border-color:transparent;margin-bottom:var(--pv-space-4)">
+                <div class="pv-sm" style="font-weight:var(--pv-weight-semibold);margin-bottom:2px">1 photo has no location</div>
+                <div class="pv-xs pv-muted">It will be part of the voyage but will not appear on the map.</div>
+                <label class="pv-check" style="margin-top:var(--pv-space-3)">
+                  <input type="checkbox" class="pv-sr" checked>
+                  <span class="pv-check-box">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                  </span>
+                  <span class="pv-check-text pv-xs">Include it anyway</span>
+                </label>
+              </div>
+
+              <button class="pv-btn pv-btn--primary pv-btn--lg" style="width:100%">Add 4 photos</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Annotations</h3>
+    <div class="pv-annot"><span class="pv-annot-num">1</span><span><strong>The review map shows where the photos actually landed</strong> before anything is published. EXIF coordinates can be wrong — a camera with a stale GPS fix will place a photo hundreds of kilometres away — and this is the only chance to notice before it is public.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">2</span><span><strong>Unplaced photos get an explicit decision</strong>, not a silent default. The user is told what will happen and can opt out.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">3</span><span><strong>"Leave in my library" is a real option.</strong> Uploading and assigning are separate acts, and forcing every upload into a voyage immediately would make the library concept meaningless.</span></div>
+    <div class="pv-annot"><span class="pv-annot-num">4</span><span><strong>The primary button counts what will actually happen</strong> — "Add 4 photos", not "Done". Six were selected; four are being added.</span></div>
+  </section>
+
+</main>
+</body>
+</html>
