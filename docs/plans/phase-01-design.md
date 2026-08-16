@@ -21,7 +21,8 @@ implement auth without inventing an error state.
 - No real map tiles. Map previews use static representations; live MapLibre is phase 7.
 - No copywriting pass. Placeholder text is fine where the words are not the point.
 - No illustration or logo design.
-- No place names anywhere — geocoding is deferred per D5.
+- No place names in photo metadata — per D5, names come from the basemap's labels, not from
+  anything the application stores or looks up.
 
 ## Targets
 

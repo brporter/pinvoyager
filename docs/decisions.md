@@ -85,18 +85,38 @@ to leak. The renderer and the data are both open, so the whole stack can be move
 - There is no satellite imagery in OSM. A satellite layer, if ever wanted, needs a separate
   provider and is out of scope.
 
-## D5 — Geocoding is deferred
+## D5 — No geocoding; place context comes from the basemap
 
-Granularity is implemented as coordinate transformation only — the stored/served coordinate
-is rounded or fuzzed to the chosen precision. No place names, no reverse geocoding, in the
-early phases.
+Photos are placed at the coordinates recorded in their EXIF, transformed only by the
+granularity setting. **Nothing in the data model associates a photo with a named place.** A
+photo row holds a latitude and longitude, or nothing at all.
 
-**Why:** reverse geocoding at upload volume means either a metered vendor in the upload path
-or self-hosting Nominatim/Photon, which is a large operational commitment. Neither is worth
-taking on before the core product exists. Nominatim's public instance is not an option — its
-usage policy forbids this kind of traffic.
+Place names are still visible to the user — countries, states, cities, towns, districts — but
+they come from the basemap, which renders them as map labels. OpenStreetMap data contains all
+of those names, and they are baked into the vector tiles we already host. They are *map
+context*, not photo data.
 
-**Revisit when:** users ask for place labels, or search-by-place becomes a goal.
+**Why:** the names were never the expensive part. The *association* is. Storing a place per
+photo means a reverse-geocode call in the upload path, either a metered vendor or a
+self-hosted index, plus somewhere to put the result, plus staleness when boundaries change,
+plus per-country `admin_level` mapping logic because level 4 means a US state, a Japanese
+prefecture, and a German Bundesland. None of that is needed to draw a marker on a map, and a
+marker on a map is the whole feature.
+
+**Consequences accepted:**
+
+- Photo metadata in the UI is coordinates plus a precision label, never a place name. The map
+  underneath supplies the human-readable context.
+- Search-by-place is out. Spatial search is not — a bounding-box or radius query over
+  coordinates needs no geocoding at all and is the natural way to do "voyages near here."
+- The label language is fixed when the tiles are built, not at runtime. A basemap built from
+  OSM's `name` tag shows 京都; one built from `name:en` shows Kyoto. Choose deliberately in
+  phase 7, because changing it later means rebuilding the tile archive.
+- Which names a viewer sees depends on their zoom level. There is no stable "the place" for a
+  photo — which is precisely the point.
+- At coarse granularity a marker may sit over a *different* named place than where the photo
+  was taken. This is one of the reasons the design draws an area rather than a pin at coarse
+  precision: an area over a region claims nothing about the label at its centre.
 
 ## D6 — All voyages are public
 
