@@ -44,7 +44,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::auth::attempt::{self, PendingAttempt};
+use crate::auth::attempt::{self, BindingValue, PendingAttempt};
 use crate::auth::provider::VerifiedIdentity;
 use crate::auth::session::{self, SessionToken};
 use crate::auth::{AuthError, CurrentUser, ProviderKind};
@@ -115,7 +115,7 @@ const MAX_REDIRECT_LEN: usize = 512;
 /// handled identically and would still have to pass every check, so there is
 /// nothing to gain by refusing it by name.
 pub fn routes() -> Router<AppState> {
-    Router::new()
+    let router = Router::new()
         .route("/auth/{provider}/start", get(start))
         .route(
             "/auth/{provider}/callback",
@@ -123,7 +123,16 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/auth/link/{provider}", post(link_start))
         .route("/auth/logout", post(logout))
-        .route("/api/me", get(me))
+        .route("/api/me", get(me));
+
+    // Not compiled into a release binary. `debug_assertions` is off in the
+    // release profile and the container image builds `--release`, so this route
+    // does not exist there — it is absent rather than disabled. The handler
+    // additionally refuses unless `auth.dev_login` is set.
+    #[cfg(debug_assertions)]
+    let router = router.route("/auth/dev/login", post(crate::auth::dev::login));
+
+    router
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,14 +146,16 @@ struct StartQuery {
 async fn start(
     State(state): State<AppState>,
     Path(provider): Path<String>,
+    jar: CookieJar,
     Query(query): Query<StartQuery>,
-) -> AppResult<Response> {
+) -> AppResult<(CookieJar, Response)> {
     let kind = parse_provider(&provider)?;
-    let url = begin(&state, kind, None, query.redirect_to.as_deref()).await?;
+    let (url, binding) = begin(&state, kind, None, query.redirect_to.as_deref()).await?;
 
     // 302 rather than 303: the browser is being sent onward to the provider,
     // not to the result of this request.
-    redirect(StatusCode::FOUND, url.as_str())
+    let response = redirect(StatusCode::FOUND, url.as_str())?;
+    Ok((jar.add(binding_cookie(&binding)), response))
 }
 
 /// Begins a link flow for the **already signed-in** user (T9).
@@ -158,13 +169,19 @@ async fn link_start(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(provider): Path<String>,
+    jar: CookieJar,
     Query(query): Query<StartQuery>,
-) -> AppResult<Response> {
+) -> AppResult<(CookieJar, Response)> {
     let kind = parse_provider(&provider)?;
     // The user id is recorded on the attempt here, at the only moment it is
     // known to be authentic: inside a request carrying a valid session. The
     // callback reads it back rather than trusting anything the provider says.
-    let url = begin(
+    //
+    // That alone is not enough: it fixes *which* account gets the identity but
+    // not *whose* browser completes the flow. The binding cookie set below is
+    // what stops an attacker starting a link on their own account and walking a
+    // victim through the provider's consent screen.
+    let (url, binding) = begin(
         &state,
         kind,
         Some(user.user_id),
@@ -173,7 +190,8 @@ async fn link_start(
     .await?;
 
     // 303: the POST has been handled and the browser should GET the provider.
-    redirect(StatusCode::SEE_OTHER, url.as_str())
+    let response = redirect(StatusCode::SEE_OTHER, url.as_str())?;
+    Ok((jar.add(binding_cookie(&binding)), response))
 }
 
 /// Shared by both entry points: build the authorization URL and persist the
@@ -183,9 +201,14 @@ async fn begin(
     kind: ProviderKind,
     link_user_id: Option<Uuid>,
     redirect_to: Option<&str>,
-) -> AppResult<Url> {
+) -> AppResult<(Url, BindingValue)> {
     let provider = state.providers.get(kind).ok_or(AppError::NotFound)?;
     let authorization = provider.authorize().map_err(auth_failed)?;
+
+    // Minted here and returned so the caller can set it as a cookie. Only the
+    // hash is stored, so a database reader cannot complete someone's in-flight
+    // authorization.
+    let binding = BindingValue::generate();
 
     let attempt = PendingAttempt {
         state: authorization.state,
@@ -198,11 +221,12 @@ async fn begin(
         // problem by trusting the column.
         redirect_to: redirect_to.and_then(safe_redirect),
         expires_at: Utc::now() + ATTEMPT_TTL,
+        binding_hash: binding.hash(),
     };
 
     attempt::create(&state.pool, &attempt).await?;
 
-    Ok(authorization.url)
+    Ok((authorization.url, binding))
 }
 
 #[derive(Debug, Deserialize)]
@@ -302,6 +326,29 @@ async fn complete(
     let Some(attempt) = attempt::consume(&state.pool, csrf_state).await? else {
         return Err(rejected("no pending attempt for this state"));
     };
+
+    // Every path below returns through this jar, so the binding cookie is
+    // cleared whether the flow succeeds or fails. Leaving it behind would let a
+    // browser accumulate one per abandoned sign-in, and a stale value can only
+    // ever cause a confusing mismatch later.
+    let jar = jar.add(binding_cookie_removal());
+
+    // The callback must arrive in the browser that started the flow.
+    //
+    // This is what closes link CSRF: an attacker can hand a victim a URL
+    // carrying the attacker's `state`, but cannot put the matching cookie in
+    // the victim's browser. Checked for sign-in as well as linking — a forged
+    // sign-in completion is a lesser problem but not a desirable one, and one
+    // code path is easier to keep correct than two.
+    let presented = jar
+        .get(BINDING_COOKIE)
+        .map(|cookie| BindingValue::from_cookie_value(cookie.value()));
+
+    match presented {
+        Some(value) if value.matches(&attempt.binding_hash) => {}
+        Some(_) => return Err(rejected("binding cookie did not match the attempt")),
+        None => return Err(rejected("callback carried no binding cookie")),
+    }
 
     // The state belongs to a flow this service started, but not necessarily to
     // *this* provider's flow. Without this check a state issued for one
@@ -613,13 +660,76 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<
 /// bug it invites. The consequence is a cookie that ends with the browser
 /// session even though the server-side row is good for longer, which is a
 /// safe-direction failure but not the intended one — see the phase notes.
-fn session_cookie(config: &SessionConfig, token: &SessionToken) -> Cookie<'static> {
+pub(crate) fn session_cookie(config: &SessionConfig, token: &SessionToken) -> Cookie<'static> {
     Cookie::build((config.cookie_name.clone(), token.expose().to_owned()))
         .http_only(true)
         .secure(config.cookie_secure)
         .same_site(SameSite::Lax)
         .path("/")
+        // Without a Max-Age this is a *browser-session* cookie: it is discarded
+        // when the browser closes, while the server row lives for weeks. The
+        // sliding expiry would then be silently defeated by closing a window.
+        // Matched to the idle timeout, because that is when the row stops
+        // resolving anyway — a cookie outliving its row only produces a
+        // confusing 401.
+        .max_age(cookie::time::Duration::seconds(clamp_secs(
+            config.idle_timeout_secs,
+        )))
         .build()
+}
+
+/// Name of the browser-binding cookie. Distinct from the session cookie, and
+/// deliberately not configurable — nothing outside this module should be
+/// reasoning about it.
+const BINDING_COOKIE: &str = "pv_auth_binding";
+
+/// The cookie that ties an authorization attempt to the browser that began it.
+///
+/// Three attributes are load-bearing and none of them is the obvious choice:
+///
+/// * **`SameSite=None`.** Apple's callback is a cross-site form POST, and a
+///   `Lax` cookie is not sent on one — every Apple sign-in would fail the
+///   binding check. `None` is what makes the mechanism work across all four
+///   providers rather than three.
+/// * **`Secure`.** Mandatory alongside `SameSite=None`; browsers reject the
+///   combination otherwise. Set unconditionally rather than from
+///   `cookie_secure`, because a `SameSite=None` cookie without `Secure` is not
+///   a weaker cookie, it is a *dropped* one. Browsers make an explicit
+///   exception for `http://localhost`, so local development still works.
+/// * **`Max-Age` matched to the attempt TTL.** The cookie is worthless once the
+///   attempt it names has expired, and leaving it behind means a browser
+///   accumulates one per abandoned sign-in.
+fn binding_cookie(value: &BindingValue) -> Cookie<'static> {
+    Cookie::build((BINDING_COOKIE, value.expose().to_owned()))
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::None)
+        .path("/")
+        .max_age(cookie::time::Duration::seconds(
+            ATTEMPT_TTL.num_seconds().max(0),
+        ))
+        .build()
+}
+
+/// The removal form of the binding cookie.
+///
+/// Attributes must match what was set or the browser keeps the original: a
+/// removal is matched on name, path and domain, not on value.
+fn binding_cookie_removal() -> Cookie<'static> {
+    Cookie::build((BINDING_COOKIE, ""))
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::None)
+        .path("/")
+        .max_age(cookie::time::Duration::seconds(0))
+        .build()
+}
+
+/// `u64` seconds to the `i64` the cookie crate wants, without wrapping a
+/// configuration mistake into a negative duration — which would express
+/// "already expired" and log nobody in.
+fn clamp_secs(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
 }
 
 /// Validates a caller-supplied destination, returning it only if it is a path

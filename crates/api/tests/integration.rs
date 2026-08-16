@@ -153,7 +153,15 @@ async fn the_same_subject_under_a_different_provider_is_allowed() {
 /// relaxing the pattern, so that a future `users.password_hash` or
 /// `identities.refresh_token` still fails this test. A broad pattern would have
 /// quietly permitted both.
-const PERMITTED: &[(&str, &str)] = &[("sessions", "token_hash")];
+/// `auth_attempts.binding_hash` is the SHA-256 of a browser-binding value this
+/// service mints at the start of a sign-in. Like a session token it is ours,
+/// not a user's or a provider's; unlike one it is single-use and expires in
+/// minutes. Stored hashed so that a database reader cannot complete somebody
+/// else's in-flight authorization.
+const PERMITTED: &[(&str, &str)] = &[
+    ("sessions", "token_hash"),
+    ("auth_attempts", "binding_hash"),
+];
 
 #[tokio::test]
 async fn the_schema_holds_no_credential_columns() {
@@ -191,6 +199,37 @@ async fn the_schema_holds_no_credential_columns() {
             found.iter().any(|(t, c)| t == table && c == column),
             "the permitted exception {table}.{column} no longer exists; remove it from PERMITTED"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The dev login is an authentication bypass, so the things that keep it
+// contained are worth asserting rather than trusting.
+//
+// The strongest guarantee — that `#[cfg(debug_assertions)]` keeps the route out
+// of a release binary entirely — cannot be tested from inside a test binary,
+// because tests are themselves a debug build. It is verified by building
+// `--release` and searching the artifact for the route string; see
+// docs/running.md.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_dev_login_route_is_absent_from_release_builds() {
+    // A compile-time assertion standing in for what cannot be checked at
+    // runtime: if someone removes the `cfg` guard, `debug_assertions` will be
+    // off in a release build while the module is still present, and this test
+    // file will fail to compile there — which is a louder failure than a route
+    // quietly appearing in production.
+    #[cfg(not(debug_assertions))]
+    compile_error!(
+        "the dev login module must be behind #[cfg(debug_assertions)]; \
+         if this fires, a release build is compiling an authentication bypass"
+    );
+
+    // In a debug build the module exists, which is the other half of the claim.
+    #[cfg(debug_assertions)]
+    {
+        let _ = pinvoyager_api::auth::dev::login;
     }
 }
 

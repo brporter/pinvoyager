@@ -96,9 +96,17 @@ kind is stored, per D1.
 
 ## Open questions
 
-- **Link CSRF at the provider — a real gap this plan did not anticipate.** T9 requires linking
-  to be an authenticated action, and it is: the attempt records `link_user_id` from a request
-  carrying a valid session. That closes "prove B, claim A". It does **not** close the reverse:
+- ~~**Link CSRF at the provider**~~ — **RESOLVED.** Every authorization attempt is now bound
+  to the browser that started it: `/auth/{provider}/start` mints a 256-bit value, sets it as a
+  `SameSite=None; Secure; HttpOnly` cookie, and stores its SHA-256 on the attempt row; the
+  callback must present a cookie hashing to that value or the flow is refused. `SameSite=None`
+  is what lets it survive Apple's cross-site form POST — the reason the obvious
+  session-matching fix could not be used. Checked on sign-in as well as linking, since one
+  code path is easier to keep correct than two. Original analysis retained below.
+
+  T9 requires linking to be an authenticated action, and it is: the attempt records
+  `link_user_id` from a request carrying a valid session. That closes "prove B, claim A". It
+  does **not**, on its own, close the reverse:
 
   1. The attacker signs in to their own account and starts a link flow, getting a provider URL
      whose `state` is bound to an attempt with `link_user_id = attacker`.

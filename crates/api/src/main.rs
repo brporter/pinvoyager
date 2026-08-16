@@ -42,6 +42,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Discovery happens once, here. A provider that fails to come up is logged
     // and disabled rather than fatal — one provider's outage must not stop the
     // service from serving the other three.
+    // Third line of defence behind `#[cfg(debug_assertions)]` and the flag
+    // itself. Loud because a forged-login endpoint reachable by accident is the
+    // whole game, and a warning nobody notices is the same as no warning.
+    #[cfg(debug_assertions)]
+    if config.auth.dev_login {
+        tracing::warn!("════════════════════════════════════════════════════════════════");
+        tracing::warn!("DEV LOGIN IS ENABLED. POST /auth/dev/login forges a session for ");
+        tracing::warn!("any identity, with no provider verification whatsoever. Anyone   ");
+        tracing::warn!("who can reach this port can become any account.                  ");
+        tracing::warn!("════════════════════════════════════════════════════════════════");
+    }
+
     let providers = ProviderRegistry::from_config(&config.auth).await?;
     tracing::info!(
         providers = ?providers.configured(),

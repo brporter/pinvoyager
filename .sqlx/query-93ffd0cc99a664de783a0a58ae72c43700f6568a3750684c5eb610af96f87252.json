@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM auth_attempts\n          WHERE state = $1\n         RETURNING state, provider, nonce, pkce_verifier, link_user_id, redirect_to, expires_at",
+  "query": "DELETE FROM auth_attempts\n          WHERE state = $1\n         RETURNING state, provider, nonce, pkce_verifier, link_user_id, redirect_to, expires_at,\n                   binding_hash",
   "describe": {
     "columns": [
       {
@@ -79,6 +79,17 @@
             "name": "expires_at"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "binding_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "binding_hash"
+          }
+        }
       }
     ],
     "parameters": {
@@ -93,8 +104,9 @@
       false,
       true,
       true,
+      false,
       false
     ]
   },
-  "hash": "3300f919b49a7bdd73784ddc7e67ab73bd779754311efdfb8d97390882392f7f"
+  "hash": "93ffd0cc99a664de783a0a58ae72c43700f6568a3750684c5eb610af96f87252"
 }

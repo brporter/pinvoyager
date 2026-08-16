@@ -55,6 +55,25 @@ json = false
 # trailing-slash or http/https mismatch is rejected with an unhelpful error.
 base_url = "http://127.0.0.1:8080"
 
+# Forged sign-in for local development: POST /auth/dev/login with
+# {"subject": "alice@example.test"} returns a session for that identity, with no
+# provider round trip at all.
+#
+#   curl -i -X POST http://127.0.0.1:8080/auth/dev/login \
+#        -H 'content-type: application/json' \
+#        -d '{"subject":"alice@example.test","display_name":"Alice"}'
+#
+# The `subject` is stored as the provider subject, not as an email — this
+# service holds no email address anywhere (D3). An email-shaped string is just a
+# memorable handle for choosing which account you are.
+#
+# This is a COMPLETE AUTHENTICATION BYPASS. It is safe to enable here only
+# because the route is behind `#[cfg(debug_assertions)]` and therefore does not
+# exist in a release binary — the container image builds `--release`. Turning
+# this on in a config file that a release binary reads does nothing, because
+# there is no route to enable.
+dev_login = true
+
 [auth.session]
 # Sliding: two weeks of inactivity ends the session. Generous on purpose — this
 # is a photo-browsing site, being signed out is pure friction, and there is no

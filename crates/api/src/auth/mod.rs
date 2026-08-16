@@ -27,6 +27,10 @@
 //! and claiming A — is exactly what makes email-based merging exploitable.
 
 pub mod attempt;
+/// Forged sign-in for development. Absent from release builds entirely — see
+/// the module docs before assuming it is merely disabled there.
+#[cfg(debug_assertions)]
+pub mod dev;
 pub mod extract;
 pub mod provider;
 pub(crate) mod providers;

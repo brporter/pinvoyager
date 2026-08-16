@@ -66,6 +66,25 @@ pub struct AuthConfig {
     /// An unconfigured provider's endpoints return 404.
     #[serde(default)]
     pub providers: ProvidersConfig,
+
+    /// Enables `POST /auth/dev/login`, which forges a sign-in without any
+    /// provider round trip.
+    ///
+    /// **This is a complete authentication bypass.** Anyone who can reach the
+    /// endpoint can become any account. It exists so the rest of the product
+    /// can be built and tested before four sets of OAuth credentials are in
+    /// hand, and it is defended in three independent layers:
+    ///
+    /// 1. The handler and its route are behind `#[cfg(debug_assertions)]`, so
+    ///    they are **not compiled into a release binary at all**. The container
+    ///    image builds `--release`, so the code does not exist there. This is
+    ///    the guarantee that matters; the other two are for someone running a
+    ///    debug build somewhere unexpected.
+    /// 2. This flag defaults to `false`, so a debug build still refuses unless
+    ///    it is turned on deliberately.
+    /// 3. Startup logs a loud warning whenever it is active.
+    #[serde(default)]
+    pub dev_login: bool,
 }
 
 #[derive(Debug, Deserialize)]

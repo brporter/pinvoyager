@@ -55,6 +55,34 @@ psql "$DATABASE_URL"          # shell into the database
 **first** boot of a fresh volume. Changing them later does nothing until
 `docker compose down -v`.
 
+## Signing in without provider credentials
+
+Debug builds expose a forged sign-in, so the rest of the product can be built
+before four sets of OAuth credentials exist. `config.toml` enables it.
+
+```sh
+curl -i -X POST http://127.0.0.1:8080/auth/dev/login \
+     -H 'content-type: application/json' \
+     -d '{"subject":"alice@example.test","display_name":"Alice"}'
+```
+
+The response sets a real session cookie; every authenticated endpoint then works
+normally. Re-running with the same `subject` signs in to the same account rather
+than creating a second one, exactly as a returning provider sign-in does.
+
+`subject` is stored as the **provider subject**, not as an email — this service
+holds no email address anywhere. An email-shaped string is simply a memorable
+handle for choosing which account you are.
+
+**This is a complete authentication bypass.** It is absent from release builds
+rather than disabled in them, because the route sits behind
+`#[cfg(debug_assertions)]`. To verify that claim rather than trust it:
+
+```sh
+SQLX_OFFLINE=true cargo build --release
+strings target/release/pinvoyager-api | grep -c '/auth/dev/login'   # must print 0
+```
+
 ## Watching for blocked runtime threads
 
 D8's rule is that nothing blocking may run on a runtime worker thread. That

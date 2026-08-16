@@ -177,6 +177,7 @@ mod tests {
                     base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
                     session: Default::default(),
                     providers: Default::default(),
+                    dev_login: false,
                 },
             },
             // No providers: these tests exercise the router, not sign-in.

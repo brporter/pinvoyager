@@ -122,6 +122,7 @@ mod tests {
                 base_url: "https://example.test".parse().expect("valid base url"),
                 session: crate::config::SessionConfig::default(),
                 providers: crate::config::ProvidersConfig::default(),
+                dev_login: false,
             },
         };
 
