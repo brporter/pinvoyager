@@ -34,7 +34,7 @@
 //! (D3). Identity resolution is `(provider, subject)` and nothing else.
 
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -254,14 +254,17 @@ async fn callback(
     State(state): State<AppState>,
     Path(provider): Path<String>,
     jar: CookieJar,
+    headers: HeaderMap,
     Query(query): Query<CallbackQuery>,
-) -> AppResult<(CookieJar, Response)> {
-    let kind = parse_provider(&provider)?;
+) -> Response {
+    let Ok(kind) = parse_provider(&provider) else {
+        return AppError::NotFound.into_response();
+    };
 
-    complete(
+    let outcome = complete(
         &state,
         kind,
-        jar,
+        jar.clone(),
         Callback {
             code: query.code.as_deref(),
             state: query.state.as_deref(),
@@ -269,7 +272,9 @@ async fn callback(
             form_body: None,
         },
     )
-    .await
+    .await;
+
+    to_browser(outcome, jar, kind, &headers)
 }
 
 /// Apple's callback: `response_mode=form_post`, so a POST with a form body.
@@ -284,17 +289,20 @@ async fn form_callback(
     State(state): State<AppState>,
     Path(provider): Path<String>,
     jar: CookieJar,
+    headers: HeaderMap,
     body: String,
-) -> AppResult<(CookieJar, Response)> {
-    let kind = parse_provider(&provider)?;
+) -> Response {
+    let Ok(kind) = parse_provider(&provider) else {
+        return AppError::NotFound.into_response();
+    };
     let fields: Vec<(String, String)> = url::form_urlencoded::parse(body.as_bytes())
         .into_owned()
         .collect();
 
-    complete(
+    let outcome = complete(
         &state,
         kind,
-        jar,
+        jar.clone(),
         Callback {
             code: field(&fields, "code"),
             state: field(&fields, "state"),
@@ -302,7 +310,87 @@ async fn form_callback(
             form_body: Some(&body),
         },
     )
-    .await
+    .await;
+
+    to_browser(outcome, jar, kind, &headers)
+}
+
+/// Turns a callback result into something a *browser* can render.
+///
+/// Both callbacks are top-level navigations: the provider redirects the user's
+/// browser here, or POSTs a form to it. Whatever this returns is what fills the
+/// window. A JSON error body — which is the right answer everywhere else in
+/// this service — puts `{"code":"bad_request","message":"..."}` on screen as
+/// plain text, and the designed failure screens in
+/// `design/screens/auth-states.html` are never reached at all.
+///
+/// So a failure becomes a 303 to the frontend's `/auth/callback` screen,
+/// carrying the outcome in the query string. The screen decides what to show;
+/// this decides only which of the four outcomes it was.
+///
+/// `NotFound` is deliberately left as a 404. It means the provider is not
+/// configured, which is not a sign-in that failed — it is a URL that does not
+/// exist here, and redirecting to a "sign-in failed" screen would tell the user
+/// a story about their attempt rather than about our configuration.
+fn to_browser(
+    outcome: AppResult<(CookieJar, Response)>,
+    jar: CookieJar,
+    kind: ProviderKind,
+    headers: &HeaderMap,
+) -> Response {
+    let err = match outcome {
+        // The jar from `complete`, not the one passed in — on success it
+        // carries the session cookie that was just issued.
+        Ok(ok) => return ok.into_response(),
+        Err(AppError::NotFound) => return AppError::NotFound.into_response(),
+        Err(err) => err,
+    };
+
+    // The four states the screen draws. `cancelled` is matched on the message
+    // constant rather than on a variant because declining at the provider is
+    // the one outcome that is not an error — it is a choice — and it reaches
+    // here as an ordinary `BadRequest`.
+    let status = match &err {
+        AppError::BadRequest(message) if message == CANCELLED => "cancelled",
+        AppError::Conflict(_) => "conflict",
+        _ => "failed",
+    };
+
+    // Set on the request by the request-id middleware. It is the reference the
+    // failure screen asks the user to quote, and it ties their report to the
+    // log line this failure already produced.
+    // Filtered rather than percent-encoded. The generator produces a UUID, so
+    // everything legitimate survives this — but the header is attacker-supplied
+    // (the request-id layer forwards a client's value if one is sent), and
+    // interpolating an unfiltered string into a Location header is how response
+    // splitting happens.
+    let request_id: String = headers
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(64)
+        .collect();
+
+    let mut target = format!("/auth/callback?status={status}&provider={}", kind.as_str());
+    if !request_id.is_empty() {
+        target.push_str("&ref=");
+        target.push_str(&request_id);
+    }
+
+    tracing::warn!(
+        provider = kind.as_str(),
+        status,
+        "sign-in failed; redirecting to the callback screen"
+    );
+
+    // The jar still travels, because a failed callback has already had the
+    // browser-binding cookie cleared and that removal must reach the browser.
+    match redirect(StatusCode::SEE_OTHER, &target) {
+        Ok(response) => (jar, response).into_response(),
+        Err(err) => err.into_response(),
+    }
 }
 
 /// The callback, once the transport difference has been flattened away.

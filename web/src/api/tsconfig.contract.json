@@ -1,0 +1,22 @@
+{
+  // The project the drift check is run against — see `__tests__/contract.test.ts`,
+  // which spawns `tsc -p` on this file.
+  //
+  // Scoped to `src/api` on purpose. The check answers one question ("do the
+  // captured responses still fit the hand-written types?"), and running it over
+  // the whole application would make it fail whenever any unrelated screen is
+  // mid-edit, which is how a useful check becomes one people learn to ignore.
+  //
+  // `strict` is set here rather than inherited because `tsconfig.app.json` does
+  // not turn it on. Without `strictNullChecks` every `| null` in `types.ts` is
+  // decoration: `null` is assignable to `number`, so a server that stopped
+  // sending `captured_at` as nullable — or started — would look identical.
+  // Turning it on for the whole application is the right fix and is not this
+  // file's to make.
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": {
+    "strict": true,
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.contract.tsbuildinfo"
+  },
+  "include": ["./**/*.ts"]
+}

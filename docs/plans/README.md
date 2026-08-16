@@ -10,7 +10,7 @@ conversation to fill in gaps.
 
 | # | Phase | Status | Document |
 |---|---|---|---|
-| 1 | Design | built — awaiting review | [phase-01-design.md](phase-01-design.md) |
+| 1 | Design | complete — reviewed and approved | [phase-01-design.md](phase-01-design.md) |
 | 2 | Backend foundation | complete | [phase-02-backend-foundation.md](phase-02-backend-foundation.md) |
 | 3 | Authentication | in progress — blocked on credentials | [phase-03-authentication.md](phase-03-authentication.md) |
 | 4 | Photo pipeline | complete | [phase-04-photo-pipeline.md](phase-04-photo-pipeline.md) |

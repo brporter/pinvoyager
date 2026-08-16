@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* The captured API fixtures under src/api/__fixtures__ are imported as
+       modules by the contract test, which is how a response shape that no
+       longer matches src/api/types.ts becomes a compile error. */
+    "resolveJsonModule": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Stated rather than inherited. TypeScript 6 turns `strict` on by default,
+       so this is currently redundant — but it was off by default in every 5.x
+       release, and a project that silently loses strictNullChecks on a
+       toolchain downgrade would make every `| null` in src/api/types.ts
+       decorative without any error appearing. */
+    "strict": true,
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}

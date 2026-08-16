@@ -1,0 +1,52 @@
+/* The application's entire stylesheet.
+ *
+ * Both files are imported from ../../design, NOT copied into this project.
+ * That is deliberate and it is the point of phase 6's target T2: editing a
+ * value in design/tokens.css must change the running application. A copy would
+ * be a snapshot that starts drifting the moment someone touches either side,
+ * and the design system would quietly become documentation of what the app used
+ * to look like.
+ *
+ * tokens.css     colour, type, spacing, radii, elevation, motion
+ * components.css the product's component styles — .pv-btn, .pv-card, .pv-pin
+ *                and the rest. React components in src/components apply these
+ *                class names rather than redefining the same rules in CSS
+ *                modules, so there is one definition of what a button looks
+ *                like rather than two that have to be kept in step.
+ */
+
+@import "../../../design/tokens.css";
+@import "../../../design/components.css";
+
+/* Page-level rules that belong to the application rather than to any
+ * component. Everything else lives in the design system. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--pv-bg);
+  color: var(--pv-text);
+  font-family: var(--pv-font-sans);
+  font-size: var(--pv-text-base);
+  line-height: var(--pv-leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The design system sets focus styling on `.pv-app :focus-visible`. The app is
+ * wrapped in `.pv-app`, so this is only a safety net for anything rendered
+ * outside that wrapper, such as a portal. Focus is never removed. */
+:focus-visible {
+  outline: 2px solid var(--pv-focus);
+  outline-offset: 2px;
+}

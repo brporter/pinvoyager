@@ -1,12 +1,16 @@
 # Phase 1 — Design
 
-**Status:** built — awaiting review
+**Status:** complete — reviewed and approved
 **Depends on:** nothing
 **Owner:** Claude
 
-All eight targets are built and pushed to the Claude Design project `PinVoyager`
-(29 files). The phase is not complete until you have reviewed the screens and the open
-questions below are answered — review is the remaining acceptance criterion.
+All eight targets are built and pushed to the Claude Design project `PinVoyager` (29 files).
+Reviewed and approved on 16 August 2026. Phase 6 implements these screens; changing one now
+means changing the code that was built from it.
+
+The three open questions below were not answered and the defaults stand: the neutral
+photography-first palette, manual photo reordering being available, and the four precision
+steps of exact / ~1 km / ~10 km / ~50 km.
 
 ## Goal
 

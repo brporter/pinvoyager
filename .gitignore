@@ -23,3 +23,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Frontend build output and dependencies
+/web/dist/
+/web/node_modules/

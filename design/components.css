@@ -244,7 +244,8 @@
 .pv-textarea { min-height: 96px; resize: vertical; }
 
 .pv-input[aria-invalid="true"],
-.pv-textarea[aria-invalid="true"] { border-color: var(--pv-danger); }
+.pv-textarea[aria-invalid="true"],
+.pv-select[aria-invalid="true"] { border-color: var(--pv-danger); }
 
 .pv-input:disabled, .pv-textarea:disabled, .pv-select:disabled {
   background: var(--pv-bg-sunken);
@@ -280,6 +281,12 @@
   border-radius: var(--pv-radius-full);
   background: var(--pv-border-strong);
   position: relative; cursor: pointer;
+  /* So this can be a real <button> rather than a div with a role. A button
+     brings its own border, padding and platform appearance, all of which
+     change the size the rules above are trying to set. */
+  appearance: none;
+  border: 0;
+  padding: 0;
   transition: background-color var(--pv-duration-fast) var(--pv-ease-out);
 }
 .pv-switch::after {
@@ -362,6 +369,14 @@
 }
 .pv-avatar--lg { width: 64px; height: 64px; font-size: var(--pv-text-xl); }
 
+/* Same omission as .pv-photo-img: a provider-supplied avatar is a real image
+   and will not be clipped to the circle without this. */
+.pv-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ==========================================================================
    Photos
 
@@ -382,7 +397,18 @@
 .pv-photo--square { aspect-ratio: 1 / 1; }
 .pv-photo--tall   { aspect-ratio: 3 / 4; }
 
-.pv-photo-img { position: absolute; inset: 0; }
+.pv-photo-img {
+  position: absolute;
+  inset: 0;
+  /* The previews in design/components/ mock photographs with CSS gradients,
+     which fill their box whatever shape it is. A real <img> does not: without
+     object-fit every photograph in the product stretches to the frame's aspect
+     ratio. The gap was invisible here precisely because nothing in this
+     directory renders an actual image. */
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
 /* Stand-in "photographs" */
 .pv-img-1 { background: linear-gradient(150deg, #5b8fa8 0%, #a8c0cc 45%, #e8dfd0 100%); }
@@ -406,6 +432,10 @@
   color: var(--pv-neutral-0);
   font-size: var(--pv-text-xs);
 }
+
+/* The "No location" badge sits at the top of the frame rather than the
+   bottom; drawn inline in photo-primitives.html. */
+.pv-photo-caption--top { top: var(--pv-space-3); bottom: auto; }
 
 .pv-photo-grid {
   display: grid;
@@ -547,6 +577,7 @@
   border: 2px solid var(--pv-pin-stroke);
   box-shadow: var(--pv-shadow-2);
   display: grid; place-items: center;
+  font-family: inherit;
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-bold);
   cursor: pointer;
@@ -705,6 +736,11 @@
   transition: background-color var(--pv-duration-fast) var(--pv-ease-out);
 }
 .pv-gran-step:hover { background: var(--pv-bg-hover); }
+/* Drawn inline in granularity.html; a class means the app does not have to
+   repeat the value. Inertness comes from the disabled attribute, not from
+   pointer-events, so keyboard users are excluded too. */
+.pv-gran-step:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .pv-gran-step[aria-pressed="true"] {
   background: var(--pv-bg);
   color: var(--pv-text);
@@ -781,6 +817,9 @@
   margin: 0 auto;
 }
 .pv-empty-icon { color: var(--pv-text-subtle); margin-bottom: var(--pv-space-4); }
+/* The error empty state, drawn inline in feedback.html. */
+.pv-empty-icon--danger { color: var(--pv-danger); }
+
 .pv-empty-title {
   font-size: var(--pv-text-xl);
   font-weight: var(--pv-weight-semibold);
