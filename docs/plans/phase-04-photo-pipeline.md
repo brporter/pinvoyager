@@ -19,8 +19,7 @@ stored in WebP.
 - No voyage association (phase 5). Photos land in the uploader's library.
 - No editing of location (explicitly a future feature).
 - No geocoding or place names (D5).
-- No video, no RAW, no HEIC unless it falls out for free — decide deliberately, not by
-  accident.
+- No video, no RAW - decide deliberately, not by accident.
 
 ## Targets
 

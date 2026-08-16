@@ -196,6 +196,37 @@ which is far harder to diagnose under load.
 concurrency, not as failures. `tokio-console` in development is the practical way to see a task
 occupying a worker thread; the compiler and Clippy will not tell you.
 
+## D9 — HEIC is required, so native image dependencies are accepted
+
+Phase 4 must accept HEIC uploads. iPhones shoot HEIC by default, so declining it would reject
+a large share of the photographs this product exists to display.
+
+**This supersedes the original reasoning for the `image` crate.** That choice was recorded as
+"pure Rust, no native dependency to manage" — and `image` has no HEIC or HEIF decoder at all.
+It is not a feature flag; the decoder does not exist, largely because HEIC wraps HEVC and
+carries patent encumbrance the maintainers declined. Supporting HEIC therefore means
+`libheif-rs` → `libheif-sys` → the C library `libheif`, and the "no native dependency"
+property is gone.
+
+That is an accepted cost, not an oversight. What it obliges:
+
+- **The container needs libheif at both stages.** `libheif-dev` (or equivalent) in the
+  builder, and the libheif shared objects in the runtime stage. The Dockerfile currently
+  installs only `ca-certificates` and `curl`; a binary linked against libheif will not start
+  there. Fix this when phase 4 adds the dependency, not before — an unused native library in
+  the image is just attack surface.
+- **Every developer machine and CI runner needs it too** (`brew install libheif`,
+  `apt install libheif-dev`). Add it to `docs/running.md` prerequisites at the same time.
+- **HEVC patent licensing** is a real consideration for a public site at scale. Noted and
+  accepted; revisit if the site grows into a commercial product.
+
+**Related, and worth deciding at the same time:** variants are to be stored as WebP.
+`image` supports WebP through `image-webp` with no native dependency, but that encoder has
+historically been **lossless-only**. Lossless WebP on photographs is typically larger than the
+source JPEG, which would make the choice counterproductive. Confirm the encoder's capability
+before phase 4 commits; if lossy WebP is needed, that means the `webp` crate and libwebp — a
+second native dependency, which is a much smaller marginal cost now that libheif is in.
+
 ---
 
 ## Defaults, not yet load-bearing
@@ -210,4 +241,4 @@ them deeply yet.
 | Database | PostgreSQL via sqlx | Async-native, real constraints, concurrent writes during batch uploads, compile-time checked queries |
 | Frontend build | Vite + React + TypeScript | Fast, conventional, no framework lock-in |
 | Sessions | Server-side, opaque cookie ID | Revocable on demand. A stateless JWT session cannot be revoked, which matters more here because the account *is* the identity |
-| Image processing | `image` crate | Pure Rust, no libvips/ImageMagick native dependency to manage |
+| Image processing | `image` crate **plus `libheif-rs`** | See D9 — HEIC is required, and `image` cannot decode it |

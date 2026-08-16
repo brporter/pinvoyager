@@ -32,16 +32,15 @@ pub async fn create(
     // read-back on every one.
     let id = Uuid::now_v7();
 
-    // Runtime-checked; phase 3 switches this to `sqlx::query_as!` once the
-    // .sqlx offline cache exists. See the module docs on `crate::db`.
-    sqlx::query_as(
+    sqlx::query_as!(
+        User,
         "INSERT INTO users (id, display_name, avatar_url)
          VALUES ($1, $2, $3)
          RETURNING id, display_name, avatar_url, created_at",
+        id,
+        display_name,
+        avatar_url,
     )
-    .bind(id)
-    .bind(display_name)
-    .bind(avatar_url)
     .fetch_one(executor)
     .await
 }
@@ -55,8 +54,11 @@ pub async fn find_by_id(
     executor: impl PgExecutor<'_>,
     id: Uuid,
 ) -> Result<Option<User>, sqlx::Error> {
-    sqlx::query_as("SELECT id, display_name, avatar_url, created_at FROM users WHERE id = $1")
-        .bind(id)
-        .fetch_optional(executor)
-        .await
+    sqlx::query_as!(
+        User,
+        "SELECT id, display_name, avatar_url, created_at FROM users WHERE id = $1",
+        id,
+    )
+    .fetch_optional(executor)
+    .await
 }

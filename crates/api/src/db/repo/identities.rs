@@ -52,17 +52,19 @@ pub async fn create(
 ) -> Result<Identity, sqlx::Error> {
     let id = Uuid::now_v7();
 
-    // Runtime-checked; phase 3 switches this to `sqlx::query_as!` once the
-    // .sqlx offline cache exists. See the module docs on `crate::db`.
-    sqlx::query_as(
-        "INSERT INTO identities (id, user_id, provider, subject)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, user_id, provider, subject, created_at",
+    // `provider as "provider: Provider"` is what tells the macro to decode a
+    // `text` column into the enum. Without the annotation it would insist on
+    // `String`, since the column really is text (see the type docs above).
+    sqlx::query_as!(
+        Identity,
+        r#"INSERT INTO identities (id, user_id, provider, subject)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, user_id, provider as "provider: Provider", subject, created_at"#,
+        id,
+        user_id,
+        provider as Provider,
+        subject,
     )
-    .bind(id)
-    .bind(user_id)
-    .bind(provider)
-    .bind(subject)
     .fetch_one(executor)
     .await
 }
@@ -76,13 +78,14 @@ pub async fn find_by_provider_subject(
     provider: Provider,
     subject: &str,
 ) -> Result<Option<Identity>, sqlx::Error> {
-    sqlx::query_as(
-        "SELECT id, user_id, provider, subject, created_at
-         FROM identities
-         WHERE provider = $1 AND subject = $2",
+    sqlx::query_as!(
+        Identity,
+        r#"SELECT id, user_id, provider as "provider: Provider", subject, created_at
+           FROM identities
+           WHERE provider = $1 AND subject = $2"#,
+        provider as Provider,
+        subject,
     )
-    .bind(provider)
-    .bind(subject)
     .fetch_optional(executor)
     .await
 }
