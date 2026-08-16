@@ -8,7 +8,8 @@
 
 A React application that implements the phase 1 design system, routes between every screen,
 signs users in and out against the phase 3 endpoints, and renders real voyages from the
-phase 5 API — with the map itself still a placeholder, filled in by phase 7.
+phase 5 API — with the map itself still a placeholder, filled in by phase 7. Use OpenAPI
+for type definition. Uploads should be resumable.
 
 ## Non-goals
 
@@ -56,16 +57,6 @@ phase 5 API — with the map itself still a placeholder, filled in by phase 7.
 ## Design references
 
 Everything under `design/components/` and `design/screens/`.
-
-## Open questions
-
-- **State management.** TanStack Query alone is likely sufficient given the server owns
-  nearly all state; a client store may be unnecessary.
-- **API type generation.** Emitting an OpenAPI document from axum and generating a client, or
-  hand-maintaining types. Generation costs backend annotation work but eliminates a whole
-  class of drift.
-- Whether upload should be resumable. It matters on mobile connections with large batches,
-  and it is much cheaper to design in now than to retrofit.
 
 ## Notes
 

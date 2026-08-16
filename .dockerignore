@@ -1,0 +1,57 @@
+# Keep the build context small. Anything listed here is never sent to the
+# daemon, so it also cannot be baked into an image by the wholesale `COPY . .`
+# in the builder stage.
+#
+# Note what is deliberately NOT excluded: `.sqlx/` (the offline query cache the
+# build compiles against) and `crates/api/migrations/`.
+
+# Build output — the largest thing in the tree by far, and a host-built target/
+# would be the wrong architecture anyway.
+target/
+**/target/
+**/*.rs.bk
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Frontend build artifacts
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+
+# Design system — browser-only previews, not build inputs
+design/
+
+# Docs and plans
+docs/
+README.md
+
+# Runtime data: uploaded originals, derived variants, session store
+data/
+**/data/
+
+# Map tiles — a planet basemap is 100+ GB
+*.pmtiles
+*.mbtiles
+
+# Secrets. Never let a real .env reach the daemon, let alone a layer.
+.env
+.env.*
+!.env.example
+
+# Container files themselves are not build inputs
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# OS / editor
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/

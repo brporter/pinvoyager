@@ -1,0 +1,50 @@
+# PinVoyager — development configuration.
+#
+# Precedence, lowest to highest: built-in defaults (crates/api/src/config.rs) →
+# this file → environment variables prefixed `PINVOYAGER__`, with a double
+# underscore separating nested keys:
+#
+#     PINVOYAGER__DATABASE__MAX_CONNECTIONS=10
+#     PINVOYAGER__TELEMETRY__JSON=true
+#
+# Every value here is a development value. Nothing in this file is a secret and
+# nothing in it should become one — the file is committed. Real secrets (the
+# OIDC client secrets phase 3 introduces, a production database URL) belong in
+# the environment, which is why the environment outranks the file.
+
+[server]
+bind = "127.0.0.1:8080"
+
+# Graceful shutdown: how long in-flight requests get to finish after Ctrl-C
+# before the process stops waiting for them.
+shutdown_timeout_secs = 30
+
+# Per-request ceiling. Phase 4 gives uploads their own, larger limit; this one
+# is sized for ordinary API calls, where anything approaching 30s is a bug.
+request_timeout_secs = 30
+
+[database]
+# Required — there is no default, and startup fails naming this key if it is
+# missing. Matches the credentials in docker-compose.yml. Override in any
+# environment that is not a laptop:
+#
+#     PINVOYAGER__DATABASE__URL=postgres://…
+url = "postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager"
+
+# Postgres itself defaults to 100 connections total. Ten leaves room for a
+# second instance, a test run, and a psql session without hitting that ceiling.
+max_connections = 10
+min_connections = 1
+
+# D8: never unset, and deliberately short. This is what turns pool exhaustion
+# into a 503 the caller can retry instead of a request that hangs forever.
+acquire_timeout_secs = 5
+
+[telemetry]
+# `RUST_LOG`-style directives. Setting `RUST_LOG` in the shell overrides this
+# entirely, which is the quick way to turn one run up to `debug`.
+log_level = "info,pinvoyager_api=debug,tower_http=debug"
+
+# Pretty output locally; deployments set `PINVOYAGER__TELEMETRY__JSON=true` so
+# lines are machine-parseable.
+json = false

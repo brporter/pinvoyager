@@ -9,7 +9,9 @@
 Voyage detail shows a real interactive map. Tiles are served from our own `.pmtiles` archive
 with no third-party runtime dependency and no API key in the frontend (D4). Photos appear as
 pins, dense areas cluster, and selection moves in both directions between the map and the
-photo list.
+photo list. Every developer will download the entire tile map for now. OSM basemap updates
+will be handled later. Basemap label language will be fixed at English for now. Clustering
+is always server-side. Discover screen also has a map.
 
 ## Non-goals
 
@@ -73,21 +75,6 @@ photo list.
 - `design/screens/voyage-detail.html`
 - `design/components/map-primitives.html`
 - `design/components/granularity.html`
-
-## Open questions
-
-- **Tile hosting operationally.** A planet archive is 100+ GB. Where does it live in
-  development — is every developer expected to download it, or is there a shared instance and
-  a small regional extract for local work?
-- **Basemap refresh cadence.** OSM data ages. Quarterly is probably fine for this use, but it
-  needs an owner and a documented procedure.
-- **The basemap's label language is fixed at tile-build time.** Building from OSM's `name` tag
-  yields local-language labels (京都); building from `name:en` yields English (Kyoto). Per D5
-  these labels are the *only* place names anywhere in the product, so the choice carries more
-  weight here than it normally would — and changing it means regenerating the archive.
-- Whether clustering runs client-side in MapLibre or server-side in phase 5's endpoint.
-  Client-side is far simpler and fine until a voyage has thousands of photos.
-- Whether the discover screen also gets a map.
 
 ## Notes
 

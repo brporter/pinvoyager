@@ -1,0 +1,87 @@
+# Local development dependencies.
+#
+#   docker compose up -d              PostgreSQL only — the normal case, with
+#                                     the service itself run via `cargo run`
+#   docker compose --profile api up   PostgreSQL + the containerised service
+#
+# Values interpolate from .env if present (Compose reads it automatically);
+# see .env.example for the full set and the defaults below for what you get
+# without one.
+name: pinvoyager
+
+services:
+  db:
+    # Pinned to a major version on purpose. `:latest` moves under you, and a
+    # major upgrade rewrites the on-disk format — the named volume below would
+    # then refuse to start against a newer server with no obvious explanation.
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pinvoyager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pinvoyager}
+      POSTGRES_DB: ${POSTGRES_DB:-pinvoyager}
+      # Cheap corruption detection; free to enable at initdb, impossible to
+      # add later without a dump and restore.
+      POSTGRES_INITDB_ARGS: --data-checksums
+    ports:
+      # Host port is configurable because a developer may already have a local
+      # PostgreSQL on 5432. Change POSTGRES_PORT and the URL in .env together.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `$$` escapes Compose interpolation so the variables are expanded inside
+      # the container, where POSTGRES_USER/DB are already set.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      # initdb runs on the first boot of a fresh volume and takes a few seconds,
+      # during which pg_isready briefly succeeds against the bootstrap server.
+      start_period: 10s
+
+  api:
+    # Opt-in. `docker compose up` with no profile gives you the database alone,
+    # which is what you want while iterating with `cargo run`.
+    profiles: ["api"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        # Not `service_started`. Without the health gate the service wins the
+        # race often enough to look flaky and fails its first migration
+        # against a database that is still doing initdb.
+        condition: service_healthy
+    environment:
+      # The image ships no config.toml — that file points at a localhost
+      # database and would be a fallback that hides a missing URL — so
+      # everything the container needs is set here.
+      #
+      # Host is `db`, the Compose service name, not localhost: inside this
+      # container localhost is the container itself.
+      PINVOYAGER__DATABASE__URL: postgres://${POSTGRES_USER:-pinvoyager}:${POSTGRES_PASSWORD:-pinvoyager}@db:5432/${POSTGRES_DB:-pinvoyager}
+      PINVOYAGER__DATABASE__MAX_CONNECTIONS: "10"
+      PINVOYAGER__DATABASE__MIN_CONNECTIONS: "1"
+      # D8: always set. Unset means pool exhaustion hangs requests forever
+      # instead of surfacing as a 503.
+      PINVOYAGER__DATABASE__ACQUIRE_TIMEOUT_SECS: "5"
+      PINVOYAGER__SERVER__SHUTDOWN_TIMEOUT_SECS: "15"
+      PINVOYAGER__SERVER__REQUEST_TIMEOUT_SECS: "30"
+      PINVOYAGER__TELEMETRY__LOG_LEVEL: "info,pinvoyager_api=debug"
+      PINVOYAGER__TELEMETRY__JSON: "true"
+      # PINVOYAGER__SERVER__BIND is set in the image to 0.0.0.0:8080. Override
+      # it here only if you also override the image's HEALTHCHECK.
+    ports:
+      - "${API_PORT:-8080}:8080"
+    # Must exceed PINVOYAGER__SERVER__SHUTDOWN_TIMEOUT_SECS, or `docker stop`
+    # SIGKILLs the process mid-drain and the graceful shutdown is decorative.
+    stop_grace_period: 30s
+    # Phase 4 writes uploads to disk (D7). The image already creates /data owned
+    # by the non-root user; uncomment once the service has a storage path in its
+    # configuration, so this is a real mount and not dead config.
+    # volumes:
+    #   - uploads:/data
+
+volumes:
+  pgdata:
+  # uploads:

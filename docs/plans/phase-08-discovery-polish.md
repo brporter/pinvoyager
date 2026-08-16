@@ -10,6 +10,9 @@ The site works end to end for a stranger: they can find voyages without an accou
 creator's profile, and see a coherent product rather than a set of working endpoints. Account
 deletion works. The application can be deployed.
 
+The site will be hosted on a single box for now; no moderation, no photo reporting path. Sitemap
+for search indexing is needed. No backup or retention policy at this time.
+
 ## Non-goals
 
 - No social graph — no following, likes, or comments.
@@ -41,6 +44,16 @@ deletion works. The application can be deployed.
    processes applying the same migration concurrently is a bad way to discover this.
 10. Operational baseline: structured logs shipped somewhere, an uptime check, and an error
     budget for the tile handler under pan load.
+11. Deployment settings that have to agree with each other, and silently do nothing when they
+    do not:
+    - `server.shutdown_timeout_secs` must be **shorter** than the orchestrator's grace period
+      (Kubernetes `terminationGracePeriodSeconds`, default 30s; compose `stop_grace_period`).
+      Longer and the SIGKILL lands mid-drain, making the graceful shutdown decorative.
+    - Startup migrations need a config flag to disable them, so migrations can move to their
+      own deploy step (target 9). Phase 2 has no such flag — add it here.
+    - `SetRequestIdLayer` preserves a client-supplied `x-request-id` rather than overwriting
+      it. Correct for cross-service propagation, but once a reverse proxy sits in front, make
+      the trust boundary explicit: decide whether the edge strips or rewrites the header.
 
 ## Acceptance criteria
 
@@ -60,18 +73,6 @@ deletion works. The application can be deployed.
 - `design/screens/profile.html`
 - `design/screens/settings.html`
 - `design/components/feedback.html`
-
-## Open questions
-
-- **Hosting target.** A single box fits the architecture well — files on local disk and a
-  100+ GB tile archive both favor it. Object storage and a CDN would change phase 4's storage
-  layer and phase 7's tile serving, so if that is the intent, it should be decided before
-  phase 4 rather than here.
-- **Moderation.** Public photo uploads from arbitrary accounts attract abuse. There is
-  currently no reporting mechanism, no takedown path, and no admin surface. That is a real
-  gap for a public site and probably deserves its own phase.
-- Whether a sitemap and search-engine indexing are wanted. Public voyages suggest yes.
-- Backup and retention policy for uploaded originals.
 
 ## Notes
 

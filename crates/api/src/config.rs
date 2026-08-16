@@ -1,0 +1,186 @@
+//! Typed configuration.
+//!
+//! CONTRACT — the shape below is fixed; other modules depend on these field
+//! names. The implementation of [`Config::load`] is owned by the config agent.
+//!
+//! Precedence, lowest to highest: built-in defaults → `config.toml` →
+//! `PINVOYAGER__`-prefixed environment variables (double underscore separates
+//! nested keys, e.g. `PINVOYAGER__DATABASE__MAX_CONNECTIONS`).
+
+use std::net::SocketAddr;
+
+use figment::{
+    Figment,
+    providers::{Env, Format, Serialized, Toml},
+};
+use secrecy::SecretString;
+use serde::Deserialize;
+
+/// Configuration file, looked up relative to the working directory. figment
+/// also searches parent directories, so `cargo run -p pinvoyager-api` from
+/// inside `crates/api` still finds the repository-root file.
+const CONFIG_FILE: &str = "config.toml";
+
+/// Environment prefix. The separator is doubled so that a single underscore
+/// stays available inside a key name: `PINVOYAGER__DATABASE__MAX_CONNECTIONS`
+/// is unambiguously `database.max_connections`.
+const ENV_PREFIX: &str = "PINVOYAGER__";
+const ENV_SEPARATOR: &str = "__";
+
+// Defaults for the `database` section. These cannot live in a `Default` impl
+// the way the other sections' do, because `DatabaseConfig` deliberately has no
+// `Default` — `url` is required and there is no honest value for it. Defaulting
+// the section as a whole would invent one.
+const DEFAULT_MAX_CONNECTIONS: u32 = 10;
+const DEFAULT_MIN_CONNECTIONS: u32 = 1;
+/// D8: finite, and short. This is the delay before pool exhaustion becomes a
+/// 503; longer values just queue more requests behind an already-saturated pool.
+const DEFAULT_ACQUIRE_TIMEOUT_SECS: u64 = 5;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    #[serde(default)]
+    pub server: ServerConfig,
+    pub database: DatabaseConfig,
+    #[serde(default)]
+    pub telemetry: TelemetryConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct ServerConfig {
+    pub bind: SocketAddr,
+    /// How long to let in-flight requests finish after a shutdown signal.
+    pub shutdown_timeout_secs: u64,
+    /// Per-request timeout. Uploads get their own, larger, limit in phase 4.
+    pub request_timeout_secs: u64,
+}
+
+/// `SecretString` has no `Debug` that reveals its contents, which is what
+/// satisfies the "printing the config does not reveal a secret" criterion.
+/// Do not replace it with `String` for convenience.
+#[derive(Debug, Deserialize)]
+pub struct DatabaseConfig {
+    pub url: SecretString,
+    pub max_connections: u32,
+    pub min_connections: u32,
+    /// D8: never unset. Without it, pool exhaustion hangs requests forever
+    /// instead of surfacing as a 503.
+    pub acquire_timeout_secs: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct TelemetryConfig {
+    /// `RUST_LOG`-style filter directive.
+    pub log_level: String,
+    /// JSON in production, pretty in development.
+    pub json: bool,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("configuration is invalid: {0}")]
+    Invalid(String),
+}
+
+impl ConfigError {
+    /// A figment error is a chain — one extraction can fail on several keys at
+    /// once — and reporting only the first sends an operator round the loop
+    /// once per mistake. Report all of them.
+    fn from_figment(err: figment::Error) -> Self {
+        let messages: Vec<String> = err.into_iter().map(describe).collect();
+        ConfigError::Invalid(messages.join("; "))
+    }
+}
+
+/// Renders one figment error so that it names the setting the operator has to
+/// go and fix.
+///
+/// figment's own `Display` is kept for the *reason* (`missing field \`url\``,
+/// `invalid type: found string, expected u32`), but not for the key: it prints
+/// the path of the value that failed to deserialize, which for a missing field
+/// is the enclosing table (`database`, not `database.url`), profile-prefixed,
+/// and tagged with the source location of whichever provider happened to
+/// supply the parent — for a missing required key that is the defaults
+/// provider, which is exactly the wrong place to send someone looking.
+fn describe(err: figment::Error) -> String {
+    let mut path = err.path.clone();
+    if let figment::error::Kind::MissingField(field) = &err.kind {
+        path.push(field.to_string());
+    }
+
+    let key = path.join(".");
+    if key.is_empty() {
+        return err.kind.to_string();
+    }
+
+    // Both spellings, because which one is wrong depends on where the value
+    // was meant to come from, and the operator knows which they were editing.
+    let env_var = format!(
+        "{ENV_PREFIX}{}",
+        key.replace('.', ENV_SEPARATOR).to_uppercase()
+    );
+    format!(
+        "{} — set `{key}` in {CONFIG_FILE} or {env_var} in the environment",
+        err.kind
+    )
+}
+
+impl Config {
+    /// Loads configuration, failing loudly on anything missing or malformed.
+    ///
+    /// A missing required setting must produce an error naming the setting.
+    pub fn load() -> Result<Self, ConfigError> {
+        // Each `merge` outranks the ones before it, so this reads lowest to
+        // highest: built-in defaults, then the file, then the environment.
+        Figment::new()
+            .merge(Serialized::default(
+                "database.max_connections",
+                DEFAULT_MAX_CONNECTIONS,
+            ))
+            .merge(Serialized::default(
+                "database.min_connections",
+                DEFAULT_MIN_CONNECTIONS,
+            ))
+            .merge(Serialized::default(
+                "database.acquire_timeout_secs",
+                DEFAULT_ACQUIRE_TIMEOUT_SECS,
+            ))
+            // An absent file is not an error: configuring everything through
+            // the environment is a legitimate deployment, and extraction still
+            // fails on any required key that nothing supplied.
+            .merge(Toml::file(CONFIG_FILE))
+            .merge(Env::prefixed(ENV_PREFIX).split(ENV_SEPARATOR))
+            .extract()
+            .map_err(ConfigError::from_figment)
+    }
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            // Loopback rather than 0.0.0.0: a development server should not
+            // land on the local network by omission. Containers override this
+            // with `PINVOYAGER__SERVER__BIND=0.0.0.0:8080`.
+            bind: SocketAddr::from(([127, 0, 0, 1], 8080)),
+            // Long enough for in-flight requests to finish, short enough that
+            // a stuck request does not hold up a restart indefinitely.
+            shutdown_timeout_secs: 30,
+            request_timeout_secs: 30,
+        }
+    }
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            // Chatty about our own code, quiet about everything else — the
+            // shape you want when the log is a terminal you are watching.
+            log_level: "info,pinvoyager_api=debug".to_owned(),
+            // Pretty by default because the default audience is a developer.
+            // Deployments set `PINVOYAGER__TELEMETRY__JSON=true`.
+            json: false,
+        }
+    }
+}

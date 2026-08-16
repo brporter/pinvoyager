@@ -9,7 +9,10 @@
 A signed-in user can upload image files; each is validated as a real image, stored on disk
 content-addressed, has its EXIF capture time and GPS coordinates extracted, and has derived
 variants generated that carry **no metadata whatsoever**. Images are served only through an
-authorizing handler, never from disk directly, per D7.
+authorizing handler, never from disk directly, per D7. Store exact coordinates and round at 
+serve time (allows later granularity changes and the future "adjust location" feature, but 
+exact coordinates sit in the database). HEIC support is a must, and photos stored should be
+stored in WebP.
 
 ## Non-goals
 
@@ -55,6 +58,12 @@ authorizing handler, never from disk directly, per D7.
     other photo row references the same hash.
 12. Per-user upload rate limiting and a per-request size cap, both returning honest status
     codes (429, 413) rather than a connection reset.
+    **Two things phase 2 left for this phase to resolve deliberately:** there is no config
+    field for the maximum request body — phase 2 hardcoded a 32 MiB global ceiling — and a
+    body limit applied as an outer layer around the whole router can only ever be *tightened*
+    by inner layers, never relaxed. If the upload route needs a larger body than the global
+    ceiling, the limit has to move off the global stack and onto individual routes. Decide
+    this before writing the handler, not after discovering 413s on valid uploads.
 
 ## Acceptance criteria
 
@@ -83,17 +92,6 @@ authorizing handler, never from disk directly, per D7.
 - `design/screens/upload-flow.html`
 - `design/components/upload.html`
 - `design/flows/upload.html` — including the no-GPS branch
-
-## Open questions
-
-- **Granularity application point.** Store exact coordinates and round at serve time (allows
-  later granularity changes and the future "adjust location" feature, but exact coordinates
-  sit in the database), or round at ingest and discard the original (stronger privacy, but the
-  precision is gone forever and cannot be recovered if the user later wants finer granularity).
-  **This needs a decision before building T8** — it is not reversible after data exists.
-- Which variant sizes, and whether to emit WebP/AVIF alongside JPEG.
-- HEIC support. iPhones shoot HEIC by default, so declining it is a real product limitation,
-  but decoding it in pure Rust is not straightforward.
 
 ## Notes
 

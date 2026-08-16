@@ -1,0 +1,18 @@
+[workspace]
+resolver = "3"
+members = ["crates/api"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.94"
+license = "UNLICENSED"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# The blocking-in-async hazard from D8 is not something Clippy can see, but
+# these catch the adjacent mistakes cheaply.
+todo = "warn"
+dbg_macro = "warn"
+unwrap_used = "warn"

@@ -1,0 +1,136 @@
+//! Request-scoped middleware: request id generation and propagation, tracing
+//! spans, and timeouts.
+//!
+//! The request id must reach the client (header at minimum) and appear on
+//! every log line for that request. That pairing is what makes the design's
+//! "Reference 7f3a-2b91" error screen actually useful — the user quotes it and
+//! it finds the log.
+
+use std::time::Duration;
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{HeaderValue, Request, StatusCode};
+use tower::ServiceBuilder;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::request_id::{
+    MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
+};
+use tower_http::timeout::TimeoutLayer;
+use tower_http::trace::{DefaultOnFailure, DefaultOnResponse, TraceLayer};
+use tracing::Level;
+use uuid::Uuid;
+
+use crate::config::ServerConfig;
+
+/// Outermost ceiling on a request body, in bytes.
+///
+/// This is a hard cap, not a default: the layer wraps the whole router, and an
+/// outer limit can only ever be *tightened* by an inner one. Phase 4 uploads
+/// therefore have to fit under it — D8 talks about 25 MB JPEGs, so 32 MiB
+/// leaves headroom for multipart framing while still refusing a body that
+/// could only be an attack or a mistake. Routes that want less (every JSON
+/// endpoint) apply their own limit inside; axum's `DefaultBodyLimit` of 2 MiB
+/// already covers the buffering extractors.
+const MAX_REQUEST_BODY_BYTES: usize = 32 * 1024 * 1024;
+
+/// Applies the middleware stack. Order matters: request id is outermost so
+/// that even a rejection from an inner layer carries one.
+///
+/// Takes the server config because two of the layers are configured from it.
+/// [`crate::http::router`] is the only caller, and it has the state to hand.
+pub fn apply(router: Router, config: &ServerConfig) -> Router {
+    // `ServiceBuilder` composes top-down: the first layer listed is the
+    // outermost, which is the reverse of chained `Router::layer` calls. Using
+    // it here means the written order is the request order, and this stack is
+    // one where the order carries meaning.
+    //
+    //   1. set request id      — so everything below it, including rejections
+    //                            produced by the layers below, has an id.
+    //                            Note `SetRequestId` keeps a client-supplied
+    //                            `x-request-id` rather than overwriting it,
+    //                            which is what makes an id survive across
+    //                            services but also means the value is only as
+    //                            trustworthy as the caller. Harmless today
+    //                            (a `HeaderValue` cannot contain CR/LF, so it
+    //                            cannot forge a log line); revisit when there
+    //                            is a proxy in front worth trusting.
+    //   2. propagate           — copies that id onto the response, whatever
+    //                            produced the response
+    //   3. trace               — inside the id layers, so the span can read
+    //                            the id; outside timeout and limit, so a 408
+    //                            or a 413 is still logged as a request
+    //   4. timeout             — a request that hangs is bounded here
+    //   5. body limit          — innermost, closest to the handler
+    let stack = ServiceBuilder::new()
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuidV7))
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(make_request_span)
+                // INFO, not the DEBUG default: this is the access log, and it
+                // is the line that carries the request id, latency and status.
+                .on_response(DefaultOnResponse::new().level(Level::INFO))
+                .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
+        )
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(config.request_timeout_secs),
+        ))
+        .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_BYTES))
+        // `RequestBodyLimit` hands its inner service a `Limited<Body>`, but
+        // axum's router only speaks `axum::body::Body`. Mapping it back is
+        // what makes the two compose; the limit is still enforced, because
+        // `Body::new` re-wraps the limited body rather than unwrapping it, so
+        // an oversized chunked body still fails mid-stream — not only the
+        // ones that declare an honest `Content-Length`.
+        .map_request(|req: Request<_>| req.map(Body::new));
+
+    router.layer(stack)
+}
+
+/// Builds the per-request span.
+///
+/// The span is deliberately `INFO`. A `DEBUG` span would be filtered out under
+/// the default `info` directive, and a span that is not recorded contributes
+/// no fields — the request id would silently vanish from every log line, which
+/// is the one thing this middleware exists to guarantee.
+fn make_request_span(request: &Request<Body>) -> tracing::Span {
+    let request_id = request
+        .extensions()
+        .get::<RequestId>()
+        .and_then(|id| id.header_value().to_str().ok())
+        .unwrap_or("unknown");
+
+    // Fields are flat and low-cardinality-first so JSON output stays greppable.
+    // The query string is deliberately excluded: it is user-controlled and, in
+    // phase 3, will carry OAuth `code` and `state` values that must not be
+    // written to a log.
+    tracing::info_span!(
+        "http_request",
+        request_id = %request_id,
+        method = %request.method(),
+        path = %request.uri().path(),
+        version = ?request.version(),
+    )
+}
+
+/// A [`MakeRequestId`] producing UUIDv7s.
+///
+/// v7 rather than tower-http's built-in v4 `MakeRequestUuid`: the first 48 bits
+/// are a millisecond timestamp, so ids sort chronologically. When a user quotes
+/// a reference from an error screen, an ordered id narrows the log search to a
+/// point in time by itself.
+#[derive(Clone, Copy, Default)]
+struct MakeRequestUuidV7;
+
+impl MakeRequestId for MakeRequestUuidV7 {
+    fn make_request_id<B>(&mut self, _request: &Request<B>) -> Option<RequestId> {
+        // A hyphenated UUID is always visible ASCII, so the parse cannot fail;
+        // `Option` exists for generators that can, and returning `None` here
+        // would simply mean "no id", which is not worth a panic.
+        HeaderValue::from_str(&Uuid::now_v7().to_string())
+            .ok()
+            .map(RequestId::new)
+    }
+}

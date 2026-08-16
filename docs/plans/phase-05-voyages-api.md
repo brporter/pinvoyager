@@ -8,7 +8,9 @@
 
 A signed-in user can create a voyage, attach photos to it, order them, set its location
 granularity, and publish it. Anyone — signed in or not — can read a published voyage and get
-back exactly the coordinate precision the owner chose.
+back exactly the coordinate precision the owner chose. Granularity is set per-voyage. Granularity
+semantics just lump photos together in a middle-cluster for the point. Deleting a voyage returns
+the photos in that voyage to the library.
 
 ## Non-goals
 
@@ -62,18 +64,6 @@ back exactly the coordinate precision the owner chose.
 - `design/screens/voyage-edit.html`
 - `design/components/granularity.html`
 - `design/flows/voyage-lifecycle.html`
-
-## Open questions
-
-- **Granularity scope.** Per voyage, per photo, or a user-level default that a voyage
-  inherits and can override? Currently drawn as per voyage with a user-level default. Per
-  photo is more flexible but considerably more UI.
-- **Granularity semantics.** Rounding to a grid (deterministic, but reveals grid membership
-  and clusters pins onto grid intersections) versus a fixed per-photo offset derived from a
-  secret and the photo ID (looks natural, stable per T5, requires care that repeated
-  observation cannot average it out). Grid rounding is simpler and probably right.
-- Whether deleting a voyage deletes its photos or returns them to the library. Returning
-  them is more forgiving.
 
 ## Notes
 
