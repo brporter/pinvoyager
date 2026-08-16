@@ -220,12 +220,15 @@ That is an accepted cost, not an oversight. What it obliges:
 - **HEVC patent licensing** is a real consideration for a public site at scale. Noted and
   accepted; revisit if the site grows into a commercial product.
 
-**Related, and worth deciding at the same time:** variants are to be stored as WebP.
-`image` supports WebP through `image-webp` with no native dependency, but that encoder has
-historically been **lossless-only**. Lossless WebP on photographs is typically larger than the
-source JPEG, which would make the choice counterproductive. Confirm the encoder's capability
-before phase 4 commits; if lossy WebP is needed, that means the `webp` crate and libwebp — a
-second native dependency, which is a much smaller marginal cost now that libheif is in.
+**Variants are encoded as lossy WebP via the `webp` crate and libwebp.** The pure-Rust
+`image-webp` encoder is lossless-only, and lossless WebP on photographs is typically larger
+than the source JPEG — which would invert the reason for choosing WebP at all. libwebp is a
+second native dependency, but the marginal cost is small now that libheif is already in, and
+both land in the same Dockerfile change.
+
+So the image stack is: `libheif-rs` to decode HEIC, `image` to decode everything else and to
+resize, and `webp` to encode the variants. Three pieces rather than one, and the container
+needs `libheif` and `libwebp` at both build and runtime.
 
 ---
 

@@ -12,6 +12,7 @@
 //! * **D7** — user uploads are served only through an authorising handler,
 //!   never as static files.
 
+pub mod auth;
 pub mod blocking;
 pub mod config;
 pub mod db;

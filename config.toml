@@ -48,3 +48,68 @@ log_level = "info,pinvoyager_api=debug,tower_http=debug"
 # Pretty output locally; deployments set `PINVOYAGER__TELEMETRY__JSON=true` so
 # lines are machine-parseable.
 json = false
+
+[auth]
+# Public base URL of this service. Provider redirect URIs are built from it, and
+# each provider console must be registered with the *exact* result — a
+# trailing-slash or http/https mismatch is rejected with an unhelpful error.
+base_url = "http://127.0.0.1:8080"
+
+[auth.session]
+# Sliding: two weeks of inactivity ends the session. Generous on purpose — this
+# is a photo-browsing site, being signed out is pure friction, and there is no
+# money or admin surface behind the cookie.
+idle_timeout_secs = 1209600
+
+# But not unbounded. Sliding expiry alone means a stolen cookie lives forever
+# provided it keeps being used; this ceiling eventually forces a fresh sign-in
+# regardless of activity.
+absolute_timeout_secs = 7776000
+
+cookie_name = "pv_session"
+
+# false ONLY because local development is plain HTTP. Every deployment must set
+# `PINVOYAGER__AUTH__SESSION__COOKIE_SECURE=true`. The default in code is `true`
+# so that forgetting this file entirely fails safe.
+cookie_secure = false
+
+# ---------------------------------------------------------------------------
+# Providers
+#
+# All four are optional and NONE are configured here, because every one of them
+# requires a client secret and this file is committed. Configure whichever you
+# have credentials for via the environment:
+#
+#   PINVOYAGER__AUTH__PROVIDERS__GOOGLE__CLIENT_ID=...
+#   PINVOYAGER__AUTH__PROVIDERS__GOOGLE__CLIENT_SECRET=...
+#   PINVOYAGER__AUTH__PROVIDERS__GOOGLE__ISSUER=https://accounts.google.com
+#
+#   PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__CLIENT_ID=...
+#   PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__CLIENT_SECRET=...
+#   PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+#
+# NOTE the tenant id above. `/common/v2.0` and `/consumers/v2.0` DO NOT WORK:
+# their discovery documents report `"issuer": ".../{tenantid}/v2.0"` with that
+# brace placeholder literally in the string, and OIDC requires the published
+# issuer to match the configured one exactly. Discovery fails, Microsoft is
+# disabled at startup (logged, non-fatal), and the cause is not obvious from the
+# symptom. Use a tenant-specific issuer URL.
+#
+#   PINVOYAGER__AUTH__PROVIDERS__FACEBOOK__CLIENT_ID=...
+#   PINVOYAGER__AUTH__PROVIDERS__FACEBOOK__CLIENT_SECRET=...
+#
+# Apple is the odd one: its "client secret" is a JWT this service generates and
+# signs with an ES256 key you download from Apple as a .p8 file, and it expires
+# (six months maximum). It needs four values rather than two:
+#
+#   PINVOYAGER__AUTH__PROVIDERS__APPLE__CLIENT_ID=...      (Services ID, not App ID)
+#   PINVOYAGER__AUTH__PROVIDERS__APPLE__TEAM_ID=...
+#   PINVOYAGER__AUTH__PROVIDERS__APPLE__KEY_ID=...
+#   PINVOYAGER__AUTH__PROVIDERS__APPLE__PRIVATE_KEY_PEM=...  (contents of the .p8)
+#
+# The service starts with none of these set. Unconfigured providers' endpoints
+# return 404 rather than blocking startup — obtaining four sets of OAuth
+# credentials is a human-gated process, and a service that cannot run until all
+# four exist cannot be worked on.
+# ---------------------------------------------------------------------------
+[auth.providers]

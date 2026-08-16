@@ -7,6 +7,7 @@
 
 use std::process::ExitCode;
 
+use pinvoyager_api::auth::ProviderRegistry;
 use pinvoyager_api::{AppState, Config, db, http, telemetry};
 
 #[tokio::main]
@@ -38,7 +39,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pool = db::connect(&config.database).await?;
     db::migrate(&pool).await?;
 
-    let state = AppState::new(pool, config);
+    // Discovery happens once, here. A provider that fails to come up is logged
+    // and disabled rather than fatal — one provider's outage must not stop the
+    // service from serving the other three.
+    let providers = ProviderRegistry::from_config(&config.auth).await?;
+    tracing::info!(
+        providers = ?providers.configured(),
+        "authentication providers ready"
+    );
+
+    let state = AppState::new(pool, config, providers);
     http::serve(state).await?;
 
     Ok(())

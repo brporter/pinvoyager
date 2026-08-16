@@ -3,6 +3,7 @@
 //! CONTRACT — `router` and `serve` signatures are fixed; implementations and
 //! everything under `health` / `middleware` are owned by the http agent.
 
+pub mod auth;
 pub mod health;
 pub mod middleware;
 
@@ -26,6 +27,7 @@ pub fn router(state: AppState) -> Router {
     let routes = Router::new()
         .route("/health", get(health::health))
         .route("/ready", get(health::ready))
+        .merge(auth::routes())
         .with_state(state);
 
     middleware::apply(routes, &config.server)
@@ -171,7 +173,14 @@ mod tests {
                     log_level: "info".to_owned(),
                     json: false,
                 },
+                auth: crate::config::AuthConfig {
+                    base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
+                    session: Default::default(),
+                    providers: Default::default(),
+                },
             },
+            // No providers: these tests exercise the router, not sign-in.
+            crate::auth::ProviderRegistry::empty(),
         )
     }
 

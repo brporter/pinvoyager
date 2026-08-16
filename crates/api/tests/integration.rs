@@ -140,11 +140,26 @@ async fn the_same_subject_under_a_different_provider_is_allowed() {
 // future migration is exactly how this would regress.
 // ---------------------------------------------------------------------------
 
+/// The one column permitted to look like a credential, and why.
+///
+/// `sessions.token_hash` is the SHA-256 of a session token **this service
+/// mints**, not a credential a user or a provider gave us. D1 forbids storing
+/// passwords, hashes of them, and long-lived provider access or refresh tokens;
+/// a session identifier is none of those. It is stored hashed precisely so that
+/// a database leak yields nothing usable — the raw token exists only in the
+/// user's cookie.
+///
+/// The exception is written as an exact (table, column) pair rather than by
+/// relaxing the pattern, so that a future `users.password_hash` or
+/// `identities.refresh_token` still fails this test. A broad pattern would have
+/// quietly permitted both.
+const PERMITTED: &[(&str, &str)] = &[("sessions", "token_hash")];
+
 #[tokio::test]
 async fn the_schema_holds_no_credential_columns() {
     let pool = pool(2, Duration::from_secs(5)).await;
 
-    let offenders: Vec<(String, String)> = sqlx::query_as(
+    let found: Vec<(String, String)> = sqlx::query_as(
         "SELECT table_name::text, column_name::text
            FROM information_schema.columns
           WHERE table_schema = 'public'
@@ -154,10 +169,29 @@ async fn the_schema_holds_no_credential_columns() {
     .await
     .expect("query information_schema");
 
+    let offenders: Vec<_> = found
+        .iter()
+        .filter(|(table, column)| {
+            !PERMITTED
+                .iter()
+                .any(|&(t, c)| t == table.as_str() && c == column.as_str())
+        })
+        .collect();
+
     assert!(
         offenders.is_empty(),
         "D1 forbids storing any credential; found: {offenders:?}"
     );
+
+    // The exception must stay honest: if the sessions table is ever renamed or
+    // the column dropped, this catches the stale entry rather than leaving a
+    // permanently-granted exemption nobody revisits.
+    for (table, column) in PERMITTED {
+        assert!(
+            found.iter().any(|(t, c)| t == table && c == column),
+            "the permitted exception {table}.{column} no longer exists; remove it from PERMITTED"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM auth_attempts\n          WHERE state = $1\n         RETURNING state, provider, nonce, pkce_verifier, link_user_id, redirect_to, expires_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pkce_verifier",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "pkce_verifier"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "link_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "link_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "redirect_to",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "redirect_to"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "auth_attempts",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "3300f919b49a7bdd73784ddc7e67ab73bd779754311efdfb8d97390882392f7f"
+}

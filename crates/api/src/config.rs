@@ -15,6 +15,7 @@ use figment::{
 };
 use secrecy::SecretString;
 use serde::Deserialize;
+use url::Url;
 
 /// Configuration file, looked up relative to the working directory. figment
 /// also searches parent directories, so `cargo run -p pinvoyager-api` from
@@ -44,6 +45,80 @@ pub struct Config {
     pub database: DatabaseConfig,
     #[serde(default)]
     pub telemetry: TelemetryConfig,
+    pub auth: AuthConfig,
+}
+
+/// Authentication configuration (phase 3).
+#[derive(Debug, Deserialize)]
+pub struct AuthConfig {
+    /// Public base URL of this service, used to build provider redirect URIs.
+    /// Must match what is registered in each provider's console exactly —
+    /// a trailing-slash mismatch is rejected by every provider with an
+    /// unhelpful error.
+    pub base_url: Url,
+    #[serde(default)]
+    pub session: SessionConfig,
+    /// **Every provider is optional.** A deployment configures the ones it has
+    /// credentials for, and the service starts with the rest disabled rather
+    /// than refusing to boot. This is not just developer convenience: obtaining
+    /// four sets of OAuth credentials is a serialised, human-gated process, and
+    /// a service that cannot start until all four exist cannot be worked on.
+    /// An unconfigured provider's endpoints return 404.
+    #[serde(default)]
+    pub providers: ProvidersConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct SessionConfig {
+    /// Sliding: each authenticated request extends the session by this much.
+    pub idle_timeout_secs: u64,
+    /// Hard ceiling regardless of activity. A sliding timeout alone means a
+    /// stolen cookie stays valid indefinitely so long as it is used.
+    pub absolute_timeout_secs: u64,
+    pub cookie_name: String,
+    /// Must be true anywhere but local plain-HTTP development.
+    pub cookie_secure: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ProvidersConfig {
+    pub google: Option<OidcProviderConfig>,
+    pub microsoft: Option<OidcProviderConfig>,
+    pub apple: Option<AppleProviderConfig>,
+    pub facebook: Option<FacebookProviderConfig>,
+}
+
+/// A standards-conformant OIDC provider: discovery document, JWKS, ID token.
+#[derive(Debug, Deserialize)]
+pub struct OidcProviderConfig {
+    pub client_id: String,
+    pub client_secret: SecretString,
+    /// Issuer URL. Discovery is fetched from `{issuer}/.well-known/openid-configuration`.
+    pub issuer: Url,
+}
+
+/// Apple is OIDC, but its client secret is not a static string — it is a JWT
+/// you generate and sign yourself with an ES256 key downloaded from Apple, and
+/// it expires (six months maximum). These are the inputs to generating it.
+#[derive(Debug, Deserialize)]
+pub struct AppleProviderConfig {
+    /// The Services ID, not the App ID.
+    pub client_id: String,
+    pub team_id: String,
+    /// Key ID of the .p8 signing key.
+    pub key_id: String,
+    /// Contents of the .p8 file, PEM-encoded PKCS#8.
+    pub private_key_pem: SecretString,
+}
+
+/// Facebook is OAuth2, not OIDC. There is no ID token to verify; the subject
+/// comes from a Graph API call.
+#[derive(Debug, Deserialize)]
+pub struct FacebookProviderConfig {
+    pub client_id: String,
+    pub client_secret: SecretString,
 }
 
 #[derive(Debug, Deserialize)]
@@ -168,6 +243,27 @@ impl Default for ServerConfig {
             // a stuck request does not hold up a restart indefinitely.
             shutdown_timeout_secs: 30,
             request_timeout_secs: 30,
+        }
+    }
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            // Sliding: two weeks of inactivity ends the session. Generous,
+            // because this is a photo-browsing site and being signed out is
+            // pure friction — there is no money and no admin surface behind
+            // the cookie.
+            idle_timeout_secs: 14 * 24 * 60 * 60,
+            // But not unbounded. A sliding timeout on its own means a stolen
+            // cookie lives forever provided it keeps being used; the absolute
+            // ceiling is what eventually forces a fresh sign-in.
+            absolute_timeout_secs: 90 * 24 * 60 * 60,
+            cookie_name: "pv_session".to_owned(),
+            // Safe default. Local plain-HTTP development sets this false
+            // explicitly, which is the right way round — forgetting to turn it
+            // *on* in production is the dangerous direction.
+            cookie_secure: true,
         }
     }
 }
