@@ -61,10 +61,9 @@ Everything under `design/components/` and `design/screens/`.
 
 - **State management.** TanStack Query alone is likely sufficient given the server owns
   nearly all state; a client store may be unnecessary.
-- **API type generation.** ASP.NET Core emits an OpenAPI document natively via
-  `Microsoft.AspNetCore.OpenApi` (Swashbuckle is no longer the default), so the remaining
-  choice is the client generator — `openapi-typescript` for types only, or NSwag for a full
-  typed client. Either eliminates a whole class of drift; hand-maintaining types does not.
+- **API type generation.** Emitting an OpenAPI document from axum and generating a client, or
+  hand-maintaining types. Generation costs backend annotation work but eliminates a whole
+  class of drift.
 - Whether upload should be resumable. It matters on mobile connections with large batches,
   and it is much cheaper to design in now than to retrofit.
 

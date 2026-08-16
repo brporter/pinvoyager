@@ -12,8 +12,7 @@ future change invalidates it.
 
 ## D1 — Authentication is delegated; no credentials are stored
 
-OIDC/OAuth2 against the four providers, implemented with ASP.NET Core's external
-authentication handlers. The application stores
+OIDC/OAuth2 implemented directly in Rust against the four providers. The application stores
 **no credentials of any kind**: no passwords, no password hashes, no long-lived provider
 access or refresh tokens.
 
@@ -24,15 +23,8 @@ fact of the identity — which provider, and that provider's stable subject iden
 hashing parameter choices, credential-stuffing exposure, and the breach-notification surface
 that comes with holding secrets.
 
-**Explicitly not ASP.NET Core Identity.** Identity is the framework's local-credential system —
-password hashes, lockout state, two-factor secrets, recovery codes. Using it here would create
-a schema full of credential columns that must remain permanently empty, which is worse than
-omitting them: it invites someone later to start filling them. External authentication plus
-cookie authentication is the whole of it.
-
-**What "verify" means here** — the framework's handlers perform these checks, so the risk
-shifts from implementing them to *configuring them correctly*. Knowing what they do on your
-behalf is what lets you tell a genuine failure from a misconfiguration:
+**What "verify" means here** — this is a security requirement, not an implementation detail,
+and it is easy to get wrong by merely *decoding* a token:
 
 - Fetch and cache each provider's JWKS; validate the ID token's signature against it
 - Validate `iss`, `aud`, and `exp`
@@ -88,9 +80,7 @@ to leak. The renderer and the data are both open, so the whole stack can be move
 **Costs accepted:**
 - A planet basemap archive is 100+ GB. Regional extracts are far smaller but break for a
   travel app whose users go anywhere — plan for planet.
-- `.pmtiles` serving depends on HTTP range requests; the backend must support them. ASP.NET
-  Core does natively, and serving the archive for the client to range-read avoids needing a
-  PMTiles reader in C# at all.
+- `.pmtiles` serving depends on HTTP range requests; the Rust backend must support them.
 - OpenStreetMap attribution is required by the ODbL license and must be visible on the map.
 - There is no satellite imagery in OSM. A satellite layer, if ever wanted, needs a separate
   provider and is out of scope.
@@ -150,7 +140,7 @@ every cache, and every authorization check, so it must not be assumed away now.
 ## D7 — Files live on disk but are never served from disk
 
 Uploads are written to a content-addressed path derived from a hash of the content. They are
-served exclusively through an application endpoint.
+served exclusively through a Rust handler.
 
 **Why:** a handler can enforce authorization, set a server-determined `Content-Type` rather
 than trusting the upload, send `X-Content-Type-Options: nosniff` and a restrictive
@@ -166,6 +156,46 @@ browser sniffs as HTML is the classic outcome.
 - Bound decoded pixel dimensions before decoding, to reject decompression bombs
 - Enforce per-request and per-user upload size and rate limits
 
+## D8 — All database access is async, and the runtime is never blocked
+
+Every database operation is `async`, on a Tokio multi-threaded runtime, through `sqlx`'s async
+API and a `PgPool`. There is no synchronous database path anywhere in the service.
+
+**Why this is nearly free, and what the real work is.** `sqlx` is async-native — it has no
+blocking mode to accidentally use — so "all database operations are async" is the default state
+of the chosen stack rather than something to engineer. Recording it as a decision is still
+worthwhile, because it fixes the inverse obligation, which is *not* free:
+
+> **Nothing that blocks may run on a runtime worker thread.**
+
+An async runtime multiplexes many tasks onto a few OS threads. One task that occupies a thread
+without yielding stalls every other task scheduled on it. In a service that is mostly awaiting
+Postgres this is invisible — right up until phase 4 starts decoding photographs.
+
+**The specific hazards in this project:**
+
+- **Image decode, resize, and encode are CPU-bound** and are the single biggest risk. A batch
+  of fifty 25 MB JPEGs processed inline will starve the runtime and stall unrelated requests.
+  This work belongs in `tokio::task::spawn_blocking`, or on a dedicated Rayon pool if the
+  parallelism needs shaping.
+- **Content hashing** of large uploads is CPU-bound for the same reason.
+- **Filesystem access** through `std::fs` blocks. Use `tokio::fs` in request paths — noting
+  that it is itself `spawn_blocking` underneath, so for a long sequence of file operations one
+  explicit `spawn_blocking` around the whole sequence beats many implicit ones.
+- **Holding a pool connection across an unrelated `await`** drains the pool. Acquire late,
+  release early, and never hold a connection while an image is being processed.
+- **Long-lived transactions across awaits** cause lock contention in Postgres. Keep them short
+  and inside a single logical unit of work.
+
+**Async does not remove the connection ceiling.** Task concurrency is effectively unbounded;
+pool connections are not. Set `max_connections` deliberately and always set `acquire_timeout` —
+without it, pool exhaustion presents as requests hanging indefinitely rather than as a 503,
+which is far harder to diagnose under load.
+
+**Blocking bugs are invisible in normal testing.** They surface as tail-latency under
+concurrency, not as failures. `tokio-console` in development is the practical way to see a task
+occupying a worker thread; the compiler and Clippy will not tell you.
+
 ---
 
 ## Defaults, not yet load-bearing
@@ -175,11 +205,9 @@ them deeply yet.
 
 | Area | Default | Reasoning |
 |---|---|---|
-| Runtime | .NET 10 (LTS) | Current long-term-support release |
-| Web framework | ASP.NET Core Minimal APIs | Small endpoint surface; controller ceremony buys nothing at this size |
-| Database | PostgreSQL via EF Core + Npgsql | Real constraints, concurrent writes during batch uploads, and migrations in the box |
+| Async runtime | Tokio, multi-threaded | The ecosystem default; axum and sqlx both build on it (D8) |
+| Web framework | axum | Tower middleware ecosystem, tokio-native, the mainstream idiomatic choice |
+| Database | PostgreSQL via sqlx | Async-native, real constraints, concurrent writes during batch uploads, compile-time checked queries |
 | Frontend build | Vite + React + TypeScript | Fast, conventional, no framework lock-in |
-| Sessions | Cookie auth backed by a custom `ITicketStore` | Revocable on demand. ASP.NET's default self-contained encrypted ticket cannot be revoked before expiry, which matters more here because the account *is* the identity |
-| Data Protection | Key ring persisted to PostgreSQL | Without this, sessions break on restart and cannot be shared across instances |
-| Image processing | Undecided — see phase 4 | ImageSharp, SkiaSharp, and Magick.NET differ on licensing, native dependencies, and HEIC support. `System.Drawing.Common` is out: Windows-only since .NET 6 |
-| Testing | xUnit + `WebApplicationFactory` + Testcontainers | Integration tests run against a real ephemeral PostgreSQL with no manual setup |
+| Sessions | Server-side, opaque cookie ID | Revocable on demand. A stateless JWT session cannot be revoked, which matters more here because the account *is* the identity |
+| Image processing | `image` crate | Pure Rust, no libvips/ImageMagick native dependency to manage |

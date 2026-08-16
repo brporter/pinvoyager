@@ -50,6 +50,11 @@ back exactly the coordinate precision the owner chose.
 - **T6** — An unauthenticated request reads a published voyage. A draft returns 404 to
   everyone but its owner — 404 rather than 403, so draft existence does not leak.
 - **T7** — Pagination is stable across insertions during traversal.
+- **T6/T9** — No N+1 queries. Loading a voyage with 48 photos issues a bounded number of
+  queries, not one per photo. This is worth calling out specifically because `await` inside a
+  loop *looks* concurrent and is not — it serialises every round trip, and the cost scales
+  with photo count on the product's most-visited endpoint. Assert on query count in a test
+  rather than trusting a read of the code.
 
 ## Design references
 
@@ -76,12 +81,12 @@ T5 is the whole privacy model. Granularity is enforced in exactly one place — 
 serialization boundary — because enforcing it per endpoint guarantees that the one endpoint
 someone forgets becomes the leak.
 
-Concretely: a `Coordinate` response record with a **private constructor** and a static factory
-that requires a granularity argument, so there is no way to put a latitude into a response DTO
-without having stated a precision. The entity type carrying raw coordinates should never be
-serialized directly — consider making that structurally impossible rather than a convention,
-since "we always remember to map to the DTO" holds right up until someone returns an entity
-from a new endpoint at 6pm on a Friday.
+Concretely: a `Coordinate` response newtype in its own module with **private fields**, whose
+only constructor takes a granularity argument. Rust's module privacy makes this genuinely
+unforgeable rather than merely conventional — there is no way to get a latitude into a response
+body without having stated a precision, and the type system enforces it at compile time instead
+of relying on everyone remembering. The row type carrying raw coordinates should not implement
+`Serialize` at all.
 
 Note how this interacts with phase 4's open question: if exact coordinates are discarded at
 ingest, T5 is trivially satisfied but granularity can never be loosened afterward.

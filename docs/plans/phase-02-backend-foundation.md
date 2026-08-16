@@ -6,10 +6,10 @@
 
 ## Goal
 
-An ASP.NET Core service that starts, reads configuration, connects to PostgreSQL, applies
-migrations, serves health endpoints, and returns structured errors — with the project
-conventions (error handling, logging, testing, layout) established well enough that phases
-3–5 add features without re-deciding them.
+A Rust service that starts, reads configuration, connects to PostgreSQL, applies migrations,
+serves a health endpoint, and returns structured errors — with the project conventions
+(error type, tracing, testing, layout) established well enough that phases 3–5 add features
+without re-deciding them.
 
 ## Non-goals
 
@@ -18,83 +18,66 @@ conventions (error handling, logging, testing, layout) established well enough t
 - No production deployment. Local development only.
 - No auth-adjacent scaffolding written "for later" — build it in phase 3 with real
   requirements in hand.
-- **No ASP.NET Core Identity.** See the note at the bottom; this is a decision, not an
-  oversight.
 
 ## Targets
 
-1. Solution with an ASP.NET Core Web API project targeting **.NET 10** (LTS) using **Minimal
-   APIs**, plus a test project. `Nullable` and `TreatWarningsAsErrors` enabled in
-   `Directory.Build.props` so they apply solution-wide.
-2. Graceful shutdown on SIGINT/SIGTERM, draining in-flight requests. The generic host does
-   this by default — the target is verifying it, and setting a sensible
-   `ShutdownTimeout`.
-3. Layered configuration — environment variables over `appsettings.{Environment}.json` over
-   `appsettings.json` — bound to typed options classes with `IOptions<T>`, validated with data
-   annotations and `.ValidateOnStart()` so a missing or malformed setting fails at boot rather
-   than on first use. Secrets come from user-secrets in development and environment variables
-   elsewhere, never from a committed file.
-4. Global exception handling via `IExceptionHandler` returning **RFC 9457 Problem Details**,
-   mapping domain errors to status codes, and — importantly — never leaking internal detail to
-   the client while logging the full exception server-side. The `traceId` goes in the response
-   so a user-visible reference ID can be quoted back.
-5. Structured JSON logging with `Microsoft.Extensions.Logging`, plus **OpenTelemetry** tracing
-   with ASP.NET Core and Npgsql instrumentation. Request correlation rides on the W3C trace
-   context that ASP.NET Core already propagates.
-6. PostgreSQL via **Npgsql** and **EF Core**, with pooling and a `DbContext` registered through
-   `AddDbContextPool`.
-7. Initial EF Core migration creating `Users` and `Identities` per D3, with a unique index on
-   `(Provider, Subject)`. No credential columns.
-8. `GET /health` (liveness) and `GET /ready` (readiness) using
-   `Microsoft.Extensions.Diagnostics.HealthChecks`, separated by **tag** so readiness includes
-   the database check and liveness does not.
+1. Cargo workspace with the service crate; builds clean under `cargo clippy -- -D warnings`.
+2. axum server with graceful shutdown on SIGINT/SIGTERM.
+3. Layered configuration — environment variables over a file over defaults — with a typed
+   config struct that fails loudly at startup on anything missing or malformed. Secrets never
+   logged, and a `Debug` impl that cannot accidentally print one.
+4. A single application error type implementing `IntoResponse`, mapping cleanly to status
+   codes, returning a consistent JSON error body, and — importantly — never leaking internal
+   detail to the client while still logging the full cause server-side.
+5. `tracing` with structured JSON output, a request-ID middleware, and per-request spans.
+6. PostgreSQL via sqlx on a `PgPool`, **every query async** per D8, plus `sqlx::migrate!`
+   wired to `migrations/`. Pool configured deliberately rather than by default:
+   `max_connections` sized against Postgres's own limit, and **`acquire_timeout` always set**
+   so exhaustion surfaces as a 503 instead of requests hanging forever.
+7. An initial migration creating `users` and `identities` per D3. No credential columns.
+8. `GET /health` (liveness) and `GET /ready` (readiness, verifies the database round-trips).
 9. `docker-compose.yml` bringing up PostgreSQL for local development.
-10. Test project using **xUnit** + `WebApplicationFactory<Program>` + **Testcontainers** for an
-    ephemeral PostgreSQL instance, with an integration test asserting on `/health` and `/ready`.
+10. Test harness: an integration test that boots the app against a real ephemeral database
+    and asserts on `/health` and `/ready`.
+11. **Runtime-blocking discipline established now, before phase 4 needs it** (D8). A documented
+    convention for where CPU-bound and blocking work goes — `tokio::task::spawn_blocking`, with
+    a thin helper so call sites are uniform — plus `tokio-console` wired up behind a dev feature
+    flag. Phase 4 introduces image processing, which is where this stops being theoretical;
+    having the pattern already in place means it gets used rather than retrofitted.
+12. A repository or data-access layer whose functions are all `async fn` taking
+    `&PgPool` or an executor, so no call site can acquire a connection and forget to release
+    it, and so tests can pass a transaction that rolls back.
 
 ## Acceptance criteria
 
-- **T1** — `dotnet build` produces zero warnings; `dotnet format --verify-no-changes` passes.
+- **T1** — `cargo clippy --all-targets -- -D warnings` is clean; `cargo fmt --check` passes.
 - **T2** — Ctrl-C drains in-flight requests rather than dropping them.
-- **T3** — Removing a required setting causes a startup failure naming the setting. Options
-  classes holding secrets do not surface them in logs or diagnostics output.
-- **T4** — A handler that throws produces a 500 with a Problem Details body containing a
-  `traceId` and no internal detail, while the log carries the full exception.
-- **T6/T7** — `dotnet ef database update` creates both tables; `\d "Identities"` shows the
-  unique index on `(Provider, Subject)`.
+- **T3** — Removing a required environment variable causes a startup failure naming the
+  variable. Printing the config struct does not reveal any secret value.
+- **T4** — A handler that returns an internal error produces a 500 with a generic body and a
+  request ID, while the log line carries the real cause.
+- **T6/T7** — `sqlx migrate run` creates both tables; a `\d identities` shows the unique
+  constraint on `(provider, subject)`.
 - **T8** — `/health` returns 200 with the database stopped; `/ready` returns 503.
-- **T10** — `dotnet test` passes from a clean checkout with Docker available. Testcontainers
-  starts and disposes the database itself, so no manual setup step exists.
+- **T10** — `cargo test` passes from a clean checkout with only docker-compose running.
+- **T6** — With the pool set to a deliberately tiny `max_connections`, concurrent requests
+  beyond that queue and then return 503 on timeout. They do not hang. Verify this rather than
+  assuming it — the default is no timeout, and the failure mode is indefinite hanging.
+- **T11** — `tokio-console` runs against a dev build and shows tasks. Confirm the tooling
+  works *now*, while the service is simple enough that anything it reports is obviously
+  correct; it is much harder to trust a new profiler while chasing a real problem.
 
 ## Open questions
 
-- **EF Core or Dapper.** EF Core is assumed because it brings migrations, which is a real
-  chunk of this phase. Dapper is leaner and closer to hand-written SQL but needs a separate
-  migration tool (DbUp or FluentMigrator). A reasonable middle path is EF Core for schema and
-  writes, Dapper for the few read paths that turn out to be hot — decide when there is a hot
-  path, not now.
-- **Minimal APIs or controllers.** Minimal APIs assumed. This service is a small set of
-  endpoints and does not need controller ceremony, but if the endpoint count grows past
-  roughly thirty, revisit.
-- Whether to add `Microsoft.AspNetCore.OpenApi` now or in phase 6. Adding it now costs little
-  and phase 6 wants a generated client from it.
+- Config file format — TOML assumed.
+- Whether to adopt `sqlx`'s compile-time query checking now. It requires either a live
+  database or a checked-in `.sqlx` offline cache during builds, which affects CI setup.
 
 ## Notes
 
-**Do not use ASP.NET Core Identity.** It is the obvious-looking choice and it is wrong here.
-Identity exists to manage local credentials — password hashes, lockout counters, two-factor
-secrets, recovery codes — which is precisely what D1 says this system never stores. Phase 3
-uses the external authentication handlers with cookie authentication and nothing else. Pulling
-in Identity would add a schema full of credential columns that must stay permanently empty,
-which is worse than useless: it is a standing invitation for someone later to start filling it.
+The `/health` vs `/ready` split matters more than it looks: conflating them means a database
+blip causes orchestrators to kill otherwise-healthy processes instead of just routing around
+them.
 
-**The `/health` versus `/ready` split matters more than it looks.** Conflating them means a
-database blip causes orchestrators to kill otherwise-healthy processes instead of just routing
-around them. The health check tags are what keep them separate.
-
-`Users` and `Identities` land here rather than in phase 3 so migration ordering is established
-early and phase 3 is purely about protocol work.
-
-**Nullable reference types are on from the first commit.** Turning them on later in a codebase
-of any size is a miserable, low-value migration, and they are the single biggest correctness
-win available in modern C#.
+`users` and `identities` land here rather than in phase 3 so that migration ordering is
+established early and phase 3 is purely about protocol work.
