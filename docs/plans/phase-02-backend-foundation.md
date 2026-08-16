@@ -1,17 +1,29 @@
 # Phase 2 — Backend foundation
 
-**Status:** in progress — blocked on Docker
+**Status:** complete
 **Depends on:** nothing (can run parallel to phase 1)
 **Owner:** Claude
 
-Code for every target is written and the build is green: `cargo fmt --check`, `cargo clippy
---all-targets -- -D warnings`, and `cargo test` all pass (10 unit tests, 1 doctest, 1 ignored).
+Green: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
+(10 unit + 7 integration + 1 doctest; 1 ignored SIGTERM test that signals the test process).
+Every target verified against a real PostgreSQL.
 
-**Not yet verified, all for the same reason — the Docker daemon is not running:**
-T9 (compose has never been brought up), T10 (no integration test against a real database),
-T11 (tokio-console unrun), the T6 pool-exhaustion 503, the T7 schema inspection, and the T8
-health/ready split against a database stopped after startup. The `.sqlx` offline cache also
-cannot be generated, so queries remain runtime-checked rather than compile-time checked.
+Queries are compile-time checked through a committed `.sqlx` offline cache, and the cache is
+**enforced** — with the database stopped and `SQLX_OFFLINE=true`, altering a query fails the
+build with "no cached data for this query". A cache that existed but was never consulted would
+look identical in a passing build, so this was checked rather than assumed.
+
+The container was built and run, not merely written: 171 MB image, serves `/health` and
+`/ready`, runs as uid 10001, Docker healthcheck reports healthy, migrations applied on boot,
+and JSON log lines carry the request id in their span. `docker stop` produces a clean drain —
+"received SIGTERM", then exit code 0 rather than 143, in 0.2s rather than waiting out the grace
+period.
+
+**The one thing not fully closed:** T11's `tokio-console` was verified as far as the subscriber
+binding and serving on 127.0.0.1:6669 under
+`RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio-console`. Driving the console TUI
+itself was not done — it needs the `tokio-console` client installed and is interactive. The
+layer is installed and listening; rendering is a client concern.
 
 ## Goal
 
