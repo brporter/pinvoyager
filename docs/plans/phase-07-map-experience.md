@@ -23,8 +23,14 @@ is always server-side. Discover screen also has a map.
 
 ## Targets
 
-1. Acquire an OpenStreetMap-derived planet `.pmtiles` basemap and document the acquisition and
-   refresh procedure — this is operational knowledge that is painful to reconstruct later.
+**Targets 1 and 2 are deferred, and target 4 is partly blocked by that — see D4a.**
+Development points at `tile.openstreetmap.org` instead. The interaction work (targets 5 to 12)
+is unaffected and is what this phase now delivers.
+
+1. ~~Acquire an OpenStreetMap-derived planet `.pmtiles` basemap~~ — **deferred.** The download
+   was attempted: 3.6 MB/s from Protomaps' build server, which is about ten hours for 127.9 GB,
+   and it truncated at 9.2 GB while reporting success. Revisit with a different source, a
+   regional extract, or a locally built archive.
 2. Tile serving. Two architectures are viable, and Rust supports both well:
 
    **(a) Serve the archive, let the client read it.** `pmtiles.js` inside MapLibre issues HTTP
@@ -40,8 +46,11 @@ is always server-side. Discover screen also has a map.
    support is mandatory** under either.
 3. Tile responses carry correct caching headers, and tile requests are cheap enough to serve
    under the load a map pan generates — one gesture can request dozens of tiles.
-4. MapLibre GL JS in voyage detail, styled to match the phase 1 design tokens so the map does
-   not look pasted in from another product.
+4. MapLibre GL JS in voyage detail. **The styling half of this target is blocked by D4a.**
+   Raster tiles arrive already drawn, so the basemap cannot be recoloured to match the design
+   tokens and the dark basemap in `design/components/map-primitives.html` is unreachable until
+   vector tiles are in place. Build the map so that swapping the source later is a change to
+   one style definition rather than to the map code.
 5. OpenStreetMap attribution visible and correctly worded. This is an ODbL license
    requirement, not a courtesy.
 6. Pins from the phase 5 map endpoint, with the design's pin, selected-pin, and cluster

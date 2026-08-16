@@ -69,6 +69,42 @@ human. Matching on email alone is an account-takeover vector, since not every pr
 verifies email ownership. Linking must be an explicit, authenticated action by a user already
 signed in — never an automatic merge.
 
+## D4a — Development uses openstreetmap.org's tile server; self-hosting is deferred
+
+**Decided 16 August 2026.** D4 below still describes where this is going. It is not what
+development runs against for now.
+
+Downloading the planet archive was attempted and abandoned. The transfer averaged 3.6 MB/s
+(about 29 Mbps) from Protomaps' build server, which would have taken roughly ten hours for
+127.9 GB, and it silently truncated at 9.2 GB with a successful exit status. Development
+therefore points at `tile.openstreetmap.org` directly, and the hosting pipeline is revisited
+later.
+
+**What their usage policy requires of us.** It permits light and development use, which this
+is, subject to conditions we have to actually meet:
+
+- Attribution must be visible. Already handled — `.pv-attribution` is on every map instance
+  and it was already a licence requirement under ODbL.
+- No bulk downloading, and no pre-fetching tiles beyond what a user is looking at.
+- A released application must not use it. This is a development-only arrangement, and
+  shipping it would be a breach rather than merely impolite.
+
+**The consequence that changes what phase 7 can deliver.** openstreetmap.org serves **raster**
+tiles — finished PNG images. The plan assumes **vector** tiles, and the difference is not
+cosmetic:
+
+- MapLibre displays raster tiles perfectly well as a raster source, so pins, clustering,
+  selection, the mobile photo sheet and the granularity areas all behave identically. None of
+  the interaction work is affected.
+- But raster tiles **cannot be restyled**. The basemap arrives already drawn in OSM's standard
+  cartography, which is bright and high-contrast. Phase 7's target 4 — "styled to match the
+  phase 1 design tokens so the map does not look pasted in from another product" — is not
+  achievable this way, and neither is the dark basemap in
+  `design/components/map-primitives.html`.
+
+So the map will work and will look like OpenStreetMap rather than like PinVoyager until the
+tile pipeline is built. Target 4 is deferred with the hosting, not dropped.
+
 ## D4 — Map: MapLibre GL JS, OpenStreetMap data, self-hosted Protomaps tiles
 
 Vector tiles served from a `.pmtiles` archive we host ourselves. No third-party tile service

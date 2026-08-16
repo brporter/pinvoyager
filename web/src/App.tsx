@@ -49,6 +49,13 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { SignIn } from "./auth/SignIn";
 import { AppShell } from "./shell/AppShell";
 import { AuthShell } from "./shell/AuthShell";
+import { Discover } from "./screens/Discover";
+import { NotFound } from "./screens/NotFound";
+import { Profile } from "./screens/Profile";
+import { Settings } from "./screens/Settings";
+import { Upload } from "./screens/Upload";
+import { VoyageDetail } from "./screens/VoyageDetail";
+import { VoyageEdit } from "./screens/VoyageEdit";
 
 export function App() {
   return (
@@ -58,17 +65,17 @@ export function App() {
       <div className="pv-app" style={{ minHeight: "100%" }}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/" element={<Placeholder name="Discover" />} />
-            <Route path="/voyages/:id" element={<Placeholder name="Voyage detail" />} />
-            <Route path="/u/:userId" element={<Placeholder name="Profile" />} />
+            <Route path="/" element={<Discover />} />
+            <Route path="/voyages/:id" element={<VoyageDetail />} />
+            <Route path="/u/:userId" element={<Profile />} />
 
             <Route element={<RequireAuth />}>
-              <Route path="/voyages/:id/edit" element={<Placeholder name="Voyage edit" />} />
-              <Route path="/upload" element={<Placeholder name="Upload" />} />
-              <Route path="/settings" element={<Placeholder name="Settings" />} />
+              <Route path="/voyages/:id/edit" element={<VoyageEdit />} />
+              <Route path="/upload" element={<Upload />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
 
-            <Route path="*" element={<Placeholder name="Not found" />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
 
           <Route element={<AuthShell />}>
@@ -78,21 +85,5 @@ export function App() {
         </Routes>
       </div>
     </AuthProvider>
-  );
-}
-
-/**
- * Stands in until each screen is built. Replaced, not extended.
- *
- * A `div`, not a `main`: `AppShell` owns the `<main>` landmark, because it is
- * also the target of the skip link and there must be exactly one of it. Screens
- * render their content into it and should not declare their own.
- */
-function Placeholder({ name }: { name: string }) {
-  return (
-    <div className="pv-container" style={{ paddingBlock: "var(--pv-space-8)" }}>
-      <h1 className="pv-h2">{name}</h1>
-      <p className="pv-muted">Not built yet.</p>
-    </div>
   );
 }

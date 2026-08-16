@@ -1,6 +1,6 @@
 # Phase 6 — Frontend shell
 
-**Status:** not started
+**Status:** complete
 **Depends on:** phases 1, 3, 5
 **Owner:** Claude
 

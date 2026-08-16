@@ -81,8 +81,14 @@ describe("protected routes, signed out", () => {
     stubMe(401);
     renderAt("/voyages/0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f");
 
+    // Asserted on the address, not on anything the screen rendered. What
+    // RequireAuth does is decide whether to redirect, and a public route is
+    // one it must leave alone; which heading the voyage screen happens to
+    // show while its data loads is that screen's business. An earlier version
+    // of this test looked for the routing placeholder's heading and broke the
+    // moment the real screen replaced it, without anything being wrong.
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Voyage detail" })).toBeInTheDocument();
+      expect(screen.queryByText("Checking your session…")).not.toBeInTheDocument();
     });
 
     expect(location()).toBe("/voyages/0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f");
@@ -94,8 +100,11 @@ describe("protected routes, signed in", () => {
     stubMe(200, SIGNED_IN);
     renderAt("/upload");
 
+    // Same reasoning as above: the property under test is that a signed-in
+    // user is not sent to /signin and the session check has finished. What the
+    // upload screen draws afterwards belongs to the upload screen's own tests.
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Upload" })).toBeInTheDocument();
+      expect(screen.queryByText("Checking your session…")).not.toBeInTheDocument();
     });
 
     expect(location()).toBe("/upload");

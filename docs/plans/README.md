@@ -15,7 +15,7 @@ conversation to fill in gaps.
 | 3 | Authentication | in progress — blocked on credentials | [phase-03-authentication.md](phase-03-authentication.md) |
 | 4 | Photo pipeline | complete | [phase-04-photo-pipeline.md](phase-04-photo-pipeline.md) |
 | 5 | Voyages API | complete | [phase-05-voyages-api.md](phase-05-voyages-api.md) |
-| 6 | Frontend shell | not started | [phase-06-frontend-shell.md](phase-06-frontend-shell.md) |
+| 6 | Frontend shell | complete | [phase-06-frontend-shell.md](phase-06-frontend-shell.md) |
 | 7 | Map experience | not started | [phase-07-map-experience.md](phase-07-map-experience.md) |
 | 8 | Discovery & polish | not started | [phase-08-discovery-polish.md](phase-08-discovery-polish.md) |
 
