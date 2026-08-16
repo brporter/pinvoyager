@@ -124,9 +124,15 @@ mod tests {
                 providers: crate::config::ProvidersConfig::default(),
                 dev_login: false,
             },
+            photos: crate::config::PhotosConfig::default(),
         };
 
-        AppState::new(pool, config, ProviderRegistry::empty())
+        AppState::new(
+            pool,
+            std::sync::Arc::new(config),
+            ProviderRegistry::empty(),
+            crate::photos::worker::VariantQueue::detached(),
+        )
     }
 
     fn parts(cookie: Option<&str>) -> Parts {

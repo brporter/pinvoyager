@@ -14,21 +14,13 @@ name = "pinvoyager-api"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["multipart"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 figment = { version = "0.10.19", features = ["toml", "env"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-sqlx = { version = "0.9", default-features = false, features = [
-    "runtime-tokio",
-    "tls-rustls-ring",
-    "postgres",
-    "macros",
-    "migrate",
-    "uuid",
-    "chrono",
-] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "macros", "migrate", "uuid", "chrono", "rust_decimal"] }
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = [
     "rt-multi-thread",
@@ -77,6 +69,13 @@ sha2 = "0.11.0"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 async-trait = "0.1.92"
 cookie = "0.18"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "rayon"] }
+libheif-rs = "2.7.0"
+webp = "0.3.1"
+kamadak-exif = "0.6.1"
+hex = "0.4.3"
+rust_decimal = { version = "1.42.1", features = ["db-postgres"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false, features = [

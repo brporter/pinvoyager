@@ -13,7 +13,7 @@ conversation to fill in gaps.
 | 1 | Design | built — awaiting review | [phase-01-design.md](phase-01-design.md) |
 | 2 | Backend foundation | complete | [phase-02-backend-foundation.md](phase-02-backend-foundation.md) |
 | 3 | Authentication | in progress — blocked on credentials | [phase-03-authentication.md](phase-03-authentication.md) |
-| 4 | Photo pipeline | not started | [phase-04-photo-pipeline.md](phase-04-photo-pipeline.md) |
+| 4 | Photo pipeline | complete | [phase-04-photo-pipeline.md](phase-04-photo-pipeline.md) |
 | 5 | Voyages API | not started | [phase-05-voyages-api.md](phase-05-voyages-api.md) |
 | 6 | Frontend shell | not started | [phase-06-frontend-shell.md](phase-06-frontend-shell.md) |
 | 7 | Map experience | not started | [phase-07-map-experience.md](phase-07-map-experience.md) |

@@ -49,6 +49,36 @@ log_level = "info,pinvoyager_api=debug,tower_http=debug"
 # lines are machine-parseable.
 json = false
 
+[photos]
+# Originals and derived variants live under here, in content-addressed
+# subdirectories. Nothing is ever served from this path as a static file (D7) —
+# every read goes through a handler that sets its own Content-Type and security
+# headers. Gitignored.
+storage_root = "data"
+
+# 25 MB. Comfortably above a modern phone's HEIC or JPEG.
+max_upload_bytes = 26214400
+
+# The decompression-bomb guard, checked from the image header BEFORE any full
+# decode. A 50,000 x 50,000 PNG is a few hundred kilobytes on disk and about
+# 10 GB decoded, so a byte-size limit does not catch it — only a pixel count does.
+max_megapixels = 100
+
+upload_rate_per_minute = 60
+
+# Bounded on purpose: an unbounded queue turns an upload burst into unbounded
+# memory. Backpressure showing up as a slower upload beats an OOM kill.
+variant_queue_depth = 256
+
+# Separate from queue depth, and the number that actually protects the machine.
+# Image work is CPU-bound and runs on the blocking pool (D8); unbounded width
+# starves everything else on the host.
+variant_concurrency = 4
+
+# 82 is the usual sweet spot for photographic WebP — visually indistinguishable
+# at normal viewing sizes, roughly a third of an equivalent JPEG.
+webp_quality = 82.0
+
 [auth]
 # Public base URL of this service. Provider redirect URIs are built from it, and
 # each provider console must be registered with the *exact* result — a

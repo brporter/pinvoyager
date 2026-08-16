@@ -6,6 +6,7 @@
 pub mod auth;
 pub mod health;
 pub mod middleware;
+pub mod photos;
 
 use std::time::Duration;
 
@@ -28,6 +29,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health::health))
         .route("/ready", get(health::ready))
         .merge(auth::routes())
+        .merge(photos::routes())
         .with_state(state);
 
     middleware::apply(routes, &config.server)
@@ -146,17 +148,8 @@ mod tests {
     use super::*;
     use crate::config::{Config, DatabaseConfig, ServerConfig, TelemetryConfig};
 
-    /// A state whose pool is lazy and never connected. Enough to exercise the
-    /// router, and deliberately unable to reach a database — which is exactly
-    /// what the liveness contract is about.
-    fn test_state() -> AppState {
-        let pool = PgPoolOptions::new()
-            .acquire_timeout(Duration::from_secs(2))
-            .connect_lazy("postgres://nobody@127.0.0.1:1/none")
-            .expect("a syntactically valid url makes a lazy pool");
-
-        AppState::new(
-            pool,
+    fn test_config() -> Config {
+        {
             Config {
                 server: ServerConfig {
                     bind: "127.0.0.1:0".parse().expect("valid socket addr"),
@@ -179,9 +172,26 @@ mod tests {
                     providers: Default::default(),
                     dev_login: false,
                 },
-            },
+                photos: crate::config::PhotosConfig::default(),
+            }
+        }
+    }
+
+    /// A state whose pool is lazy and never connected. Enough to exercise the
+    /// router, and deliberately unable to reach a database — which is exactly
+    /// what the liveness contract is about.
+    fn test_state() -> AppState {
+        let pool = PgPoolOptions::new()
+            .acquire_timeout(Duration::from_secs(2))
+            .connect_lazy("postgres://nobody@127.0.0.1:1/none")
+            .expect("a syntactically valid url makes a lazy pool");
+
+        AppState::new(
+            pool,
+            std::sync::Arc::new(test_config()),
             // No providers: these tests exercise the router, not sign-in.
             crate::auth::ProviderRegistry::empty(),
+            crate::photos::worker::VariantQueue::detached(),
         )
     }
 

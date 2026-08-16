@@ -1,6 +1,6 @@
 # Phase 4 — Photo pipeline
 
-**Status:** not started
+**Status:** complete
 **Depends on:** phase 3
 **Owner:** Claude
 
@@ -92,6 +92,25 @@ stored in WebP.
 - `design/components/upload.html`
 - `design/flows/upload.html` — including the no-GPS branch
 
+## Open questions
+
+- **The startup recovery sweep works but does not announce itself.** Verified by hand: a photo
+  set back to `pending`, with the service restarted, goes to `ready` in about five seconds. But
+  the `tracing::info!("requeuing photos left pending by a previous run")` line does **not**
+  appear at the default configured log level, while `"variant worker started"` — the same
+  macro, the same level, the same module — does. It appears under `RUST_LOG=trace`.
+
+  The only structural difference is that the requeue line runs inside a `tokio::spawn`ed task
+  and the other does not. Not a correctness problem, and not data loss: an operator restarting
+  a service with stranded photos simply sees nothing telling them it happened. Worth
+  understanding before relying on that line during an incident.
+
+  Two false alarms this produced, recorded because both cost real time: a polling loop with no
+  `sleep` burned forty iterations in six seconds and looked like a stall, and a first "the
+  sweep is broken" conclusion came from killing the service after three seconds. Graceful
+  shutdown also keeps the worker running while draining, so a `kill` does not immediately stop
+  variant generation — use `kill -9` to simulate a process that genuinely died mid-batch.
+
 ## Notes
 
 **Verify the strip, do not assume it.** The `exiftool` acceptance criterion exists because
@@ -105,5 +124,73 @@ correctly. The failure mode being avoided is a stored XSS: a user uploads a file
 sniffs as HTML, and it executes on our origin against another user's session.
 
 Deduplication by hash and public voyages interact: two users uploading the same bytes share
-one file. That is fine for storage, but deletion must be reference-counted (T9) or one user
+one file. That is fine for storage, but deletion must be reference-counted (T11) or one user
 deleting removes another user's photo.
+
+### A data-modifying CTE cannot see its own effects
+
+Worth recording, because the bug it causes is silent and a single-photo test cannot find it.
+
+`delete_returning_orphaned` deletes a row in a CTE and then asks whether any *other* row still
+references that content hash. Postgres evaluates every part of a statement against **one
+snapshot taken before the statement ran**, so the outer `EXISTS` still sees the row the CTE
+just deleted. Without an explicit `AND photos.id <> $1`, the answer is `false` for every photo
+ever deleted: no file is ever unlinked and the store grows forever.
+
+The reason it survives testing is that "failed to delete the file" and "correctly kept a file
+another user still references" look identical from outside. There is now a dedicated test for
+the single-reference case.
+
+### HEIC would have been rotated twice
+
+The bug that would have shipped, on the one format iPhones shoot by default.
+
+libheif carries out the container's own `irot`/`imir` transformation properties during decode —
+that is what MIAF requires, and it is why every libheif-based viewer renders an iPhone photo
+the right way up. `image`, by contrast, decodes what is literally in a JPEG and never consults
+the EXIF orientation.
+
+So the two paths do not start from the same position. Applying the EXIF orientation uniformly
+after decoding leaves JPEG correct and turns every HEIC portrait through 180°.
+
+Verified against libheif 1.23.1 rather than assumed: a HEIC whose *only* orientation signal is
+an EXIF tag decodes unrotated, so the container property is the sole authority. Reconciled in
+`exif::extract`, which reports no orientation for an ISO-BMFF container because the decoder has
+already consumed it — the caller then rotates by 1, a no-op. Regression test:
+`a_heic_is_never_rotated_twice`.
+
+### The strip is confirmed, not assumed
+
+`exiftool` on a generated variant reports only `[ExifTool]`, `[System]`, `[File]` and the VP8
+bitstream header — no EXIF, GPS, XMP, IPTC, ICC profile, Photoshop or MakerNotes block, and no
+`VP8X` extended header at all. libwebp's simple-encode path writes only the bitstream.
+
+Both an `exiftool` assertion and a hand-rolled RIFF chunk walk are in the test suite, so an
+encoder upgrade that started emitting a metadata chunk fails the build rather than quietly
+leaking coordinates.
+
+### Three things left for integration, in order of how much they matter
+
+1. **`ContentHash` has a public field and infallible path functions.** The storage module
+   claims no user-supplied string reaches the filesystem, and that is true of the current call
+   sites — but nothing structurally prevents `ContentHash("../../etc/passwd".into())` from
+   producing an escaping path. A private field with a validating constructor, or fallible path
+   functions, would make the claim true by construction rather than by inspection.
+2. **Nobody range-checks coordinates.** `numeric(9, 6)` holds three integer digits, so a
+   finite but absurd latitude from malformed EXIF (|lat| ≥ 1000 is a real thing to find in the
+   wild) surfaces as a raw database error — a 500 on an otherwise-valid upload. The EXIF
+   extractor should reject anything outside ±90 / ±180, since it is the layer that knows what
+   it read. Deliberately not silently dropped at the repository, which would hide bad data.
+3. **Deletion still races a concurrent upload of the same bytes.** One statement closes the
+   count-then-delete window, but READ COMMITTED cannot see an uploader that commits a *new*
+   row for the same hash after the snapshot is taken: the delete reports orphaned, the file is
+   unlinked, and the new photo points at nothing. Closing it needs
+   `pg_advisory_xact_lock` keyed on the content hash, taken by the uploader around
+   commit-plus-insert and by the deleter around the delete plus the unlink — which lives in
+   the handler, because only the handler owns the transaction the lock must sit in.
+
+An honest note on the bomb guard: `image` 0.25's JPEG path reads the whole file into memory
+before parsing headers, so a JPEG's *bytes* are buffered (bounded by `max_upload_bytes`) even
+though its *pixels* are not. PNG, WebP and HEIC stream properly. The decompression-bomb
+guarantee holds in every case — a 50,000 × 50,000 PNG costs an IHDR parse — but the JPEG path
+is not quite as cheap as the others.

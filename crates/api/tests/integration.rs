@@ -158,9 +158,19 @@ async fn the_same_subject_under_a_different_provider_is_allowed() {
 /// not a user's or a provider's; unlike one it is single-use and expires in
 /// minutes. Stored hashed so that a database reader cannot complete somebody
 /// else's in-flight authorization.
+/// `photos.content_hash` is a SHA-256 of image bytes — a storage address and a
+/// deduplication key, not a secret of any kind. It matches the pattern only
+/// because the word "hash" appears in it.
+///
+/// Three exemptions now, and every one of them was added because this test
+/// failed and forced the question. That is the design working: a broad pattern
+/// with narrow, written exceptions makes each new credential-shaped column a
+/// deliberate decision, where a pattern tuned to pass would make the next one
+/// invisible.
 const PERMITTED: &[(&str, &str)] = &[
     ("sessions", "token_hash"),
     ("auth_attempts", "binding_hash"),
+    ("photos", "content_hash"),
 ];
 
 #[tokio::test]

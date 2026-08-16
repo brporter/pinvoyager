@@ -15,4 +15,5 @@
 //! the identity lookups it actually needs, against real requirements.
 
 pub mod identities;
+pub mod photos;
 pub mod users;

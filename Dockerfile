@@ -17,6 +17,17 @@ ARG DEBIAN_CODENAME=bookworm
 # --------------------------------------------------------------------------
 FROM rust:${RUST_VERSION}-slim-${DEBIAN_CODENAME} AS builder
 
+# Native image libraries (D9). `image` has no HEIC decoder at all — not a
+# feature flag, the decoder does not exist — so HEIC support means libheif, and
+# lossy WebP means libwebp because the pure-Rust encoder is lossless-only.
+# pkg-config is how the -sys crates find both.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        pkg-config \
+        libheif-dev \
+        libwebp-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # sqlx's query macros are checked against the committed `.sqlx` offline cache
@@ -67,8 +78,17 @@ FROM debian:${DEBIAN_CODENAME}-slim AS runtime
 #   ships none, and the failure only appears against a TLS-requiring database —
 #   i.e. in production, not locally.
 # curl: only present for HEALTHCHECK below.
+# libheif1 / libwebp7: the RUNTIME halves of the build dependencies above. The
+#   binary is dynamically linked against both, so without them it does not start
+#   at all — and the error is a loader message, not anything mentioning images.
+#   The runtime packages are deliberately not the -dev ones: headers and static
+#   archives are build-time only and would just be extra surface.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libheif1 \
+        libwebp7 \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root from the start. Phase 4 writes user uploads to disk (D7); a process

@@ -8,6 +8,7 @@
 //! nested keys, e.g. `PINVOYAGER__DATABASE__MAX_CONNECTIONS`).
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use figment::{
     Figment,
@@ -46,6 +47,52 @@ pub struct Config {
     #[serde(default)]
     pub telemetry: TelemetryConfig,
     pub auth: AuthConfig,
+    #[serde(default)]
+    pub photos: PhotosConfig,
+}
+
+/// Photo storage and upload limits (phase 4).
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct PhotosConfig {
+    /// Root of the on-disk store. Originals and variants live in sibling
+    /// subdirectories beneath it.
+    ///
+    /// Nothing is ever served from here as a static file (D7) — every read goes
+    /// through a handler that sets its own `Content-Type` and security headers.
+    pub storage_root: PathBuf,
+
+    /// Largest accepted upload. Rejected before the body is read, so an
+    /// oversized request costs a header parse rather than a disk write.
+    pub max_upload_bytes: u64,
+
+    /// Largest accepted decoded image, in megapixels.
+    ///
+    /// This is the decompression-bomb guard and it is checked from the header
+    /// alone, before any full decode: a 50,000 × 50,000 PNG is a few hundred
+    /// kilobytes on disk and about 10 GB in memory. A byte-size limit does not
+    /// catch it; only a pixel-count limit does.
+    pub max_megapixels: u32,
+
+    /// Uploads permitted per user per minute.
+    pub upload_rate_per_minute: u32,
+
+    /// How many variant-generation jobs may queue before the producer blocks.
+    ///
+    /// Bounded on purpose: an unbounded channel converts a burst of uploads
+    /// into unbounded memory, and backpressure that shows up as a slow upload
+    /// is far better than an out-of-memory kill.
+    pub variant_queue_depth: usize,
+
+    /// How many images may be processed concurrently.
+    ///
+    /// Distinct from the queue depth, and the number that actually protects the
+    /// runtime: image work is CPU-bound (D8) and runs on the blocking pool, so
+    /// letting it run unboundedly wide starves everything else on the machine.
+    pub variant_concurrency: usize,
+
+    /// Quality for the lossy WebP variants, 0–100.
+    pub webp_quality: f32,
 }
 
 /// Authentication configuration (phase 3).
@@ -262,6 +309,31 @@ impl Default for ServerConfig {
             // a stuck request does not hold up a restart indefinitely.
             shutdown_timeout_secs: 30,
             request_timeout_secs: 30,
+        }
+    }
+}
+
+impl Default for PhotosConfig {
+    fn default() -> Self {
+        Self {
+            storage_root: PathBuf::from("data"),
+            // 25 MB. Comfortably above a modern phone's HEIC or JPEG, and well
+            // below what a 200-megapixel medium-format raw would need — which
+            // is fine, because raw is a declared non-goal.
+            max_upload_bytes: 25 * 1024 * 1024,
+            // 100 MP. Above any consumer camera and far below the pixel counts
+            // that make a decode bomb interesting.
+            max_megapixels: 100,
+            upload_rate_per_minute: 60,
+            variant_queue_depth: 256,
+            // Leave headroom: the blocking pool also serves file I/O, and
+            // saturating every core with image work makes the service
+            // unresponsive in exactly the way D8 warns about.
+            variant_concurrency: 4,
+            // 82 is the usual sweet spot for photographic WebP — visually
+            // indistinguishable from the source at normal viewing sizes, and
+            // roughly a third of an equivalent JPEG.
+            webp_quality: 82.0,
         }
     }
 }

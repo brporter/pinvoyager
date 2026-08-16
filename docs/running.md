@@ -1,5 +1,25 @@
 # Running locally
 
+## Native prerequisites
+
+Phase 4 links against two C libraries, and needs a third tool to verify its
+central guarantee:
+
+```sh
+brew install libheif webp pkg-config exiftool     # macOS
+# Debian/Ubuntu: libheif-dev libwebp-dev pkg-config libimage-exiftool-perl
+```
+
+- **libheif** — `image` has no HEIC decoder at all. It is not a feature flag;
+  the decoder does not exist, largely because HEIC wraps HEVC. iPhones shoot
+  HEIC by default, so this is not optional (D9).
+- **libwebp** — the pure-Rust WebP encoder is lossless-only, and lossless WebP
+  on a photograph is typically larger than the source JPEG, which would invert
+  the reason for choosing WebP.
+- **exiftool** — the test suite runs it against generated variants to prove no
+  GPS, timestamp, or camera data survives. Without it that test cannot run, and
+  that test is what makes the granularity feature real rather than cosmetic.
+
 ## Prerequisites
 
 - **Docker must be running.** PostgreSQL comes from Compose; the integration

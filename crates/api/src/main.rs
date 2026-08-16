@@ -8,6 +8,7 @@
 use std::process::ExitCode;
 
 use pinvoyager_api::auth::ProviderRegistry;
+use pinvoyager_api::photos::worker;
 use pinvoyager_api::{AppState, Config, db, http, telemetry};
 
 #[tokio::main]
@@ -60,7 +61,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "authentication providers ready"
     );
 
-    let state = AppState::new(pool, config, providers);
+    // Shared before the state exists, because the variant worker needs the same
+    // configuration and has to be constructed first — `AppState` holds its
+    // queue handle.
+    let config = std::sync::Arc::new(config);
+
+    // Also sweeps any photos left `pending` by a previous run, which would
+    // otherwise sit in someone's library forever, never becoming viewable.
+    let variants = worker::spawn(pool.clone(), config.clone());
+
+    let state = AppState::new(pool, config, providers, variants);
     http::serve(state).await?;
 
     Ok(())

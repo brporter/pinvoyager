@@ -9,6 +9,7 @@ use sqlx::PgPool;
 
 use crate::auth::ProviderRegistry;
 use crate::config::Config;
+use crate::photos::worker::VariantQueue;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,14 +19,26 @@ pub struct AppState {
     /// sign-in. A discovery round trip on every authorization would add latency
     /// to every sign-in and put avoidable load on the provider.
     pub providers: Arc<ProviderRegistry>,
+    /// Handle onto the variant worker. Uploads enqueue and return; encoding
+    /// happens off the request path (D8).
+    pub variants: VariantQueue,
 }
 
 impl AppState {
-    pub fn new(pool: PgPool, config: Config, providers: ProviderRegistry) -> Self {
+    /// Takes an `Arc<Config>` rather than a `Config` because the variant worker
+    /// needs the same configuration and is constructed *before* this — the
+    /// worker cannot take `AppState`, since `AppState` contains its handle.
+    pub fn new(
+        pool: PgPool,
+        config: Arc<Config>,
+        providers: ProviderRegistry,
+        variants: VariantQueue,
+    ) -> Self {
         Self {
             pool,
-            config: Arc::new(config),
+            config,
             providers: Arc::new(providers),
+            variants,
         }
     }
 }
