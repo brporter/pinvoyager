@@ -17,3 +17,4 @@
 pub mod identities;
 pub mod photos;
 pub mod users;
+pub mod voyages;

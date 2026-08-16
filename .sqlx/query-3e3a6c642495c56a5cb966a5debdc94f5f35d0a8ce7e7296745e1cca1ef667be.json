@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT vp.photo_id,\n                  vp.position,\n                  p.captured_at,\n                  p.width,\n                  p.height,\n                  p.variant_status,\n                  p.latitude::float8  AS latitude,\n                  p.longitude::float8 AS longitude\n             FROM voyage_photos vp\n             JOIN photos p ON p.id = vp.photo_id\n            WHERE vp.voyage_id = $1\n            ORDER BY vp.position, vp.photo_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "photo_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "voyage_photos",
+            "name": "photo_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "position",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "voyage_photos",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "captured_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "photos",
+            "name": "captured_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "width",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "photos",
+            "name": "width"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "photos",
+            "name": "height"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "variant_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "photos",
+            "name": "variant_status"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "latitude",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "longitude",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "3e3a6c642495c56a5cb966a5debdc94f5f35d0a8ce7e7296745e1cca1ef667be"
+}

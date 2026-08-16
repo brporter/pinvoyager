@@ -1,0 +1,118 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE voyages\n            SET title        = COALESCE($3::text, title),\n                description  = CASE WHEN $4::boolean THEN $5::text ELSE description END,\n                granularity  = COALESCE($6::text, granularity),\n                published    = COALESCE($7::boolean, published),\n                published_at = CASE\n                                   WHEN COALESCE($7::boolean, published)\n                                        AND published_at IS NULL\n                                   THEN now()\n                                   ELSE published_at\n                               END,\n                updated_at   = now()\n          WHERE id = $1 AND owner_id = $2\n         RETURNING id, owner_id, title, description, published, granularity,\n                   created_at, published_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "owner_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "published",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "published"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "granularity",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "granularity"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "voyages",
+            "name": "published_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c2baab1edb313f6b9a41174364800cfc6b3a2eced36b43c9c4c2abc41401c87d"
+}

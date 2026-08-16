@@ -7,6 +7,7 @@ pub mod auth;
 pub mod health;
 pub mod middleware;
 pub mod photos;
+pub mod voyages;
 
 use std::time::Duration;
 
@@ -30,6 +31,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ready", get(health::ready))
         .merge(auth::routes())
         .merge(photos::routes())
+        .merge(voyages::routes())
         .with_state(state);
 
     middleware::apply(routes, &config.server)

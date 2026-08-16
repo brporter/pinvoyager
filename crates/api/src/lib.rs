@@ -21,6 +21,7 @@ pub mod http;
 pub mod photos;
 pub mod state;
 pub mod telemetry;
+pub mod voyages;
 
 pub use config::Config;
 pub use error::{AppError, AppResult};

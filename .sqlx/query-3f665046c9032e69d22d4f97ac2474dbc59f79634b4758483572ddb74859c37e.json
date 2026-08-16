@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n               SELECT 1\n                 FROM voyage_photos vp\n                 JOIN voyages v ON v.id = vp.voyage_id\n                WHERE vp.photo_id = $1\n                  AND v.published\n           )",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3f665046c9032e69d22d4f97ac2474dbc59f79634b4758483572ddb74859c37e"
+}

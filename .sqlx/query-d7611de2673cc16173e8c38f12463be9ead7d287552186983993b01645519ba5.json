@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(\n                              sum(COALESCE(seq_scan, 0) + COALESCE(idx_scan, 0)), 0\n                          )::bigint AS \"scans!\"\n                     FROM pg_stat_xact_user_tables\n                    WHERE relname = 'photos'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "scans!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d7611de2673cc16173e8c38f12463be9ead7d287552186983993b01645519ba5"
+}

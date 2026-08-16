@@ -62,9 +62,10 @@ use serde_json::json;
 use tokio::io::AsyncWriteExt as _;
 use uuid::Uuid;
 
-use crate::auth::CurrentUser;
+use crate::auth::{CurrentUser, MaybeUser};
 use crate::blocking::run_blocking_infallible;
 use crate::db::repo::photos::{self, NewPhoto, Photo};
+use crate::db::repo::voyages as voyages_repo;
 use crate::error::AppError;
 use crate::photos::storage::{self, ContentHash};
 use crate::photos::worker::{STATUS_PENDING, STATUS_READY, VariantJob};
@@ -480,6 +481,44 @@ async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Photo, 
     Ok(photo)
 }
 
+/// Resolves a photo the caller is allowed to **look at**, which is a wider set
+/// than the one they own.
+///
+/// Used only for serving image bytes. Every voyage is public (D6), so a
+/// photograph attached to a published voyage is public too — and without this
+/// the product is a public gallery with the pictures painted out: the voyage
+/// JSON is world-readable while every `thumbnail_url` in it 404s for anyone but
+/// the owner.
+///
+/// Metadata endpoints deliberately do **not** use this. They return exact
+/// coordinates to an owner, and the granularity boundary lives in
+/// `http::voyages`; widening those would route around it.
+///
+/// The ownership check comes first because it needs no second query, and a
+/// draft never grants visibility — attaching a photo to an unpublished voyage
+/// must not make it fetchable.
+async fn viewable(
+    state: &AppState,
+    user: Option<&CurrentUser>,
+    id: Uuid,
+) -> Result<Photo, Rejection> {
+    let photo = photos::find_by_id(&state.pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    if user.is_some_and(|user| user.user_id == photo.owner_id) {
+        return Ok(photo);
+    }
+
+    if voyages_repo::photo_is_publicly_visible(&state.pool, id).await? {
+        return Ok(photo);
+    }
+
+    // 404 rather than 403, consistently with the rest of the service: telling a
+    // caller that a photo exists but is not theirs is an enumeration oracle.
+    Err(AppError::NotFound.into())
+}
+
 // ---------------------------------------------------------------------------
 // Serving — where D7 is enforced
 // ---------------------------------------------------------------------------
@@ -492,7 +531,7 @@ async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Photo, 
 /// unable to execute as a document on this origin.
 async fn image(
     State(state): State<AppState>,
-    user: CurrentUser,
+    MaybeUser(user): MaybeUser,
     Path((id, variant)): Path<(Uuid, String)>,
     headers: HeaderMap,
 ) -> Result<Response, Rejection> {
@@ -502,7 +541,7 @@ async fn image(
         return Err(AppError::NotFound.into());
     };
 
-    let photo = owned(&state, &user, id).await?;
+    let photo = viewable(&state, user.as_ref(), id).await?;
 
     // A variant that does not exist *yet* is not a server error, and must not
     // be reported as one.
@@ -1367,15 +1406,26 @@ mod tests {
     /// than 404 is also what proves they are merged into the router at all — an
     /// unwired route would 404 here, with no database involved either way.
     #[tokio::test]
-    async fn every_photo_route_requires_a_session() {
+    async fn every_metadata_route_requires_a_session() {
         let id = Uuid::now_v7();
 
+        // Note what is *not* in this list: `GET /api/photos/{id}/{variant}`.
+        //
+        // Serving the bytes is deliberately anonymous-capable, because every
+        // voyage is public (D6) and a published voyage whose images 404 for
+        // anyone but its author is a public gallery with the pictures painted
+        // out. That route authorises per photograph — owner, or attached to a
+        // published voyage — rather than per session; see `viewable` and
+        // `tests/photos_public_access.rs`.
+        //
+        // The *metadata* routes stay session-gated. They return exact
+        // coordinates to an owner, and the granularity boundary lives in
+        // `http::voyages`; opening them would route around it.
         for (method, uri) in [
             ("GET", "/api/photos".to_owned()),
             ("POST", "/api/photos".to_owned()),
             ("GET", format!("/api/photos/{id}")),
             ("DELETE", format!("/api/photos/{id}")),
-            ("GET", format!("/api/photos/{id}/thumb")),
         ] {
             assert_eq!(
                 status_of(method, &uri).await,

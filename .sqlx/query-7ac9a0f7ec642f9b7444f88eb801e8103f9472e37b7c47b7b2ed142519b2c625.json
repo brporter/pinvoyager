@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE voyage_photos vp\n            SET position = ranked.position\n           FROM (\n                SELECT existing.photo_id,\n                       (row_number() OVER (ORDER BY desired.ordinality NULLS LAST,\n                                                    existing.position,\n                                                    existing.photo_id))::int AS position\n                  FROM voyage_photos existing\n                  LEFT JOIN (\n                            SELECT DISTINCT ON (photo_id) photo_id, ordinality\n                              FROM unnest($3::uuid[]) WITH ORDINALITY AS d(photo_id, ordinality)\n                             ORDER BY photo_id, ordinality\n                       ) AS desired ON desired.photo_id = existing.photo_id\n                 WHERE existing.voyage_id = $1\n           ) AS ranked\n          WHERE vp.voyage_id = $1\n            AND vp.photo_id = ranked.photo_id\n            AND EXISTS (SELECT 1 FROM voyages v WHERE v.id = $1 AND v.owner_id = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7ac9a0f7ec642f9b7444f88eb801e8103f9472e37b7c47b7b2ed142519b2c625"
+}
