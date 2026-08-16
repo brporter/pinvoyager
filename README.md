@@ -41,7 +41,7 @@ Claude Design project for review.
 
 ## Stack
 
-- **Backend** — Rust: axum, tokio, sqlx, PostgreSQL
+- **Backend** — C# / .NET 10: ASP.NET Core Minimal APIs, EF Core, Npgsql, PostgreSQL
 - **Frontend** — React, TypeScript, Vite, MapLibre GL JS
 - **Map tiles** — self-hosted Protomaps `.pmtiles`, OpenStreetMap data
 - **Auth** — OIDC/OAuth2 against Google, Microsoft, Apple, and Facebook. No credentials of

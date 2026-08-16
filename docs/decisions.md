@@ -12,7 +12,8 @@ future change invalidates it.
 
 ## D1 — Authentication is delegated; no credentials are stored
 
-OIDC/OAuth2 implemented directly in Rust against the four providers. The application stores
+OIDC/OAuth2 against the four providers, implemented with ASP.NET Core's external
+authentication handlers. The application stores
 **no credentials of any kind**: no passwords, no password hashes, no long-lived provider
 access or refresh tokens.
 
@@ -23,8 +24,15 @@ fact of the identity — which provider, and that provider's stable subject iden
 hashing parameter choices, credential-stuffing exposure, and the breach-notification surface
 that comes with holding secrets.
 
-**What "verify" means here** — this is a security requirement, not an implementation detail,
-and it is easy to get wrong by merely *decoding* a token:
+**Explicitly not ASP.NET Core Identity.** Identity is the framework's local-credential system —
+password hashes, lockout state, two-factor secrets, recovery codes. Using it here would create
+a schema full of credential columns that must remain permanently empty, which is worse than
+omitting them: it invites someone later to start filling them. External authentication plus
+cookie authentication is the whole of it.
+
+**What "verify" means here** — the framework's handlers perform these checks, so the risk
+shifts from implementing them to *configuring them correctly*. Knowing what they do on your
+behalf is what lets you tell a genuine failure from a misconfiguration:
 
 - Fetch and cache each provider's JWKS; validate the ID token's signature against it
 - Validate `iss`, `aud`, and `exp`
@@ -80,7 +88,9 @@ to leak. The renderer and the data are both open, so the whole stack can be move
 **Costs accepted:**
 - A planet basemap archive is 100+ GB. Regional extracts are far smaller but break for a
   travel app whose users go anywhere — plan for planet.
-- `.pmtiles` serving depends on HTTP range requests; the Rust backend must support them.
+- `.pmtiles` serving depends on HTTP range requests; the backend must support them. ASP.NET
+  Core does natively, and serving the archive for the client to range-read avoids needing a
+  PMTiles reader in C# at all.
 - OpenStreetMap attribution is required by the ODbL license and must be visible on the map.
 - There is no satellite imagery in OSM. A satellite layer, if ever wanted, needs a separate
   provider and is out of scope.
@@ -140,7 +150,7 @@ every cache, and every authorization check, so it must not be assumed away now.
 ## D7 — Files live on disk but are never served from disk
 
 Uploads are written to a content-addressed path derived from a hash of the content. They are
-served exclusively through a Rust handler.
+served exclusively through an application endpoint.
 
 **Why:** a handler can enforce authorization, set a server-determined `Content-Type` rather
 than trusting the upload, send `X-Content-Type-Options: nosniff` and a restrictive
@@ -165,8 +175,11 @@ them deeply yet.
 
 | Area | Default | Reasoning |
 |---|---|---|
-| Web framework | axum | Tower middleware ecosystem, tokio-native, the mainstream idiomatic choice |
-| Database | PostgreSQL via sqlx | Real constraints, concurrent writes during batch uploads, compile-time checked queries |
+| Runtime | .NET 10 (LTS) | Current long-term-support release |
+| Web framework | ASP.NET Core Minimal APIs | Small endpoint surface; controller ceremony buys nothing at this size |
+| Database | PostgreSQL via EF Core + Npgsql | Real constraints, concurrent writes during batch uploads, and migrations in the box |
 | Frontend build | Vite + React + TypeScript | Fast, conventional, no framework lock-in |
-| Sessions | Server-side, opaque cookie ID | Revocable on demand. A stateless JWT session cannot be revoked, which matters more here because the account *is* the identity |
-| Image processing | `image` crate | Pure Rust, no libvips/ImageMagick native dependency to manage |
+| Sessions | Cookie auth backed by a custom `ITicketStore` | Revocable on demand. ASP.NET's default self-contained encrypted ticket cannot be revoked before expiry, which matters more here because the account *is* the identity |
+| Data Protection | Key ring persisted to PostgreSQL | Without this, sessions break on restart and cannot be shared across instances |
+| Image processing | Undecided — see phase 4 | ImageSharp, SkiaSharp, and Magick.NET differ on licensing, native dependencies, and HEIC support. `System.Drawing.Common` is out: Windows-only since .NET 6 |
+| Testing | xUnit + `WebApplicationFactory` + Testcontainers | Integration tests run against a real ephemeral PostgreSQL with no manual setup |

@@ -34,8 +34,13 @@ deletion works. The application can be deployed.
 8. Security headers: a CSP that actually constrains, plus HSTS, frame options, and referrer
    policy. MapLibre's worker usage interacts with CSP and needs attention rather than a
    blanket `unsafe-*`.
-9. Production build and deployment: container image, migration strategy on deploy, tile
-   archive placement, backups for the database and the upload directory.
+9. Production build and deployment: container image via `dotnet publish /t:PublishContainer`
+   (no Dockerfile needed), tile archive placement, and backups for the database and the upload
+   directory.
+   **Migrations run as their own deploy step**, using `dotnet ef migrations bundle` to produce
+   a self-contained executable. Calling `Migrate()` at application startup is the common
+   shortcut and it races as soon as there is more than one instance — two processes applying
+   the same migration concurrently is a bad way to discover this.
 10. Operational baseline: structured logs shipped somewhere, an uptime check, and an error
     budget for the tile handler under pan load.
 

@@ -1,6 +1,9 @@
-# Rust
-/target/
-**/*.rs.bk
+# .NET
+bin/
+obj/
+*.user
+# Local dev secrets live in user-secrets, outside the repo — never here
+
 
 # Node
 node_modules/

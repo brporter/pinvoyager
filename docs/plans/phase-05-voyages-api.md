@@ -74,8 +74,14 @@ back exactly the coordinate precision the owner chose.
 
 T5 is the whole privacy model. Granularity is enforced in exactly one place — the
 serialization boundary — because enforcing it per endpoint guarantees that the one endpoint
-someone forgets becomes the leak. A single response type that cannot be constructed without
-applying granularity is worth the small amount of extra type machinery.
+someone forgets becomes the leak.
+
+Concretely: a `Coordinate` response record with a **private constructor** and a static factory
+that requires a granularity argument, so there is no way to put a latitude into a response DTO
+without having stated a precision. The entity type carrying raw coordinates should never be
+serialized directly — consider making that structurally impossible rather than a convention,
+since "we always remember to map to the DTO" holds right up until someone returns an entity
+from a new endpoint at 6pm on a Friday.
 
 Note how this interacts with phase 4's open question: if exact coordinates are discarded at
 ingest, T5 is trivially satisfied but granularity can never be loosened afterward.
