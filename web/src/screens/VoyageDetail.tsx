@@ -27,17 +27,20 @@
  * just the id: scrolling the rail underneath the user's own click would fight
  * them. This is the interaction the whole screen exists for.
  *
- * ## What phase 7 replaces
+ * ## The map
  *
- * {@link MapPlaceholder} is a stand-in occupying the exact dimensions the real
- * map gets — the left column at desktop and `inset: 0` behind the sheet at
- * mobile — so the layout is exercised before MapLibre arrives. It projects the
- * real coordinates from the API with a flat equirectangular fit over their
- * bounding box, so the pins genuinely correspond to the photographs and both
- * directions of selection are testable now. Phase 7 swaps the projection, adds
- * zoom, clustering and the area rendering for coarse granularity, and keeps the
- * `onSelectPhoto` / `selectedPhotoId` contract. The layout is the contract; the
- * renderer is the implementation.
+ * Phase 7 replaced the stand-in with MapLibre. What survived the swap is the
+ * contract: the map is handed a list of pins and the current selection, and it
+ * reports a photograph back when one of its pins is clicked. The layout was the
+ * contract; the renderer was the implementation. See `src/map/`.
+ *
+ * The pins are built from the detail payload this screen already fetches rather
+ * than from `GET /api/voyages/{id}/map`. That endpoint exists and is leaner,
+ * but the map is only rendered once the detail read has resolved — the desktop
+ * split and the mobile sheet both need the photo list to exist — so asking for
+ * it as well would be a second round trip for coordinates already in hand. The
+ * detail payload carries the same rounded `Coordinate`, the same `precision_m`
+ * and, unlike the map payload, the capture times the pin labels are made of.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -49,7 +52,6 @@ import { useVoyage } from "../api/hooks";
 import type { Coordinate, Voyage, VoyagePhoto } from "../api/types";
 import { useAuth } from "../auth/useAuth";
 import {
-  Attribution,
   Badge,
   Button,
   EmptyState,
@@ -57,29 +59,30 @@ import {
   ImageIcon,
   Photo,
   PhotoGrid,
-  Pin,
   Skeleton,
   WarningTriangleIcon,
   CloseIcon,
   ShareIcon,
 } from "../components";
+import { LazyVoyageMap, type MapSelection, type VoyagePin } from "../map";
+import { prefersReducedMotion } from "../shell/motion";
 import { useIsDesktop } from "../shell/useIsDesktop";
 
 /* ==========================================================================
    Selection
    ========================================================================== */
 
-/** Which side of the screen asked for the selection.
+/**
+ * Which side of the screen asked for the selection.
  *
- *  A pin click has to scroll the rail; a photo click must not, because the
- *  photo the user just clicked is already where they are looking and moving it
- *  under the pointer is disorienting. */
-type SelectionSource = "pin" | "photo";
-
-interface Selection {
-  photoId: string;
-  source: SelectionSource;
-}
+ * Both halves need it, for symmetrical reasons. A pin click has to scroll the
+ * rail but must not move the camera; a photo click has to move the camera but
+ * must not scroll the rail. In each case the thing the user just clicked is
+ * already where they are looking, and moving it under them is disorienting.
+ *
+ * The type is the map module's, so the two halves cannot drift apart.
+ */
+type Selection = MapSelection;
 
 /* ==========================================================================
    Screen
@@ -143,7 +146,7 @@ export function VoyageDetail() {
 
   const view: LayoutProps = {
     voyage: query.data,
-    selectedPhotoId: selection?.photoId ?? null,
+    selection,
     onSelectPin: selectFromPin,
     onSelectPhoto: selectFromPhoto,
     onClearSelection: clearSelection,
@@ -174,11 +177,35 @@ function fillHeight(desktop: boolean): CSSProperties {
 
 interface LayoutProps {
   voyage: Voyage;
-  selectedPhotoId: string | null;
+  /** The whole selection, not just the id: the map needs to know which half of
+   *  the screen asked, so that clicking a pin does not also re-centre on it. */
+  selection: Selection | null;
   onSelectPin: (photoId: string) => void;
   onSelectPhoto: (photoId: string) => void;
   onClearSelection: () => void;
   registerPhoto: (photoId: string, node: HTMLElement | null) => void;
+}
+
+/**
+ * The pins for a voyage, built from the photographs it already carries.
+ *
+ * Photographs with no coordinate are dropped here and picked up by
+ * {@link UnplacedSection} instead — the map genuinely cannot draw them, and
+ * they are accounted for in the rail rather than silently lost.
+ *
+ * The label is {@link photoAlt}, the same string the photograph carries in the
+ * rail. That is deliberate: it is the only accessible name a pin has, and
+ * sharing it is what lets a screen-reader user tell which pin belongs to which
+ * photograph.
+ */
+function pinsFor(voyage: Voyage): VoyagePin[] {
+  return voyage.photos
+    .filter((photo): photo is VoyagePhoto & { coordinate: Coordinate } => photo.coordinate !== null)
+    .map((photo) => ({
+      id: photo.id,
+      coordinate: photo.coordinate,
+      label: photoAlt(photo, voyage),
+    }));
 }
 
 /* ==========================================================================
@@ -189,13 +216,15 @@ const RAIL_WIDTH = 420;
 
 function DesktopLayout({
   voyage,
-  selectedPhotoId,
+  selection,
   onSelectPin,
   onSelectPhoto,
   registerPhoto,
 }: LayoutProps) {
+  const selectedPhotoId = selection?.photoId ?? null;
   const placed = placedPhotos(voyage);
   const unplaced = voyage.photos.filter((photo) => !photo.placed);
+  const pins = useMemo(() => pinsFor(voyage), [voyage]);
 
   return (
     <div
@@ -206,11 +235,12 @@ function DesktopLayout({
       }}
     >
       <div style={{ position: "relative", minWidth: 0 }}>
-        <MapPlaceholder
-          voyage={voyage}
-          photos={placed}
-          selectedPhotoId={selectedPhotoId}
-          onSelect={onSelectPin}
+        <LazyVoyageMap
+          label={`Map of ${voyage.title}`}
+          pins={pins}
+          precisionM={voyage.precision_m}
+          selection={selection}
+          onSelectPin={onSelectPin}
           style={{ position: "absolute", inset: 0 }}
         />
       </div>
@@ -296,15 +326,17 @@ const SHEET_EXPANDED = 300;
 
 function MobileLayout({
   voyage,
-  selectedPhotoId,
+  selection,
   onSelectPin,
   onSelectPhoto,
   onClearSelection,
   registerPhoto,
 }: LayoutProps) {
+  const selectedPhotoId = selection?.photoId ?? null;
   const placed = placedPhotos(voyage);
   const unplaced = voyage.photos.filter((photo) => !photo.placed);
   const selected = voyage.photos.find((photo) => photo.id === selectedPhotoId) ?? null;
+  const pins = useMemo(() => pinsFor(voyage), [voyage]);
 
   const [height, setHeight] = useState<number>(SHEET_PEEK);
   const [dragging, setDragging] = useState(false);
@@ -353,11 +385,12 @@ function MobileLayout({
 
   return (
     <div style={{ ...fillHeight(false), position: "relative", overflow: "hidden" }}>
-      <MapPlaceholder
-        voyage={voyage}
-        photos={placed}
-        selectedPhotoId={selectedPhotoId}
-        onSelect={expandAndSelect}
+      <LazyVoyageMap
+        label={`Map of ${voyage.title}`}
+        pins={pins}
+        precisionM={voyage.precision_m}
+        selection={selection}
+        onSelectPin={expandAndSelect}
         // Attribution is a licence requirement, so it rides above the sheet
         // rather than sliding underneath it and disappearing.
         attributionOffset={height}
@@ -743,121 +776,6 @@ function UnplacedSection({
 }
 
 /* ==========================================================================
-   The map stand-in
-   ========================================================================== */
-
-interface MapPlaceholderProps {
-  voyage: Voyage;
-  photos: readonly VoyagePhoto[];
-  selectedPhotoId: string | null;
-  onSelect: (photoId: string) => void;
-  /** Pixels from the bottom to lift the attribution, so the mobile sheet does
-   *  not cover it. */
-  attributionOffset?: number;
-  style?: CSSProperties;
-}
-
-function MapPlaceholder({
-  voyage,
-  photos,
-  selectedPhotoId,
-  onSelect,
-  attributionOffset = 0,
-  style,
-}: MapPlaceholderProps) {
-  const pins = useMemo(() => projectPins(photos), [photos]);
-
-  return (
-    <div className="pv-map" style={style} data-testid="voyage-map">
-      {pins.map(({ photo, left, top }) => (
-        <Pin
-          key={photo.id}
-          label={photoAlt(photo, voyage)}
-          left={left}
-          top={top}
-          selected={photo.id === selectedPhotoId}
-          onClick={() => onSelect(photo.id)}
-        />
-      ))}
-
-      {/* A zero-height box the attribution can anchor to, which is how it is
-          lifted clear of the sheet without touching the design system's
-          `.pv-attribution` rule. */}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: attributionOffset, height: 0 }}>
-        <Attribution />
-      </div>
-    </div>
-  );
-}
-
-interface PinPlacement {
-  photo: VoyagePhoto;
-  left: string;
-  top: string;
-}
-
-/** Percent of the map kept clear at each edge, so a pin at the extreme of the
- *  bounding box is not half off the canvas. */
-const MAP_INSET = 14;
-
-/** How far apart to fan photographs that share one rounded coordinate. At a
- *  coarse granularity every photo in a town lands on the same point, and a
- *  stack of identical pins is one pin as far as the user is concerned. */
-const DUPLICATE_FAN_PX = 16;
-
-/**
- * Lays the pins out over the placeholder.
- *
- * A flat equirectangular fit to the bounding box of the coordinates: enough
- * that the pins are in the right relative positions and correspond to real
- * photographs, which is what makes selection testable before phase 7. It is
- * not a map projection and does not pretend to be one.
- */
-function projectPins(photos: readonly VoyagePhoto[]): PinPlacement[] {
-  const located = photos.filter(
-    (photo): photo is VoyagePhoto & { coordinate: Coordinate } => photo.coordinate !== null,
-  );
-  if (located.length === 0) return [];
-
-  const latitudes = located.map((photo) => photo.coordinate.latitude);
-  const longitudes = located.map((photo) => photo.coordinate.longitude);
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLon = Math.min(...longitudes);
-  const maxLon = Math.max(...longitudes);
-
-  const axis = (value: number, min: number, max: number): number => {
-    const span = max - min;
-    if (span < 1e-9) return 50;
-    return MAP_INSET + ((value - min) / span) * (100 - 2 * MAP_INSET);
-  };
-
-  const seen = new Map<string, number>();
-
-  return located.map((photo) => {
-    const { latitude, longitude } = photo.coordinate;
-    const key = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
-    const index = seen.get(key) ?? 0;
-    seen.set(key, index + 1);
-
-    const angle = (index * Math.PI * 2) / 6;
-    const radius = index === 0 ? 0 : DUPLICATE_FAN_PX * (1 + Math.floor((index - 1) / 6));
-    const dx = Math.round(Math.cos(angle) * radius);
-    const dy = Math.round(Math.sin(angle) * radius);
-
-    const x = axis(longitude, minLon, maxLon);
-    // Latitude increases northward and CSS `top` increases downward.
-    const y = 100 - axis(latitude, minLat, maxLat);
-
-    return {
-      photo,
-      left: `calc(${x.toFixed(2)}% + ${dx}px)`,
-      top: `calc(${y.toFixed(2)}% + ${dy}px)`,
-    };
-  });
-}
-
-/* ==========================================================================
    Loading, empty and error
    ========================================================================== */
 
@@ -1045,9 +963,4 @@ function photoAlt(photo: VoyagePhoto, voyage: Voyage): string {
 
 function countLabel(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function prefersReducedMotion(): boolean {
-  if (typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }

@@ -1,6 +1,6 @@
 # Phase 7 — Map experience
 
-**Status:** not started
+**Status:** in progress — voyage detail delivered, discover map outstanding
 **Depends on:** phase 6
 **Owner:** Claude
 
@@ -94,3 +94,87 @@ they made. An area circle whose radius reflects the actual precision tells the t
 Self-hosting tiles is the phase's main operational cost and was accepted deliberately (D4) to
 avoid per-load billing, API keys in the client, and a vendor able to break the map. The
 tradeoff is real: disk, bandwidth, and a refresh procedure are now ours.
+
+## What was built
+
+Everything lives under `web/src/map/`, and the division of it is the point:
+
+| file                | what it owns                                                    |
+|---------------------|-----------------------------------------------------------------|
+| `style.ts`          | the tile source. The only file that names a tile URL.            |
+| `geo.ts`            | projection, clustering, area sizing, camera fitting. No MapLibre.|
+| `MapCanvas.tsx`     | the MapLibre instance, camera, zoom controls, attribution.       |
+| `VoyageMap.tsx`     | pins, clusters, granularity areas, selection.                    |
+| `LazyVoyageMap.tsx` | the code-splitting boundary.                                     |
+
+`MapCanvas.tsx` is the only file in the application that imports `maplibre-gl`. Swapping the
+basemap for the self-hosted vector archive means rewriting `style.ts`; swapping MapLibre for
+another library means rewriting `MapCanvas.tsx`. Neither reaches the pin behaviour.
+
+Pins and clusters are real DOM buttons positioned by MapLibre markers, not features drawn into
+the WebGL canvas. A pin drawn on a canvas cannot be tabbed to, has no accessible name, and
+cannot carry the 44 px hit area the design requires — and the pin, cluster and area treatments
+already exist as CSS in `design/components.css`, so drawing them again as MapLibre paint
+properties would make the design system a description of the map rather than its source.
+
+## Deviations, and why
+
+**Clustering runs in the browser, not on the server.** The goal above says clustering is always
+server-side. For a single voyage it is not, because `GET /api/voyages/{id}/map` already returns
+every pin in the voyage in one response — server-side clustering would add bounding-box and
+zoom parameters to that endpoint and turn every pan and zoom into a network round trip for data
+the browser already holds. `clusterPins` in `geo.ts` is a pure function over the complete pin
+set, which is also what makes it directly testable. Server-side clustering remains the right
+answer for the discover map, where the pins span every published voyage and cannot all be sent,
+and that is where it will be built.
+
+**The voyage detail map reads the detail payload, not `GET /api/voyages/{id}/map`.** Target 6
+names the map endpoint. The map is only rendered once the detail read has resolved — both the
+desktop split and the mobile sheet need the photo list to exist — so asking for the map payload
+as well would be a second round trip for coordinates already in hand. The detail payload
+carries the same rounded `Coordinate`, the same `precision_m`, and, unlike the map payload, the
+capture times the pin labels are made of. The map endpoint gets its consumer in the discover
+map.
+
+**A coarse voyage draws a circle *and* a pin, where the design draws the circle alone.**
+`design/components/map-primitives.html` shows a rounded position as a dashed circle with no
+marker in it. That treatment cannot be selected: `.pv-map-area` sets `pointer-events: none`, it
+is not a button, and it is not in the tab order — so a coarse voyage would have no way to reach
+a photograph from the map, and bidirectional selection is the interaction the screen exists
+for. A pin ringed by a dashed 20 km circle is the ordinary cartographic convention for a
+position with an uncertainty and does not read as an exact claim. **The design file should be
+updated to settle this.**
+
+## Verification
+
+- **T5** — asserted in `src/map/__tests__/VoyageMap.test.tsx`: the notice is present on the map
+  and links to `https://www.openstreetmap.org/copyright`.
+- **T10** — asserted in the same file: a voyage with `precision_m` draws `.pv-map-area`
+  elements, a voyage at exact precision draws none, and the camera stops short of the zoom at
+  which the circle would be smaller than the rounding.
+- **T12** — measured on a production build. The entry chunk is 354.95 kB (108.44 kB gzipped),
+  unchanged from phase 6; MapLibre is a separate 952.58 kB chunk (248.88 kB gzipped) with its
+  own 82.86 kB stylesheet. Searching the built entry chunk for the string `maplibre` returns
+  zero matches.
+- The arithmetic in `geo.ts` is checked against independently derived figures — 156543.03 m/px
+  at the equator at zoom 0, the `cos(latitude)` correction, and `zoomForPrecision` being the
+  exact inverse of `areaDiameterPx`.
+- The tests were shown not to be vacuous by breaking the implementation six ways and confirming
+  each break failed a test: removing the latitude correction from `metresPerPixel`; letting an
+  absorbed pin absorb its own neighbours; drawing the granularity circle at the precision radius
+  instead of its diameter; panning the camera for a pin click as well as a list click; leaving
+  the selected pin in the clustering pool; and ignoring `prefers-reduced-motion` in camera
+  movement.
+
+## Still outstanding
+
+- **The discover map**, and the server-side clustered endpoint it needs. The phase 1 design for
+  `design/screens/discover.html` draws no map, so where it goes is an open visual question.
+- **T2, T3** — deferred with targets 1 and 2 under D4a. No `.pmtiles` archive exists to range-
+  request.
+- **T8 at both breakpoints by hand, and T9 on a real touch device.** The gestures cannot fight
+  in the way the design warns about, because the sheet is a separate element above the map and
+  `.pv-sheet` carries `touch-action: pan-y` — but that reasoning is not a substitute for
+  dragging the sheet on a phone.
+- **T12 against Lighthouse.** The chunk measurement above is evidence the map is not in the
+  entry bundle; it is not a Lighthouse score.

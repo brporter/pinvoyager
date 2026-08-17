@@ -18,6 +18,9 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// The substitute itself, imported by path so its bookkeeping can be reset
+// between tests. `vi.mock` above is what makes the application receive it.
+import { __resetMaps } from "../../../__mocks__/maplibre-gl";
 import { ApiRequestError } from "../../api/client";
 import { useVoyage } from "../../api/hooks";
 import type { Voyage, VoyagePhoto } from "../../api/types";
@@ -26,6 +29,12 @@ import type { AuthState } from "../../auth/context";
 import { VoyageDetail } from "../VoyageDetail";
 
 vi.mock("../../api/hooks", () => ({ useVoyage: vi.fn() }));
+
+// MapLibre needs a WebGL context and jsdom has none, so the real library cannot
+// be constructed here at all. The substitute in `web/__mocks__/maplibre-gl.ts`
+// keeps markers as real DOM elements, which is the only part of it this
+// screen's behaviour depends on.
+vi.mock("maplibre-gl");
 
 /* -- fixtures ------------------------------------------------------------ */
 
@@ -124,8 +133,33 @@ function renderScreen() {
   );
 }
 
+/**
+ * Waits for the map to arrive.
+ *
+ * The map is code-split — `src/map/LazyVoyageMap.tsx` — so it is not in the
+ * first render, and until its chunk resolves the screen shows a placeholder of
+ * the same dimensions. The zoom controls are the readiness signal because they
+ * exist only in the real map component, whereas the labelled region exists in
+ * the placeholder too and would match immediately.
+ */
+async function mapReady(): Promise<void> {
+  await screen.findByRole("button", { name: "Zoom in" });
+}
+
+function mapRegion(): HTMLElement {
+  return screen.getByRole("region", { name: /^Map of / });
+}
+
+/**
+ * The pins on the map.
+ *
+ * Selected by the design system's own class rather than by role, because the
+ * map region also contains the two zoom controls, which are buttons and are not
+ * pins. `.pv-pin` is the design's name for this thing, so a change of markup
+ * that stopped applying it would be a change worth failing over.
+ */
 function mapPins(): HTMLElement[] {
-  return within(screen.getByTestId("voyage-map")).getAllByRole("button");
+  return Array.from(mapRegion().querySelectorAll<HTMLElement>("button.pv-pin"));
 }
 
 beforeEach(() => {
@@ -137,6 +171,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  __resetMaps();
 });
 
 /* -- tests --------------------------------------------------------------- */
@@ -145,6 +180,8 @@ describe("VoyageDetail — selection", () => {
   it("marks a photograph selected when it is chosen", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
+
+    await mapReady();
 
     const strip = screen.getByRole("group", { name: "Photos in this voyage" });
     const [first] = within(strip).getAllByRole("button");
@@ -161,6 +198,8 @@ describe("VoyageDetail — selection", () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
 
+    await mapReady();
+
     const strip = screen.getByRole("group", { name: "Photos in this voyage" });
     const photos = within(strip).getAllByRole("button");
     const pinsBefore = mapPins();
@@ -171,8 +210,8 @@ describe("VoyageDetail — selection", () => {
     // same photograph seen from two sides.
     await userEvent.click(photos[1]);
 
-    const pin = screen.getByTestId("voyage-map").querySelector<HTMLElement>(
-      `[aria-label="${photos[1].getAttribute("aria-label") ?? ""}"]`,
+    const pin = mapRegion().querySelector<HTMLElement>(
+      `button.pv-pin[aria-label="${photos[1].getAttribute("aria-label") ?? ""}"]`,
     );
     expect(pin).toHaveAttribute("aria-pressed", "true");
   });
@@ -180,6 +219,8 @@ describe("VoyageDetail — selection", () => {
   it("selects the photograph belonging to a chosen pin and scrolls it into view", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
+
+    await mapReady();
 
     const pin = mapPins()[1];
     const name = pin.getAttribute("aria-label") ?? "";
@@ -195,6 +236,8 @@ describe("VoyageDetail — selection", () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
 
+    await mapReady();
+
     const strip = screen.getByRole("group", { name: "Photos in this voyage" });
     await userEvent.click(within(strip).getAllByRole("button")[0]);
 
@@ -203,9 +246,10 @@ describe("VoyageDetail — selection", () => {
 });
 
 describe("VoyageDetail — precision", () => {
-  it("states the precision in the header, so the pins are not read as exact", () => {
+  it("states the precision in the header, so the pins are not read as exact", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
+    await mapReady();
 
     // Mobile: the floating header carries the badge.
     const header = screen.getByRole("heading", { level: 1 }).closest("div")?.parentElement;
@@ -213,10 +257,11 @@ describe("VoyageDetail — precision", () => {
     expect(within(header as HTMLElement).getByText("~1 km")).toBeInTheDocument();
   });
 
-  it("states the precision in the desktop rail header", () => {
+  it("states the precision in the desktop rail header", async () => {
     stubViewport(true);
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
+    await mapReady();
 
     const rail = screen.getByRole("complementary", { name: "Photos in this voyage" });
     expect(within(rail).getByText("~1 km")).toBeInTheDocument();
@@ -230,6 +275,7 @@ describe("VoyageDetail — unplaced photographs", () => {
   it("accounts for photographs with no location rather than dropping them", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
+    await mapReady();
 
     // The count is stated whether or not the photographs are expanded: a user
     // who sees two pins for three photos has to be told where the third went.
@@ -244,13 +290,14 @@ describe("VoyageDetail — unplaced photographs", () => {
     expect(unplaced).toHaveAccessibleName(/no location/);
   });
 
-  it("says nothing when every photograph is placed", () => {
+  it("says nothing when every photograph is placed", async () => {
     vi.mocked(useVoyage).mockReturnValue(
       queryResult({
         data: voyage({ photos: [PLACED_A, PLACED_B], photo_count: 2, unplaced_count: 0 }),
       }),
     );
     renderScreen();
+    await mapReady();
 
     expect(screen.queryByText(/no location/)).not.toBeInTheDocument();
   });
@@ -306,13 +353,14 @@ describe("VoyageDetail — states", () => {
     expect(screen.getByText("This voyage is not here")).toBeInTheDocument();
   });
 
-  it("has something to say about a voyage with no photographs", () => {
+  it("has something to say about a voyage with no photographs", async () => {
     vi.mocked(useVoyage).mockReturnValue(
       queryResult({
         data: voyage({ photos: [], photo_count: 0, placed_count: 0, unplaced_count: 0 }),
       }),
     );
     renderScreen();
+    await mapReady();
 
     expect(screen.getByText("No photographs yet")).toBeInTheDocument();
   });
@@ -322,6 +370,8 @@ describe("VoyageDetail — the mobile sheet", () => {
   it("is reachable and collapsible from the keyboard", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
+
+    await mapReady();
 
     const grip = screen.getByRole("button", { name: "Expand photo list" });
     expect(grip).toHaveAttribute("aria-expanded", "false");
@@ -339,6 +389,7 @@ describe("VoyageDetail — the mobile sheet", () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
 
+    await mapReady();
     await userEvent.click(mapPins()[0]);
 
     expect(screen.getByRole("button", { name: "Collapse photo list" })).toBeInTheDocument();
