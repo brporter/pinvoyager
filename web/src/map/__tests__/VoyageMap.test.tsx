@@ -307,6 +307,22 @@ describe("VoyageMap — selection", () => {
 
     expect(camera().camera.filter((call) => call.kind === "easeTo")).toHaveLength(0);
   });
+
+  /**
+   * Once, not once per camera event.
+   *
+   * Moving the camera makes it settle, settling tells this component where it
+   * is now looking, and that is a state change. If the callback that moves the
+   * camera were rebuilt by that state change, the effect that panned to the
+   * selection would see new dependencies and pan again — an endless flight, in
+   * a browser as much as here. `MapCanvas` keeps `moveTo` stable for the life
+   * of the map instance precisely so this cannot happen.
+   */
+  it("moves the camera once for one selection", () => {
+    renderMap({ selection: { photoId: "b", source: "photo" } });
+
+    expect(camera().camera.filter((call) => call.kind === "easeTo")).toHaveLength(1);
+  });
 });
 
 describe("VoyageMap — reduced motion", () => {

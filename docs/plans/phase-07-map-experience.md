@@ -1,6 +1,6 @@
 # Phase 7 — Map experience
 
-**Status:** in progress — voyage detail delivered, discover map outstanding
+**Status:** complete, except for targets 1–3 (deferred under D4a) and the hand checks below
 **Depends on:** phase 6
 **Owner:** Claude
 
@@ -99,13 +99,14 @@ tradeoff is real: disk, bandwidth, and a refresh procedure are now ours.
 
 Everything lives under `web/src/map/`, and the division of it is the point:
 
-| file                | what it owns                                                    |
-|---------------------|-----------------------------------------------------------------|
-| `style.ts`          | the tile source. The only file that names a tile URL.            |
-| `geo.ts`            | projection, clustering, area sizing, camera fitting. No MapLibre.|
-| `MapCanvas.tsx`     | the MapLibre instance, camera, zoom controls, attribution.       |
-| `VoyageMap.tsx`     | pins, clusters, granularity areas, selection.                    |
-| `LazyVoyageMap.tsx` | the code-splitting boundary.                                     |
+| file               | what it owns                                                     |
+|--------------------|------------------------------------------------------------------|
+| `style.ts`         | the tile source. The only file that names a tile URL.            |
+| `geo.ts`           | projection, clustering, area sizing, camera fitting. No MapLibre.|
+| `MapCanvas.tsx`    | the MapLibre instance, camera, zoom controls, attribution.       |
+| `VoyageMap.tsx`    | one voyage: pins, clusters, granularity areas, selection.        |
+| `DiscoverMap.tsx`  | every voyage: markers grouped by the server.                     |
+| `Lazy*.tsx`        | the two code-splitting boundaries.                               |
 
 `MapCanvas.tsx` is the only file in the application that imports `maplibre-gl`. Swapping the
 basemap for the self-hosted vector archive means rewriting `style.ts`; swapping MapLibre for
@@ -119,22 +120,20 @@ properties would make the design system a description of the map rather than its
 
 ## Deviations, and why
 
-**Clustering runs in the browser, not on the server.** The goal above says clustering is always
-server-side. For a single voyage it is not, because `GET /api/voyages/{id}/map` already returns
-every pin in the voyage in one response — server-side clustering would add bounding-box and
-zoom parameters to that endpoint and turn every pan and zoom into a network round trip for data
-the browser already holds. `clusterPins` in `geo.ts` is a pure function over the complete pin
-set, which is also what makes it directly testable. Server-side clustering remains the right
-answer for the discover map, where the pins span every published voyage and cannot all be sent,
-and that is where it will be built.
+**Clustering runs in the browser for a voyage and on the server for the world.** The goal above
+says clustering is always server-side. It is not, and the split is now recorded as decision
+D10. A voyage arrives whole in one response, so grouping it in the browser makes a pan cost
+nothing; the world cannot arrive whole, so `GET /api/map` takes a rectangle and a zoom and
+answers with markers.
 
 **The voyage detail map reads the detail payload, not `GET /api/voyages/{id}/map`.** Target 6
 names the map endpoint. The map is only rendered once the detail read has resolved — both the
 desktop split and the mobile sheet need the photo list to exist — so asking for the map payload
 as well would be a second round trip for coordinates already in hand. The detail payload
 carries the same rounded `Coordinate`, the same `precision_m`, and, unlike the map payload, the
-capture times the pin labels are made of. The map endpoint gets its consumer in the discover
-map.
+capture times the pin labels are made of. `GET /api/voyages/{id}/map` therefore still has no
+consumer in the frontend; the discovery map reads `GET /api/map` instead, which is a different
+endpoint answering a different question.
 
 **A coarse voyage draws a circle *and* a pin, where the design draws the circle alone.**
 `design/components/map-primitives.html` shows a rounded position as a dashed circle with no
@@ -152,24 +151,79 @@ updated to settle this.**
 - **T10** — asserted in the same file: a voyage with `precision_m` draws `.pv-map-area`
   elements, a voyage at exact precision draws none, and the camera stops short of the zoom at
   which the circle would be smaller than the rounding.
-- **T12** — measured on a production build. The entry chunk is 354.95 kB (108.44 kB gzipped),
-  unchanged from phase 6; MapLibre is a separate 952.58 kB chunk (248.88 kB gzipped) with its
-  own 82.86 kB stylesheet. Searching the built entry chunk for the string `maplibre` returns
-  zero matches.
+- **T12** — measured on a production build. The entry chunk is 356.22 kB (108.72 kB gzipped)
+  against phase 6's 354.95 kB; MapLibre is a separate 950.96 kB chunk (248.36 kB gzipped) with
+  its own 82.86 kB stylesheet, shared by both map boundaries so moving from discovery to a
+  voyage does not download it twice. Searching the built entry chunk for the string `maplibre`
+  returns zero matches.
+- The discovery map's own behaviour is asserted in `src/map/__tests__/DiscoverMap.test.tsx`, and
+  the endpoint's in `crates/api/tests/discover_map.rs`, which drives the production router.
 - The arithmetic in `geo.ts` is checked against independently derived figures — 156543.03 m/px
   at the equator at zoom 0, the `cos(latitude)` correction, and `zoomForPrecision` being the
   exact inverse of `areaDiameterPx`.
-- The tests were shown not to be vacuous by breaking the implementation six ways and confirming
-  each break failed a test: removing the latitude correction from `metresPerPixel`; letting an
-  absorbed pin absorb its own neighbours; drawing the granularity circle at the precision radius
-  instead of its diameter; panning the camera for a pin click as well as a list click; leaving
-  the selected pin in the clustering pool; and ignoring `prefers-reduced-motion` in camera
-  movement.
+- The tests were shown not to be vacuous by breaking the implementation and confirming each
+  break failed a test. In the browser: removing the latitude correction from `metresPerPixel`;
+  letting an absorbed pin absorb its own neighbours; drawing the granularity circle at the
+  precision radius instead of its diameter; panning the camera for a pin click as well as a list
+  click; leaving the selected pin in the clustering pool; and ignoring `prefers-reduced-motion`
+  in camera movement. On the server: dropping `v.published` from the rectangle query; rounding
+  every voyage as exact; treating a rectangle that crosses the antimeridian as an ordinary
+  range; and returning rows in an unspecified order.
+- One deliberate break did **not** fail anything, and the comment claiming it would was wrong.
+  Removing the explicit `is_finite` guard from the bounding-box parser left NaN still refused,
+  because `RangeInclusive::contains` compares with `PartialOrd` and every comparison against NaN
+  is false. The guard was kept and its comment corrected: it earns its place against the *other*
+  obvious spelling of the range test, `south < -90.0 || south > 90.0`, where both halves are
+  false for NaN and it would sail through.
+
+## A bug the tests found
+
+Selecting a photograph in the list panned the camera; the camera settling fired MapLibre's
+`moveend`; that told `MapCanvas` where it was now looking, which was a state change; the state
+change rebuilt the `moveTo` callback; and the effect that pans to a selection had `moveTo` in
+its dependency list, so it ran again and panned again. An endless flight, in a browser as much
+as in a test — the frontend suite went from 1.4 seconds to never finishing.
+
+`moveTo` is now built with `useCallback` keyed on the map instance alone, so its identity
+survives camera movement, and the visible rectangle is compared by value before being stored so
+a camera movement that ends where it began does not re-render every marker. `VoyageMap.test.tsx`
+asserts that one selection produces exactly one camera movement.
+
+## The discovery map and its endpoint
+
+`GET /api/map?west=&south=&east=&north=&zoom=` returns markers for every published voyage
+inside a rectangle. No session is taken and none is read: everything it draws is published, so
+the answer is the same for everyone.
+
+Three properties are worth stating because they are what the tests are about.
+
+**Rounded before grouped.** Each photograph passes through its own voyage's granularity — the
+same `place()` call every other endpoint uses — and only then is grouped. Grouping exact
+coordinates and publishing the group's position would make what the map draws a function of
+values that were never allowed out.
+
+**A marker's position is a real photograph's published position**, not a computed centre. That
+is forced rather than chosen: `Coordinate` has private fields and one constructor, so an
+average of several coordinates is not something that can be serialized at all. The
+representative is the lowest photograph id in the group, so the same rectangle draws the same
+markers twice running.
+
+**Truncation is reported.** One request considers at most 20,000 photographs; beyond that
+`truncated` is true and the map says so. A map that silently dropped half a continent looks
+exactly like a map of a continent with fewer photographs on it.
+
+`photos_location_idx` was added for the rectangle query — partial on `latitude IS NOT NULL`,
+leading on latitude. It is a btree, not a spatial index, so a wide short rectangle reads more of
+the index than it returns; PostGIS would fix that and is a large thing to require of every
+deployment for one endpoint. Measure before assuming it is the problem.
+
+**Where the map goes on the discovery screen is a visual decision the design has not made.**
+`design/screens/discover.html` draws no map. It is placed between the hero and the voyage grid,
+as a band rather than a full screen, using only components the design system already defines.
+The design file should settle it.
 
 ## Still outstanding
 
-- **The discover map**, and the server-side clustered endpoint it needs. The phase 1 design for
-  `design/screens/discover.html` draws no map, so where it goes is an open visual question.
 - **T2, T3** — deferred with targets 1 and 2 under D4a. No `.pmtiles` archive exists to range-
   request.
 - **T8 at both breakpoints by hand, and T9 on a real touch device.** The gestures cannot fight
@@ -178,3 +232,9 @@ updated to settle this.**
   dragging the sheet on a phone.
 - **T12 against Lighthouse.** The chunk measurement above is evidence the map is not in the
   entry bundle; it is not a Lighthouse score.
+- **Nothing has been run against a real tile server.** Every test here replaces MapLibre with a
+  substitute, because jsdom has no WebGL context. That the map draws the right markers is
+  checked; that it draws them over a basemap has only been reasoned about.
+- **The discovery map opens at a world view**, so its first request asks about the whole planet
+  and will hit the 20,000-photograph cap once there is enough published. What it should open on
+  instead — the reader's last position, or the densest region — is an open product question.

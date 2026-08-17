@@ -268,6 +268,38 @@ needs `libheif` and `libwebp` at both build and runtime.
 
 ---
 
+## D10 — A voyage's pins are grouped in the browser; the world's are grouped on the server
+
+**Decided 16 August 2026.** The phase 7 plan said clustering is always server-side. It is not,
+and the split is deliberate.
+
+**A voyage is a bounded collection.** `GET /api/voyages/{id}/map` already returns every pin in
+it in one response — tens to low hundreds of photographs. The browser groups them as the camera
+moves, so a pan or a zoom costs nothing. Doing it server-side would mean adding bounding-box
+and zoom parameters to that endpoint and making every gesture a network round trip for data the
+browser is already holding. The grouping is a pure function in `web/src/map/geo.ts`, which is
+also what makes it directly testable.
+
+**The world is not bounded.** `GET /api/map` answers for every published voyage there is, and
+at a world view its rectangle covers every published photograph in the database. Nothing can be
+sent whole for the browser to group. So the rectangle and the zoom are the question, and
+markers are the answer.
+
+**What this costs.** Two implementations of clustering, in two languages, that will not always
+agree: the browser groups greedily by nearest neighbour, the server by a fixed grid. Their
+answers differ slightly at the edges of a cell. That is acceptable because they are never shown
+side by side — one draws a voyage, the other draws the world — and unifying them would mean
+either making a voyage's map chatty or shipping the planet to the browser.
+
+**What the server must never do.** Group first and round afterwards. Every photograph is
+rounded to *its own voyage's* granularity before anything is grouped, through the same
+`place()` call every other endpoint uses; a marker's published position is one real
+photograph's, never a computed centre of several. That last part is enforced by the type
+system rather than by care: `Coordinate` has private fields and one constructor, so an average
+of several coordinates is not a thing that can be serialized. See D6.
+
+---
+
 ## Defaults, not yet load-bearing
 
 Chosen as reasonable starting points. Change them here if you disagree; nothing depends on

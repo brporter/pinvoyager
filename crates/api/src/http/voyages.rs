@@ -63,7 +63,7 @@
 //! see [`stored_granularity`]. A build that meets a spelling a later migration
 //! added must not decide that the safe reading is `exact`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -127,6 +127,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/voyages/{id}/photos/order", patch(reorder))
         .route("/api/voyages/{id}/photos/{photo}", delete(detach))
         .route("/api/voyages/{id}/map", get(map))
+        .route("/api/map", get(discover_map))
 }
 
 // ---------------------------------------------------------------------------
@@ -143,8 +144,16 @@ pub fn routes() -> Router<AppState> {
 /// a coordinate says nothing about where a photograph was taken and there is no
 /// honest way to draw it, so it joins the unplaced group rather than becoming a
 /// pin at longitude zero.
-fn place(granularity: Granularity, photo: &VoyagePhoto) -> Option<Coordinate> {
-    match (photo.latitude, photo.longitude) {
+///
+/// Takes the two values rather than a row, so that the voyage row type and the
+/// discovery map's own row type share this one call site instead of each
+/// growing a `Granularity::apply` of its own.
+fn place(
+    granularity: Granularity,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+) -> Option<Coordinate> {
+    match (latitude, longitude) {
         (Some(latitude), Some(longitude)) => Some(granularity.apply(latitude, longitude)),
         _ => None,
     }
@@ -370,7 +379,7 @@ impl VoyageResponse {
         let photos: Vec<VoyagePhotoResponse> = photos
             .into_iter()
             .map(|photo| {
-                let coordinate = place(granularity, &photo);
+                let coordinate = place(granularity, photo.latitude, photo.longitude);
                 VoyagePhotoResponse {
                     id: photo.photo_id,
                     position: photo.position,
@@ -734,7 +743,7 @@ async fn map(
     for photo in &photos {
         let thumbnail_url = variant_url(photo.photo_id, VariantKind::Thumb);
 
-        match place(granularity, photo) {
+        match place(granularity, photo.latitude, photo.longitude) {
             Some(coordinate) => pins.push(MapPin {
                 photo_id: photo.photo_id,
                 coordinate,
@@ -757,6 +766,306 @@ async fn map(
         pins,
         unplaced,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// The discovery map
+// ---------------------------------------------------------------------------
+
+/// What the discovery map asks for: a rectangle and how far in the camera is.
+#[derive(Debug, Deserialize)]
+struct DiscoverMapQuery {
+    west: f64,
+    south: f64,
+    east: f64,
+    north: f64,
+    /// Web Mercator zoom. Decides how many pixels apart two photographs are,
+    /// and therefore whether they are drawn as one marker or two.
+    zoom: f64,
+}
+
+/// A group of photographs the discovery map draws as one marker.
+#[derive(Debug, Serialize)]
+struct DiscoverCluster {
+    /// **A real photograph's published position**, not a computed centre.
+    ///
+    /// That is a deliberate constraint rather than a convenience. [`Coordinate`]
+    /// has private fields and one constructor, so the only way to put a
+    /// latitude in a response is to have rounded it through a granularity —
+    /// and a centroid averaged from several photographs is not the output of
+    /// that constructor. Taking the representative's own coordinate keeps
+    /// [`place`] the single call to `Granularity::apply` in this module, and
+    /// means every position the map draws is one a voyage already publishes.
+    coordinate: Coordinate,
+    /// How many photographs the marker stands for, the representative
+    /// included.
+    count: usize,
+    /// The representative: the lowest photo id in the group, so the choice is
+    /// deterministic and the same rectangle draws the same markers twice
+    /// running.
+    photo_id: Uuid,
+    /// Which published voyage the representative belongs to, so a marker can be
+    /// followed to something.
+    voyage_id: Uuid,
+    thumbnail_url: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DiscoverMapResponse {
+    clusters: Vec<DiscoverCluster>,
+    /// True when there were more photographs in the rectangle than
+    /// [`DISCOVER_MAP_LIMIT`] and some were left out.
+    ///
+    /// Stated rather than hidden. A map that silently drops half a continent
+    /// looks exactly like a map of a continent with fewer photographs in it,
+    /// and the reader has no way to tell which they are looking at.
+    truncated: bool,
+}
+
+/// The most photographs one discovery-map request will consider.
+///
+/// A cap is unavoidable: at the world view the rectangle is the whole planet,
+/// and the answer would otherwise be every published photograph in the
+/// database. Rows past the cap are dropped rather than merged, which is why
+/// exceeding it is reported.
+const DISCOVER_MAP_LIMIT: i64 = 20_000;
+
+/// How far apart, in screen pixels, two photographs must be to get their own
+/// markers.
+///
+/// The 44px touch target from `design/tokens.css`, the same figure the browser
+/// clusters a single voyage by. Two markers closer than one touch target cannot
+/// be tapped apart, so leaving them separate produces taps that appear to do
+/// nothing.
+const DISCOVER_CLUSTER_CELL_PX: f64 = 44.0;
+
+/// The widest granularity cell, in degrees of latitude — 50 km over 111.32 km
+/// per degree.
+///
+/// Used to widen the queried rectangle. Rounding moves a photograph by up to
+/// half a cell, so a photograph just outside the requested rectangle can round
+/// to a position inside it; querying only the exact rectangle would drop it and
+/// leave a visible gap at the edge of every pan.
+const MAX_CELL_DEG_LAT: f64 = 50.0 / 111.32;
+
+/// The same widening for longitude.
+///
+/// Longitude cells grow as `1 / cos(latitude)` and the granularity boundary
+/// freezes that scaling at 85°, so this is the widest a cell ever gets:
+/// about 5.2°.
+const MAX_CELL_DEG_LON: f64 = MAX_CELL_DEG_LAT / 0.087_155_742_7; // cos(85°)
+
+/// Photographs from every **published** voyage, clustered, inside a rectangle.
+///
+/// This is the endpoint the phase 7 goal means by "clustering is always
+/// server-side", and here it genuinely has to be: the rectangle at a world view
+/// covers every published photograph there is, and no client can be sent them
+/// all to group for itself. A single voyage is the opposite case — it fits in
+/// one response, and `GET /api/voyages/{id}/map` sends it whole.
+///
+/// No session is required and none is consulted. Only published voyages are
+/// considered, so the answer is the same for everyone, which is also what makes
+/// it cacheable.
+///
+/// # What is rounded, and when
+///
+/// Each photograph is rounded to **its own voyage's** granularity before
+/// anything else happens — the same [`place`] call every other endpoint here
+/// uses. Clustering then groups already-published positions. Doing it the other
+/// way round, grouping exact coordinates and rounding the group, would make the
+/// marker a function of coordinates that were never allowed out.
+async fn discover_map(
+    State(state): State<AppState>,
+    Query(query): Query<DiscoverMapQuery>,
+) -> Result<Json<DiscoverMapResponse>, Rejection> {
+    let bbox = Bbox::parse(&query)?;
+
+    let rows = repo::published_photos_in_bbox(
+        &state.pool,
+        to_degrees(bbox.south - MAX_CELL_DEG_LAT, -90.0, 90.0),
+        to_degrees(bbox.north + MAX_CELL_DEG_LAT, -90.0, 90.0),
+        to_degrees(bbox.west - MAX_CELL_DEG_LON, -180.0, 180.0),
+        to_degrees(bbox.east + MAX_CELL_DEG_LON, -180.0, 180.0),
+        bbox.wraps,
+        // One more than the cap, so that hitting it is detectable.
+        DISCOVER_MAP_LIMIT + 1,
+    )
+    .await?;
+
+    let truncated = rows.len() as i64 > DISCOVER_MAP_LIMIT;
+    let considered = &rows[..rows.len().min(DISCOVER_MAP_LIMIT as usize)];
+
+    if truncated {
+        tracing::warn!(
+            limit = DISCOVER_MAP_LIMIT,
+            zoom = bbox.zoom,
+            "discovery map hit its row cap; some photographs were left out"
+        );
+    }
+
+    Ok(Json(DiscoverMapResponse {
+        clusters: cluster_for_discovery(considered, bbox.zoom),
+        truncated,
+    }))
+}
+
+/// A validated rectangle.
+struct Bbox {
+    west: f64,
+    south: f64,
+    east: f64,
+    north: f64,
+    zoom: f64,
+    /// True when the rectangle crosses the antimeridian, so `west` is
+    /// numerically greater than `east`.
+    wraps: bool,
+}
+
+const BAD_BOUNDS: &str = "That is not a rectangle we can look in.";
+const BAD_ZOOM: &str = "That is not a zoom level we recognise.";
+
+/// The zoom levels the map can be at. Zero is the whole world in one tile; the
+/// tile source stops at 19 and the client allows one blurry level past it.
+const MAX_QUERY_ZOOM: f64 = 20.0;
+
+impl Bbox {
+    fn parse(query: &DiscoverMapQuery) -> Result<Self, Rejection> {
+        // Non-finite values first, and explicitly.
+        //
+        // The range checks below happen to catch NaN already, because
+        // `RangeInclusive::contains` compares with `PartialOrd` and every
+        // comparison against NaN is false — so `!contains(&NaN)` is true and the
+        // value is refused. That is a subtlety rather than a design. Written the
+        // other obvious way, `south < -90.0 || south > 90.0`, both halves are
+        // false for NaN and it sails through, to become a pixel coordinate with
+        // no grid cell. This loop is what makes the refusal survive that
+        // rewrite.
+        for value in [query.west, query.south, query.east, query.north] {
+            if !value.is_finite() {
+                return Err(Rejection::field("bounds", BAD_BOUNDS));
+            }
+        }
+
+        if !query.zoom.is_finite() || query.zoom < 0.0 || query.zoom > MAX_QUERY_ZOOM {
+            return Err(Rejection::field("zoom", BAD_ZOOM));
+        }
+
+        if !(-90.0..=90.0).contains(&query.south)
+            || !(-90.0..=90.0).contains(&query.north)
+            || !(-180.0..=180.0).contains(&query.west)
+            || !(-180.0..=180.0).contains(&query.east)
+            || query.south > query.north
+        {
+            return Err(Rejection::field("bounds", BAD_BOUNDS));
+        }
+
+        Ok(Bbox {
+            west: query.west,
+            south: query.south,
+            east: query.east,
+            north: query.north,
+            zoom: query.zoom,
+            // West greater than east is how a rectangle crossing the
+            // antimeridian arrives — from Fiji to Samoa the numbers run 177 to
+            // -172. It is not an error and it is not an empty rectangle.
+            wraps: query.west > query.east,
+        })
+    }
+}
+
+/// Clamps and converts to the column's type.
+///
+/// `numeric` rather than `float8` so the comparison can use
+/// `photos_location_idx`; casting the column instead would make the index
+/// unusable. A value that will not convert clamps to the bound, which is
+/// correct for a rectangle edge — the widest sensible rectangle is the whole
+/// world.
+fn to_degrees(value: f64, low: f64, high: f64) -> rust_decimal::Decimal {
+    let clamped = value.clamp(low, high);
+    rust_decimal::Decimal::from_f64_retain(clamped)
+        .map(|decimal| decimal.round_dp(6))
+        .unwrap_or_else(|| {
+            rust_decimal::Decimal::from_f64_retain(low).unwrap_or(rust_decimal::Decimal::ZERO)
+        })
+}
+
+/// Groups already-rounded positions into one marker per grid cell.
+///
+/// A fixed grid rather than the greedy nearest-neighbour grouping the browser
+/// uses for a single voyage. Both are defensible; the grid is chosen here
+/// because it is linear in the number of photographs rather than quadratic, and
+/// this endpoint's input is bounded by [`DISCOVER_MAP_LIMIT`] rather than by
+/// how many photographs one person put in one voyage. The visible cost is that
+/// two photographs either side of a cell boundary stay apart when they are
+/// close enough to overlap; zooming in separates them anyway, and at the scale
+/// this endpoint is read at the difference is not noticeable.
+///
+/// The grid is anchored at zero in world-pixel space, so it is the same grid
+/// for every request at a given zoom. A grid anchored on the rectangle would
+/// regroup the same photographs differently on every pan, and markers would
+/// visibly reshuffle as the map moved.
+fn cluster_for_discovery(rows: &[repo::DiscoverPhoto], zoom: f64) -> Vec<DiscoverCluster> {
+    // Insertion-ordered, so the output follows the input's `ORDER BY photo_id`
+    // and the response is byte-identical for an unchanged rectangle.
+    let mut cells: Vec<((i64, i64), DiscoverCluster)> = Vec::new();
+    let mut index: HashMap<(i64, i64), usize> = HashMap::new();
+
+    for row in rows {
+        let granularity = stored_granularity(&row.granularity);
+
+        // Rounded before it is grouped. The grid never sees an exact
+        // coordinate from a voyage that does not publish one.
+        let Some(coordinate) = place(granularity, Some(row.latitude), Some(row.longitude)) else {
+            continue;
+        };
+
+        let (x, y) = world_pixels(coordinate.latitude(), coordinate.longitude(), zoom);
+        let key = (
+            (x / DISCOVER_CLUSTER_CELL_PX).floor() as i64,
+            (y / DISCOVER_CLUSTER_CELL_PX).floor() as i64,
+        );
+
+        match index.get(&key) {
+            Some(&at) => cells[at].1.count += 1,
+            None => {
+                index.insert(key, cells.len());
+                cells.push((
+                    key,
+                    DiscoverCluster {
+                        coordinate,
+                        count: 1,
+                        photo_id: row.photo_id,
+                        voyage_id: row.voyage_id,
+                        thumbnail_url: variant_url(row.photo_id, VariantKind::Thumb),
+                    },
+                ));
+            }
+        }
+    }
+
+    cells.into_iter().map(|(_, cluster)| cluster).collect()
+}
+
+/// Web Mercator, in world pixels at `zoom`.
+///
+/// The whole world is `256 * 2^zoom` pixels across, which is the same
+/// convention MapLibre uses, so a distance computed here is the distance the
+/// browser will draw. Written out rather than shared with the frontend because
+/// the two are separate programs; both are checked against the same published
+/// constants.
+fn world_pixels(latitude: f64, longitude: f64, zoom: f64) -> (f64, f64) {
+    /// The latitude Web Mercator stops at. Past it the projection runs to
+    /// infinity, and an infinite pixel coordinate has no grid cell.
+    const MAX_MERCATOR_LATITUDE: f64 = 85.051_129;
+
+    let scale = 256.0 * 2f64.powf(zoom);
+    let clamped = latitude.clamp(-MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE);
+    let sin = clamped.to_radians().sin();
+
+    (
+        ((longitude + 180.0) / 360.0) * scale,
+        (0.5 - ((1.0 + sin) / (1.0 - sin)).ln() / (4.0 * std::f64::consts::PI)) * scale,
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -1235,12 +1544,7 @@ mod tests {
     #[test]
     fn a_photo_missing_one_coordinate_is_unplaced() {
         for (latitude, longitude) in [(Some(43.06), None), (None, Some(141.35)), (None, None)] {
-            let photo = VoyagePhoto {
-                latitude,
-                longitude,
-                ..a_photo()
-            };
-            assert!(place(Granularity::Exact, &photo).is_none());
+            assert!(place(Granularity::Exact, latitude, longitude).is_none());
         }
     }
 
@@ -1610,7 +1914,8 @@ mod tests {
                 precision_m: granularity.display_radius_m(),
                 pins: vec![MapPin {
                     photo_id: photo.photo_id,
-                    coordinate: place(granularity, &photo).expect("placed"),
+                    coordinate: place(granularity, photo.latitude, photo.longitude)
+                        .expect("placed"),
                     thumbnail_url: variant_url(photo.photo_id, VariantKind::Thumb),
                 }],
                 unplaced_count: 0,

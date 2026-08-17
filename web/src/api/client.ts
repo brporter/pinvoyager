@@ -23,6 +23,7 @@
  */
 
 import type {
+  DiscoverMap,
   Granularity,
   Me,
   Photo,
@@ -330,6 +331,39 @@ export function getVoyageMap(id: string, options: RequestOptions = {}): Promise<
   return request<VoyageMap>({ method: "GET", path: `/api/voyages/${id}/map`, ...options });
 }
 
+/** The rectangle the discovery map is looking at. */
+export interface MapWindow {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  /** Web Mercator zoom. Decides which photographs the server groups together,
+   *  so it is part of the question rather than a hint. */
+  zoom: number;
+}
+
+/**
+ * Every published voyage's photographs inside a rectangle, already grouped.
+ *
+ * No session, and the answer is the same for everyone. Unlike a single voyage's
+ * map, this one cannot be sent whole and grouped in the browser — at a world
+ * view the rectangle covers every published photograph there is.
+ */
+export function getDiscoverMap(
+  window: MapWindow,
+  options: RequestOptions = {},
+): Promise<DiscoverMap> {
+  const query = new URLSearchParams({
+    west: String(window.west),
+    south: String(window.south),
+    east: String(window.east),
+    north: String(window.north),
+    zoom: String(window.zoom),
+  });
+
+  return request<DiscoverMap>({ method: "GET", path: `/api/map?${query}`, ...options });
+}
+
 export interface CreateVoyageInput {
   title?: string;
   description?: string;
@@ -609,6 +643,7 @@ export const api = {
   listVoyages,
   getVoyage,
   getVoyageMap,
+  getDiscoverMap,
   createVoyage,
   updateVoyage,
   deleteVoyage,

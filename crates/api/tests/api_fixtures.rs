@@ -576,6 +576,26 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         .await,
     );
 
+    // The discovery map, over every published voyage rather than one of them.
+    // Read with no session on purpose: it is the same answer for everyone, and
+    // capturing it signed in would hide a handler that consulted one.
+    let discover_map = call(
+        &app,
+        "GET",
+        "/api/map?west=140.0&south=42.0&east=142.5&north=44.0&zoom=10",
+        None,
+        None,
+    )
+    .await;
+    capture("discover_map", StatusCode::OK, &discover_map);
+    let markers: Value = serde_json::from_str(&discover_map.body).expect("json");
+    assert!(
+        !markers["clusters"].as_array().expect("clusters").is_empty(),
+        "the discovery map fixture has no markers in it, so the TypeScript check \
+         would never see the shape of one: {}",
+        discover_map.body
+    );
+
     capture(
         "voyage_list",
         StatusCode::OK,
@@ -712,6 +732,7 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         "voyage_updated",
         "voyage_detail",
         "voyage_map",
+        "discover_map",
         "voyage_list",
         "voyage_list_mine",
         "error_not_found",

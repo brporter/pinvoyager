@@ -544,6 +544,85 @@ pub async fn photo_is_publicly_visible(
     Ok(visible.unwrap_or(false))
 }
 
+/// One placed photograph in a published voyage, for the discovery map.
+///
+/// Coordinates are **exact**, like every other row type here, and the
+/// granularity travels with them as the stored string so that the rounding
+/// still happens once at the serialization boundary rather than in this query.
+/// A photograph that is in two published voyages appears twice, once per
+/// voyage, because it is genuinely published twice and each voyage may round it
+/// differently.
+#[derive(Debug, Clone)]
+pub struct DiscoverPhoto {
+    pub photo_id: Uuid,
+    pub voyage_id: Uuid,
+    /// Stored spelling; parse with `Granularity::parse`.
+    pub granularity: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+/// Every placed photograph in a published voyage inside a rectangle.
+///
+/// `wraps` is for a rectangle that crosses the antimeridian, where `west` is
+/// numerically greater than `east` — panning across the Pacific is not exotic,
+/// and without it that pan returns either everything or nothing depending on
+/// which way the comparison falls.
+///
+/// `limit` is a cap, not a page size: there is no cursor here because the map
+/// asks for an area rather than for a sequence. The caller is expected to ask
+/// for one more row than it intends to use, so that hitting the cap is
+/// detectable and can be reported rather than silently changing the answer.
+/// Ordering by `photo_id` makes which rows survive the cap deterministic, so
+/// the same rectangle does not return a different sample each time it is asked
+/// for.
+pub async fn published_photos_in_bbox(
+    executor: impl PgExecutor<'_>,
+    south: rust_decimal::Decimal,
+    north: rust_decimal::Decimal,
+    west: rust_decimal::Decimal,
+    east: rust_decimal::Decimal,
+    wraps: bool,
+    limit: i64,
+) -> Result<Vec<DiscoverPhoto>, sqlx::Error> {
+    // The latitude range is a range scan on `photos_location_idx`; the
+    // longitude test is applied from the same index. Comparisons are against
+    // `numeric` parameters rather than casting the columns to `float8`,
+    // because casting a column is what makes an index on it unusable.
+    //
+    // `latitude!` and `longitude!` are asserted non-null. The column is
+    // nullable, but `latitude IS NOT NULL` is in the predicate and the table's
+    // own CHECK constraint makes latitude and longitude null together, so a row
+    // that reached here has both.
+    sqlx::query_as!(
+        DiscoverPhoto,
+        r#"SELECT p.id             AS photo_id,
+                  v.id             AS voyage_id,
+                  v.granularity,
+                  p.latitude::float8  AS "latitude!",
+                  p.longitude::float8 AS "longitude!"
+             FROM photos p
+             JOIN voyage_photos vp ON vp.photo_id = p.id
+             JOIN voyages v        ON v.id = vp.voyage_id
+            WHERE v.published
+              AND p.latitude IS NOT NULL
+              AND p.latitude BETWEEN $1 AND $2
+              AND CASE WHEN $5 THEN (p.longitude >= $3 OR p.longitude <= $4)
+                       ELSE p.longitude BETWEEN $3 AND $4
+                  END
+            ORDER BY p.id
+            LIMIT $6"#,
+        south,
+        north,
+        west,
+        east,
+        wraps,
+        limit,
+    )
+    .fetch_all(executor)
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

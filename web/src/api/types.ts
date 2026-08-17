@@ -141,6 +141,39 @@ export interface VoyageMap {
   unplaced: MapUnplaced[];
 }
 
+/** Rust: `DiscoverCluster`. One marker on the discovery map.
+ *
+ *  `coordinate` is a real photograph's published position rather than a
+ *  computed centre of the group. That is forced by the server's own types —
+ *  `Coordinate` can only be built by rounding through a granularity, and an
+ *  average of several photographs is not the output of that — and it has a
+ *  useful consequence here: every position this endpoint returns is one some
+ *  voyage already publishes. */
+export interface MapCluster {
+  coordinate: Coordinate;
+  /** How many photographs the marker stands for, the named one included. */
+  count: number;
+  /** The representative photograph, and the voyage to follow it to. */
+  photo_id: string;
+  voyage_id: string;
+  thumbnail_url: string;
+}
+
+/** Rust: `DiscoverMapResponse`. Every published voyage's photographs inside a
+ *  rectangle, grouped for the zoom that was asked for.
+ *
+ *  Clustering happens on the server here, unlike on a single voyage's map: the
+ *  rectangle at a world view covers every published photograph there is, and no
+ *  client can be sent them all to group for itself. */
+export interface DiscoverMap {
+  clusters: MapCluster[];
+  /** True when there were more photographs in the rectangle than one request
+   *  will consider and some were left out. Stated rather than hidden — a map
+   *  that silently drops half a continent looks exactly like a map of a
+   *  continent with fewer photographs in it. */
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Photos — Rust: `http::photos`
 // ---------------------------------------------------------------------------

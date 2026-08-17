@@ -45,6 +45,7 @@ import me from "../__fixtures__/me.json";
 import photo from "../__fixtures__/photo.json";
 import photoList from "../__fixtures__/photo_list.json";
 import photoUpload from "../__fixtures__/photo_upload.json";
+import discoverMap from "../__fixtures__/discover_map.json";
 import voyageAttached from "../__fixtures__/voyage_attached.json";
 import voyageCreated from "../__fixtures__/voyage_created.json";
 import voyageDetail from "../__fixtures__/voyage_detail.json";
@@ -57,6 +58,7 @@ import voyageUpdated from "../__fixtures__/voyage_updated.json";
 import type { ApiErrorBody } from "../client";
 import type {
   ApiError,
+  DiscoverMap,
   Granularity,
   LinkedProvider,
   Me,
@@ -160,6 +162,7 @@ export const assigned: {
   voyageUpdated: FromJson<Voyage>;
   voyageDetail: FromJson<Voyage>;
   voyageMap: FromJson<VoyageMap>;
+  discoverMap: FromJson<DiscoverMap>;
   voyageList: FromJson<VoyageList>;
   voyageListMine: FromJson<VoyageList>;
   errorNotFound: FromJson<ApiError>;
@@ -186,6 +189,7 @@ export const assigned: {
   voyageUpdated,
   voyageDetail,
   voyageMap,
+  discoverMap,
   voyageList,
   voyageListMine,
   errorNotFound,

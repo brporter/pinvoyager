@@ -44,6 +44,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -92,6 +93,18 @@ export interface MapView {
    * `zoom` is absolute, not a delta, and omitting it leaves the zoom alone.
    */
   moveTo: (coordinate: LngLat, options?: { zoom?: number }) => void;
+
+  /**
+   * The rectangle currently on screen, or null before the map has laid itself
+   * out and knows how big it is.
+   *
+   * Updated when a gesture *finishes*, not while it is happening. The
+   * discovery map turns this into a request, and a request per animation frame
+   * of a pan would be both useless and a breach of the tile server's usage
+   * policy in spirit — see decision D4a on not fetching beyond what the user is
+   * looking at.
+   */
+  window: Bounds | null;
 }
 
 export interface MapCanvasProps {
@@ -159,6 +172,7 @@ export function MapCanvas({
   const container = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [zoom, setZoom] = useState(0);
+  const [visible, setVisible] = useState<Bounds | null>(null);
 
   /**
    * The bounds the camera has already been sent to.
@@ -205,14 +219,31 @@ export function MapCanvas({
 
     const onZoom = () => setZoom(instance.getZoom());
 
+    const onSettled = () => {
+      const bounds = instance.getBounds();
+      const next: Bounds = {
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+      };
+
+      // Compared by value. A camera movement that ends where it began still
+      // fires `moveend`, and handing React a new-but-equal object each time
+      // would re-render every marker for a rectangle that has not moved.
+      setVisible((current) => (keyOf(current) === keyOf(next) ? current : next));
+    };
+
     // `load` fires once the style and the first tiles are in. Markers are only
     // rendered after it, because adding one to a map that has not finished
     // loading positions it against a camera that is about to change.
     instance.on("load", () => {
       setZoom(instance.getZoom());
+      onSettled();
       setMap(instance);
     });
     instance.on("zoom", onZoom);
+    instance.on("moveend", onSettled);
 
     return () => {
       setMap(null);
@@ -246,18 +277,32 @@ export function MapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, boundsKey, maxFitZoom]);
 
+  /**
+   * Stable for the lifetime of the map instance, and that is load-bearing
+   * rather than tidy.
+   *
+   * Callers put `moveTo` in an effect's dependency list — panning to a
+   * photograph chosen in the list is exactly that shape. If its identity
+   * changed whenever the camera moved, the sequence would be: the effect eases
+   * the camera, the camera settles, `moveend` updates this component's state,
+   * the callback is rebuilt, the effect's dependencies have changed, and the
+   * effect eases the camera again. That is an endless flight, and it is not a
+   * test artefact — `moveend` fires in a browser for the same reason.
+   */
+  const moveTo = useCallback(
+    (coordinate: LngLat, options?: { zoom?: number }) => {
+      map?.easeTo({
+        center: [coordinate.longitude, coordinate.latitude],
+        ...(options?.zoom === undefined ? {} : { zoom: options.zoom }),
+        duration: cameraDuration(FIT_DURATION_MS),
+      });
+    },
+    [map],
+  );
+
   const view = useMemo<MapView>(
-    () => ({
-      zoom,
-      moveTo: (coordinate, options) => {
-        map?.easeTo({
-          center: [coordinate.longitude, coordinate.latitude],
-          ...(options?.zoom === undefined ? {} : { zoom: options.zoom }),
-          duration: cameraDuration(FIT_DURATION_MS),
-        });
-      },
-    }),
-    [map, zoom],
+    () => ({ zoom, window: visible, moveTo }),
+    [zoom, visible, moveTo],
   );
 
   return (

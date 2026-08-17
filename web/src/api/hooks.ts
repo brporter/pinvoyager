@@ -44,11 +44,22 @@ import {
   signOut,
   updateVoyage,
   uploadPhotos,
+  getDiscoverMap,
   type CreateVoyageInput,
+  type MapWindow,
   type UpdateVoyageInput,
   type UploadOptions,
 } from "./client";
-import type { Me, Photo, PhotoList, UploadResult, Voyage, VoyageList, VoyageMap } from "./types";
+import type {
+  DiscoverMap,
+  Me,
+  Photo,
+  PhotoList,
+  UploadResult,
+  Voyage,
+  VoyageList,
+  VoyageMap,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Keys
@@ -72,6 +83,14 @@ export const keys = {
     detail: (id: string) => [...keys.voyages.all, "detail", id] as const,
     map: (id: string) => [...keys.voyages.all, "map", id] as const,
   },
+
+  /** The discovery map, keyed by the rectangle and zoom it was asked for.
+   *
+   *  Deliberately outside `voyages`, even though it draws voyages. Publishing
+   *  one voyage invalidates `["voyages"]`, and every rectangle of the world map
+   *  a user had panned across would be thrown away with it — while the answer
+   *  they are looking at changed by at most one marker. */
+  discoverMap: (window: MapWindow) => ["discover-map", window] as const,
 
   photos: {
     all: ["photos"] as const,
@@ -204,6 +223,34 @@ export function useVoyageMap(id: string | undefined): UseQueryResult<VoyageMap> 
     ...queryDefaults,
   });
 }
+
+/**
+ * The discovery map for one rectangle.
+ *
+ * `enabled` because the rectangle is not known until the map has laid itself
+ * out and reported where it is looking — asking before then would request a
+ * window nobody is looking at, and openstreetmap.org's usage policy is
+ * explicit about not fetching beyond what the user can see (decision D4a).
+ *
+ * `placeholderData` keeps the previous rectangle's markers on screen while the
+ * next one loads. Without it every pan blanks the map and redraws it, which
+ * reads as the pins flickering rather than as data arriving.
+ */
+export function useDiscoverMap(
+  window: MapWindow | null,
+): UseQueryResult<DiscoverMap> {
+  return useQuery({
+    queryKey: keys.discoverMap(window ?? EMPTY_WINDOW),
+    queryFn: ({ signal }) => getDiscoverMap(window as MapWindow, { signal }),
+    enabled: window !== null,
+    placeholderData: (previous) => previous,
+    ...queryDefaults,
+  });
+}
+
+/** Never fetched — `enabled` is false whenever it would be the key. It exists
+ *  so the key is a stable shape rather than sometimes containing null. */
+const EMPTY_WINDOW: MapWindow = { west: 0, south: 0, east: 0, north: 0, zoom: 0 };
 
 /**
  * Puts a freshly read voyage into the cache and invalidates what it changed.

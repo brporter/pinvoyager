@@ -1,0 +1,21 @@
+-- An index for the discovery map's bounding-box query.
+--
+-- `GET /api/map` asks for every placed photograph in a published voyage inside
+-- a rectangle. Without this the query is a sequential scan of `photos` on every
+-- pan, and a pan is a gesture a user makes continuously.
+--
+-- Partial on `latitude IS NOT NULL`, because a photograph with no location can
+-- never be in the answer — screenshots, scans and any camera with location
+-- services off are an ordinary share of the table, and there is no reason to
+-- carry them in an index that exists only to find placed ones.
+--
+-- Leading on latitude, with longitude second, so the latitude range is an index
+-- range scan and the longitude test is applied from the index rather than by
+-- fetching each row. That is not a true spatial index: a btree cannot restrict
+-- both axes at once, so a wide, short rectangle still reads more of the index
+-- than it returns. A GiST index over a PostGIS geometry would, and the reason
+-- for not doing that is that PostGIS is a substantial extension to require of
+-- every deployment for one endpoint. Revisit it if the map becomes slow, and
+-- measure before assuming this is why.
+CREATE INDEX photos_location_idx ON photos (latitude, longitude)
+    WHERE latitude IS NOT NULL;

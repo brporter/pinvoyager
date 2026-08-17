@@ -52,6 +52,7 @@ import type { VoyageList, VoyageSummary } from "../api/types";
 import { signInPath } from "../auth/redirect";
 import { useAuth } from "../auth/useAuth";
 import { Badge, Button, EmptyState, Photo, SearchIcon, Skeleton } from "../components";
+import { LazyDiscoverMap } from "../map";
 import { useIsDesktop } from "../shell/useIsDesktop";
 import { ErrorScreen } from "./NotFound";
 
@@ -254,6 +255,7 @@ export function referenceOf(error: unknown): string | null {
 // ---------------------------------------------------------------------------
 
 const GRID_HEADING_ID = "pv-discover-recent";
+const MAP_HEADING_ID = "pv-discover-map";
 
 export function Discover() {
   const desktop = useIsDesktop();
@@ -321,6 +323,31 @@ export function Discover() {
             </Link>
           </>
         )}
+      </section>
+
+      {/* The world map, between the hero and the grid.
+
+          `design/screens/discover.html` draws no map at all; the phase 7 goal
+          asks for one on this screen, so this is a placement decision the
+          design file has not made and should. The height is stated in `dvh` so
+          the map is a band rather than a full screen — the grid below it is
+          still the primary object on this page, and a map that filled the
+          viewport would read as the whole screen. */}
+      <section
+        aria-labelledby={MAP_HEADING_ID}
+        style={{ padding: desktop ? "var(--pv-space-6)" : "var(--pv-space-4)" }}
+      >
+        <h2 className="pv-h3" id={MAP_HEADING_ID} style={{ marginBottom: "var(--pv-space-4)" }}>
+          Everywhere people have been
+        </h2>
+        <LazyDiscoverMap
+          label="A map of every published photograph"
+          style={{
+            height: desktop ? "48dvh" : "40dvh",
+            minHeight: 280,
+            borderRadius: "var(--pv-radius-lg)",
+          }}
+        />
       </section>
 
       <section

@@ -86,6 +86,11 @@ function mercatorY(latitude: number): number {
 
 type BoundsPair = [[number, number], [number, number]];
 
+function centreOf(bounds: BoundsPair): [number, number] {
+  const [[west, south], [east, north]] = bounds;
+  return [(west + east) / 2, (south + north) / 2];
+}
+
 /**
  * The zoom at which a rectangle fits the viewport.
  *
@@ -126,6 +131,7 @@ export class FakeMap {
   removed = false;
 
   private zoom: number;
+  private centre: [number, number] = [0, 0];
   private readonly listeners = new globalThis.Map<string, Listener[]>();
 
   constructor(options: FakeMapOptions) {
@@ -137,8 +143,10 @@ export class FakeMap {
     // here as well as in `fitBounds`.
     if (options.bounds !== undefined) {
       this.zoom = zoomForBounds(options.bounds as BoundsPair, options.fitBoundsOptions ?? {});
+      this.centre = centreOf(options.bounds as BoundsPair);
     } else {
       this.zoom = typeof options.zoom === "number" ? options.zoom : 4;
+      if (Array.isArray(options.center)) this.centre = options.center as [number, number];
     }
 
     this.markerContainer = document.createElement("div");
@@ -185,6 +193,29 @@ export class FakeMap {
     return this.zoom;
   }
 
+  /**
+   * A rectangle around the centre.
+   *
+   * jsdom performs no layout, so there is no viewport to derive one from. The
+   * assumed 800x600 is converted to degrees at the current zoom, which is
+   * enough for a test to assert that the discovery map asked the server about
+   * the area it is looking at rather than about some other one.
+   */
+  getBounds() {
+    const scale = 256 * 2 ** this.zoom;
+    const halfLng = ((ASSUMED_VIEWPORT.width / 2) / scale) * 360;
+    const halfLat = ((ASSUMED_VIEWPORT.height / 2) / scale) * 360;
+
+    const [centreLng, centreLat] = this.centre;
+
+    return {
+      getWest: () => Math.max(-180, centreLng - halfLng),
+      getEast: () => Math.min(180, centreLng + halfLng),
+      getSouth: () => Math.max(-85, centreLat - halfLat),
+      getNorth: () => Math.min(85, centreLat + halfLat),
+    };
+  }
+
   /** Moves the camera and tells anything listening, which is what makes
    *  clusters re-form in a test the way they would in a browser. */
   setZoom(zoom: number): this {
@@ -195,13 +226,17 @@ export class FakeMap {
 
   easeTo(options: Record<string, unknown>): this {
     this.camera.push({ kind: "easeTo", options });
+    if (Array.isArray(options.center)) this.centre = options.center as [number, number];
     if (typeof options.zoom === "number") this.setZoom(options.zoom);
+    this.fire("moveend");
     return this;
   }
 
   fitBounds(bounds: unknown, options: Record<string, unknown> = {}): this {
     this.camera.push({ kind: "fitBounds", options, bounds });
+    this.centre = centreOf(bounds as BoundsPair);
     this.setZoom(zoomForBounds(bounds as BoundsPair, options));
+    this.fire("moveend");
     return this;
   }
 
