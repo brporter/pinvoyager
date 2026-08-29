@@ -8,7 +8,7 @@
  * ## How drift is caught
  *
  * These types are written by hand, which means nothing stops them from
- * disagreeing with the server. The defence is a pair of tests rather than code
+ * disagreeing with the server. The defense is a pair of tests rather than code
  * generation:
  *
  *  1. A Rust integration test drives each endpoint and writes the real response
@@ -27,8 +27,8 @@
  *  serialized form.
  *
  *  `precision_m` is absent — not null — when the voyage is at exact precision.
- *  When present it is the radius in metres that the map should draw as an area
- *  instead of a pin, because a sharp pin at the centre of a rounded coordinate
+ *  When present it is the radius in meters that the map should draw as an area
+ *  instead of a pin, because a sharp pin at the center of a rounded coordinate
  *  claims accuracy the value does not have. */
 export interface Coordinate {
   latitude: number;
@@ -144,7 +144,7 @@ export interface VoyageMap {
 /** Rust: `DiscoverCluster`. One marker on the discovery map.
  *
  *  `coordinate` is a real photograph's published position rather than a
- *  computed centre of the group. That is forced by the server's own types —
+ *  computed center of the group. That is forced by the server's own types —
  *  `Coordinate` can only be built by rounding through a granularity, and an
  *  average of several photographs is not the output of that — and it has a
  *  useful consequence here: every position this endpoint returns is one some

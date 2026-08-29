@@ -68,7 +68,7 @@ impl FromRequestParts<AppState> for CurrentUser {
     ) -> Result<Self, Self::Rejection> {
         // No cookie, an unknown token, and an expired session are all 401. The
         // caller learns that it must sign in and nothing else — telling a
-        // probing client that a token was *recognised but expired* confirms the
+        // probing client that a token was *recognized but expired* confirms the
         // token was real.
         resolve(parts, state).await?.ok_or(AppError::Unauthorized)
     }

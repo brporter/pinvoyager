@@ -1,5 +1,5 @@
 /**
- * Discover — behaviour, not appearance.
+ * Discover — behavior, not appearance.
  *
  * The four things worth pinning down are the ones that are easy to get wrong
  * and invisible when they are: the precision label on every card, the empty

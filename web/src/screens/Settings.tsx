@@ -11,7 +11,7 @@
  * and no password is stored anywhere, so a user who removes their only identity
  * has no way back into the account — and no support path we control can restore
  * it, because there is nothing to prove ownership against. The refusal is
- * therefore structural rather than a warning dialogue: with one provider linked
+ * therefore structural rather than a warning dialog: with one provider linked
  * the control is `disabled`, and it is paired with a `Toast` explaining the
  * consequence and the remedy. A disabled control with no reason attached reads
  * as a bug.
@@ -32,7 +32,7 @@
  *  * `DELETE /api/me`               — delete the account
  *
  * Until then each of them answers 404/405 and the screen shows a real error,
- * which is the honest behaviour: the alternative is a Save button that silently
+ * which is the honest behavior: the alternative is a Save button that silently
  * does nothing. `POST /auth/link/{provider}` — the one that *does* exist — is a
  * form submission rather than a fetch, because it answers with a 302 to the
  * provider's consent screen and that has to be a full-page navigation.
@@ -377,7 +377,7 @@ function PrecisionSection() {
   const groupId = useId();
 
   // Read after mount rather than during render: `localStorage` is not available
-  // in every rendering environment, and a lazy initialiser that touches it
+  // in every rendering environment, and a lazy initializer that touches it
   // makes the component unrenderable where it is not.
   useEffect(() => {
     setValue(readDefaultGranularity());
@@ -619,7 +619,7 @@ function DeleteSection() {
     >
       {/* Two steps, and deliberately so: the first press only reveals the
           confirmation. A single click must never be able to destroy an account,
-          and a `confirm()` dialogue is dismissed by reflex. */}
+          and a `confirm()` dialog is dismissed by reflex. */}
       {!confirming ? (
         <Button variant="danger" onClick={() => setConfirming(true)}>
           Delete my account

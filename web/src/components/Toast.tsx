@@ -1,8 +1,8 @@
 /**
  * Toast — from `design/components/feedback.html`.
  *
- * A left border in a status colour, an icon, and a text title: three signals,
- * none of which is colour alone.
+ * A left border in a status color, an icon, and a text title: three signals,
+ * none of which is color alone.
  *
  * The role is chosen by tone and it is the load-bearing part of this component.
  * Success and info are `status`, announced politely when the screen reader

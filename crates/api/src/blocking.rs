@@ -90,7 +90,7 @@ where
     T: Send + 'static,
 {
     // The outer `Result` is the join result: `Err` here means the closure
-    // panicked (a blocking task cannot be cancelled, so `JoinError` is always
+    // panicked (a blocking task cannot be canceled, so `JoinError` is always
     // a panic in practice). Flatten it into the caller's error type so a panic
     // is a 500 with the real cause on the `#[source]` chain, not a lost thread.
     match tokio::task::spawn_blocking(f).await {

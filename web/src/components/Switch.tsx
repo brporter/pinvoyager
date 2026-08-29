@@ -8,12 +8,12 @@
  * needs (`border: 0`, `padding: 0`, `appearance: none`). Rendering a `<button>`
  * with that class would pick up the user agent's border and padding and come
  * out the wrong size, so the design file's `role="switch"` + `tabindex="0"`
- * markup is followed exactly and the keyboard behaviour a button would have
+ * markup is followed exactly and the keyboard behavior a button would have
  * given for free is implemented here: Space and Enter both toggle.
  *
  * State reaches assistive technology through `aria-checked`, and reaches
- * everyone else through the knob's position as well as the track's colour —
- * two signals, neither of which is colour alone. The adjacent `stateText`
+ * everyone else through the knob's position as well as the track's color —
+ * two signals, neither of which is color alone. The adjacent `stateText`
  * ("Draft" / "Published — visible to everyone") is the third and most reliable.
  */
 

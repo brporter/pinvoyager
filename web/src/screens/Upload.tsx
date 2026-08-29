@@ -31,7 +31,7 @@
  * ## Why step three exists
  *
  * EXIF coordinates can be wrong — a camera holding a stale GPS fix will place a
- * photograph hundreds of kilometres from where it was taken — and the review
+ * photograph hundreds of kilometers from where it was taken — and the review
  * map is the only chance to notice before anything is published. Photos with no
  * location get an explicit decision there rather than a silent default, and the
  * primary button counts what will actually happen: "Add 4 photos", not "Done".
@@ -309,7 +309,7 @@ export function Upload() {
         patch(item.id, {
           status: "error",
           failure: controller.signal.aborted
-            ? { message: "Cancelled", retryable: true }
+            ? { message: "Canceled", retryable: true }
             : reasonFor(error, item.file),
         });
       } finally {
@@ -933,7 +933,7 @@ function ReviewMap({
 
       <p className="pv-xs pv-muted" style={{ marginTop: "var(--pv-space-2)" }}>
         Check this before publishing. A camera holding an old GPS fix can place a
-        photo hundreds of kilometres from where it was taken.
+        photo hundreds of kilometers from where it was taken.
         {unplacedCount > 0 && (
           <>
             {" "}

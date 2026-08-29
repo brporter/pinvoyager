@@ -23,7 +23,7 @@
 //!
 //! # The rounding
 //!
-//! Grid rounding to the **centre** of a cell, which gives three properties the
+//! Grid rounding to the **center** of a cell, which gives three properties the
 //! plan asks for:
 //!
 //! * **Stable.** The same input always yields the same output. Re-sampling per
@@ -31,10 +31,10 @@
 //!   let repeated observation average the noise away and recover the true
 //!   position.
 //! * **Clustering.** Photos that fall in one cell collapse to one point, which
-//!   is the "lump them together" behaviour the plan specifies — and it is also
+//!   is the "lump them together" behavior the plan specifies — and it is also
 //!   what stops a coarse voyage from displaying a suspiciously even scatter of
 //!   distinct pins.
-//! * **Bounded error.** The centre is at most half a cell from the truth on
+//! * **Bounded error.** The center is at most half a cell from the truth on
 //!   each axis, rather than up to a full cell as flooring would give.
 //!
 //! ## Longitude is not latitude
@@ -63,7 +63,7 @@
 
 use serde::Serialize;
 
-/// Kilometres per degree of latitude.
+/// Kilometers per degree of latitude.
 ///
 /// Constant to about half a percent between the equator and the pole on the
 /// real spheroid, which is two orders of magnitude finer than the smallest cell
@@ -109,7 +109,7 @@ impl Granularity {
         }
     }
 
-    /// Target cell size in kilometres. `None` for [`Granularity::Exact`].
+    /// Target cell size in kilometers. `None` for [`Granularity::Exact`].
     pub fn cell_km(self) -> Option<f64> {
         match self {
             Granularity::Exact => None,
@@ -119,10 +119,10 @@ impl Granularity {
         }
     }
 
-    /// Radius to draw on the map, in metres, or `None` for exact.
+    /// Radius to draw on the map, in meters, or `None` for exact.
     ///
     /// Phase 7 renders an **area** rather than a pin whenever this is `Some`.
-    /// A sharp pin at the centre of a 10 km cell makes a precision claim the
+    /// A sharp pin at the center of a 10 km cell makes a precision claim the
     /// data cannot support, and visually undoes the choice the user made.
     pub fn display_radius_m(self) -> Option<u32> {
         self.cell_km().map(|km| (km * 500.0) as u32)
@@ -148,7 +148,7 @@ impl Granularity {
         // Clamped because a cell straddling the pole rounds to past ±90, which
         // is not a latitude. The clamp only ever moves the point closer to the
         // truth, so it cannot widen the error bound.
-        let lat = cell_centre(latitude, lat_cell_deg).clamp(-90.0, 90.0);
+        let lat = cell_center(latitude, lat_cell_deg).clamp(-90.0, 90.0);
 
         // From the rounded latitude, never the raw one. The width of the
         // longitude cell decides which cell a longitude falls into, so deriving
@@ -156,7 +156,7 @@ impl Granularity {
         // function of the very value being hidden — and, just as bad, would
         // stop two photos in one cell from agreeing on an answer.
         let lon_cell_deg = lat_cell_deg / longitude_cell_scale(lat);
-        let lon = wrap_longitude(cell_centre(longitude, lon_cell_deg));
+        let lon = wrap_longitude(cell_center(longitude, lon_cell_deg));
 
         Coordinate {
             latitude: lat,
@@ -169,12 +169,12 @@ impl Granularity {
     }
 }
 
-/// The centre of the `cell`-wide grid cell containing `value`, on a grid
+/// The center of the `cell`-wide grid cell containing `value`, on a grid
 /// anchored at zero.
 ///
-/// The centre rather than the lower edge: both collapse a cell to one point,
+/// The center rather than the lower edge: both collapse a cell to one point,
 /// which is the clustering the plan asks for, but nothing is further than half
-/// a cell from the centre where a point just short of the upper edge is a whole
+/// a cell from the center where a point just short of the upper edge is a whole
 /// cell from the lower one.
 ///
 /// Anchoring at zero makes the grid the same for every user and every request —
@@ -182,7 +182,7 @@ impl Granularity {
 /// symmetric about the equator and the prime meridian: `floor` rounds toward
 /// negative infinity, so `-x` lands exactly opposite `x` instead of the
 /// southern and western hemispheres getting a differently shaped grid.
-fn cell_centre(value: f64, cell: f64) -> f64 {
+fn cell_center(value: f64, cell: f64) -> f64 {
     (value / cell).floor() * cell + cell / 2.0
 }
 
@@ -219,12 +219,12 @@ fn longitude_cell_scale(latitude_deg: f64) -> f64 {
         .cos()
 }
 
-/// Normalises to `[-180, 180)`, or to 180.0 itself in the one floating-point
+/// Normalizes to `[-180, 180)`, or to 180.0 itself in the one floating-point
 /// case where `rem_euclid` rounds up to its modulus. Both are the same meridian
 /// and both are values a map will accept.
 ///
 /// The grid does not divide the globe evenly, so the cell containing a point
-/// just west of the antimeridian has its centre just east of it — 180.03, which
+/// just west of the antimeridian has its center just east of it — 180.03, which
 /// is *not* a value a map will accept. Wrapping is a rotation of the sphere, so
 /// it changes no distance and loses no precision.
 fn wrap_longitude(degrees: f64) -> f64 {
@@ -248,7 +248,7 @@ pub struct Coordinate {
     /// exact.
     ///
     /// Per axis, not as the crow flies: a point in the corner of its cell is
-    /// half a *diagonal* from the centre, about 1.41 × this. Publishing the
+    /// half a *diagonal* from the center, about 1.41 × this. Publishing the
     /// smaller figure is the conservative choice — the truth is at least this
     /// far away and sometimes further — and it is the radius phase 7 draws,
     /// which is then the circle inscribed in the cell rather than one bulging
@@ -304,12 +304,12 @@ mod tests {
         2.0 * EARTH_RADIUS_KM * h.sqrt().asin()
     }
 
-    /// North-south error in kilometres.
+    /// North-south error in kilometers.
     fn lat_error_km(truth_lat: f64, c: &Coordinate) -> f64 {
         (c.latitude() - truth_lat).abs() * KM_PER_DEG_LAT
     }
 
-    /// East-west error in kilometres **at the true latitude** — the number a
+    /// East-west error in kilometers **at the true latitude** — the number a
     /// degrees-only assertion cannot see, and the one the cos correction exists
     /// to bound.
     fn lon_error_km(truth_lat: f64, truth_lon: f64, c: &Coordinate) -> f64 {
@@ -323,7 +323,7 @@ mod tests {
 
     /// Measures the grid on the ground rather than trusting the arithmetic:
     /// sweeps a latitude and a longitude, watches where the output jumps, and
-    /// converts the spacing between adjacent cell centres into kilometres.
+    /// converts the spacing between adjacent cell centers into kilometers.
     ///
     /// Returns `(height_km, width_km)`.
     fn measured_cell_km(g: Granularity, lat: f64) -> (f64, f64) {
@@ -342,30 +342,30 @@ mod tests {
     /// Mean spacing between the distinct values `f` takes as its argument walks
     /// forward in steps of `step`.
     fn spacing_deg(step: f64, f: impl Fn(f64) -> f64) -> f64 {
-        let mut centres: Vec<f64> = Vec::new();
+        let mut centers: Vec<f64> = Vec::new();
         for i in 0..4000 {
             let value = f(i as f64 * step);
-            if centres.last().is_none_or(|&last| last != value) {
-                centres.push(value);
+            if centers.last().is_none_or(|&last| last != value) {
+                centers.push(value);
             }
         }
 
         assert!(
-            centres.len() >= 3,
+            centers.len() >= 3,
             "the sweep did not cross two cell boundaries; it cannot measure a spacing"
         );
 
-        // Drop the first centre: the sweep starts partway into its cell, so
+        // Drop the first center: the sweep starts partway into its cell, so
         // only the gaps between whole cells are a spacing.
-        let spanned = centres[centres.len() - 1] - centres[1];
+        let spanned = centers[centers.len() - 1] - centers[1];
 
-        spanned / (centres.len() - 2) as f64
+        spanned / (centers.len() - 2) as f64
     }
 
     #[test]
     fn exact_passes_both_values_through_untouched() {
         // Bit-for-bit, including the values a "tidying" implementation would be
-        // tempted to normalise: the antimeridian, the pole, and negative zero.
+        // tempted to normalize: the antimeridian, the pole, and negative zero.
         for (lat, lon) in [
             (48.858_370_1_f64, 2.294_481_f64),
             (-33.868_820, 151.209_290),
@@ -484,7 +484,7 @@ mod tests {
                         let c = g.apply(lat, lon);
                         let at = format!("{} at {lat},{lon}", g.as_str());
 
-                        // Half a cell on each axis, in metres on the ground.
+                        // Half a cell on each axis, in meters on the ground.
                         assert!(
                             lat_error_km(lat, &c) <= cell * 0.5 * 1.001,
                             "{at}: {} km north-south",
@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn precision_m_is_half_the_cell_in_metres() {
+    fn precision_m_is_half_the_cell_in_meters() {
         assert_eq!(Granularity::Km1.apply(0.0, 0.0).precision_m(), Some(500));
         assert_eq!(Granularity::Km10.apply(0.0, 0.0).precision_m(), Some(5_000));
         assert_eq!(
@@ -581,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn the_origin_rounds_to_the_centre_of_the_cell_it_is_in() {
+    fn the_origin_rounds_to_the_center_of_the_cell_it_is_in() {
         // A known answer, so a change of grid — anchor, offset, or constant —
         // cannot pass silently. Every published pin in the product moves if
         // this changes.
@@ -591,7 +591,7 @@ mod tests {
         assert!((c.longitude() - 0.044_915_573).abs() < 1e-9, "{c:?}");
 
         // Half a cell from the origin on each axis, which is the most the
-        // centre of a cell can ever be from a point inside it.
+        // center of a cell can ever be from a point inside it.
         assert!(lat_error_km(0.0, &c) <= 5.0 * 1.001);
         assert!(lon_error_km(0.0, 0.0, &c) <= 5.0 * 1.001);
     }
@@ -658,7 +658,7 @@ mod tests {
 
     #[test]
     fn the_antimeridian_still_produces_a_longitude() {
-        // The cell straddling ±180 has its centre past it, so without wrapping
+        // The cell straddling ±180 has its center past it, so without wrapping
         // this emits 180.03 — a value that is not a longitude and that a map
         // will place off the edge of the world.
         for g in COARSE {

@@ -42,7 +42,7 @@ import { Link } from "react-router";
 import { Button, EmptyState, ErrorCircleIcon } from "../components";
 
 /**
- * Centres one empty state in the space the shell gives a screen.
+ * Centers one empty state in the space the shell gives a screen.
  *
  * `min-height: 60vh` rather than the full viewport: the top bar and, on a
  * phone, the tab bar are already using some of it, and a `100vh` block inside

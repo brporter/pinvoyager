@@ -2,7 +2,7 @@
  * A voyage drawn on the map: pins, clusters, granularity areas, and selection.
  *
  * Everything here is about photographs. Nothing here knows about MapLibre —
- * `MapCanvas.tsx` is the only file that does — so the pin behaviour survives a
+ * `MapCanvas.tsx` is the only file that does — so the pin behavior survives a
  * change of mapping library, and more immediately survives the swap from
  * openstreetmap.org's raster tiles to the self-hosted vector archive that
  * decision D4 describes.
@@ -69,7 +69,7 @@ export interface MapSelection {
 export interface VoyageMapProps {
   pins: readonly VoyagePin[];
   /**
-   * The radius, in metres, that the voyage's coordinates were rounded to —
+   * The radius, in meters, that the voyage's coordinates were rounded to —
    * `Coordinate.precision_m` from the API. Null when the voyage publishes exact
    * positions, which is the only case where a bare pin tells the truth.
    */
@@ -93,14 +93,14 @@ export interface VoyageMapProps {
  *
  * Without a cap the camera fits a single point by zooming to the maximum, which
  * would show a named street corner for a position known only to within fifty
- * kilometres — the map would be making a claim the data cannot support, which
+ * kilometers — the map would be making a claim the data cannot support, which
  * is the same defect target 10 is about, expressed as a camera rather than as a
  * marker.
  */
 const FITTED_AREA_DIAMETER_PX = 320;
 
 /** Never fit closer than this even at exact precision. A single photograph
- *  filling the screen with one building is disorienting; a neighbourhood is
+ *  filling the screen with one building is disorienting; a neighborhood is
  *  legible. */
 const MAX_FIT_ZOOM = 16;
 
@@ -288,7 +288,7 @@ function ClusterMarker({ cluster, precisionM, zoom, onSelectPin, onExpand }: Clu
  * `pointer-events: none`, it is not a button, and it is not in the tab order —
  * so a circle-only voyage would have no way to reach a photograph from the map,
  * and bidirectional selection is the interaction the whole screen exists for.
- * The circle plus a pin at its centre is the ordinary cartographic convention
+ * The circle plus a pin at its center is the ordinary cartographic convention
  * for a position with an uncertainty, and a pin ringed by a dashed 20 km circle
  * does not read as an exact claim. **This is a deviation from the design file
  * and the design file should be updated to settle it.**

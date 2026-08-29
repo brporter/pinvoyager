@@ -95,7 +95,7 @@ describe("reasonFor", () => {
 
   /** A proxy returning an HTML error page, or any shape that is not ours, must
    *  still produce a row rather than throwing and taking the batch with it. */
-  it("produces a reason for an error shape it does not recognise", () => {
+  it("produces a reason for an error shape it does not recognize", () => {
     const reason = reasonFor(new Error("something else entirely"), fileOfSize(1000));
 
     expect(reason.message).toBeTruthy();

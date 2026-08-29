@@ -136,7 +136,7 @@ describe("Checkbox", () => {
     expect(box).toBeChecked();
   });
 
-  it("honours a controlled `checked` prop", async () => {
+  it("honors a controlled `checked` prop", async () => {
     function Controlled() {
       const [on, setOn] = useState(false);
       return (

@@ -508,7 +508,7 @@ export function uploadPhotos(
 
   return new Promise<UploadResult>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new NetworkError("The upload was cancelled.", signal.reason));
+      reject(new NetworkError("The upload was canceled.", signal.reason));
       return;
     }
 
@@ -544,7 +544,7 @@ export function uploadPhotos(
 
     xhr.addEventListener("abort", () => {
       finish();
-      reject(new NetworkError("The upload was cancelled.", signal?.reason));
+      reject(new NetworkError("The upload was canceled.", signal?.reason));
     });
 
     xhr.addEventListener("error", () => {

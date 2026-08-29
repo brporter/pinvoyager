@@ -34,7 +34,7 @@ export function prefersReducedMotion(): boolean {
  * Zero is what MapLibre reads as "jump straight there". Passing `animate:
  * false` would do the same, but every camera method takes `duration`, so one
  * number covers `easeTo`, `flyTo`, `fitBounds`, `zoomIn` and `zoomOut` without
- * each call site having to remember which option that method honours.
+ * each call site having to remember which option that method honors.
  */
 export function cameraDuration(normalMs: number): number {
   return prefersReducedMotion() ? 0 : normalMs;

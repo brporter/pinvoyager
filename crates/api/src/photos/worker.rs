@@ -72,7 +72,7 @@ impl VariantQueue {
     /// A queue with no worker behind it, for tests that exercise the router
     /// rather than the pipeline.
     ///
-    /// Enqueueing on it fails, which is the honest behaviour — a test that
+    /// Enqueueing on it fails, which is the honest behavior — a test that
     /// accidentally depends on variants being generated should notice, rather
     /// than silently passing against a queue that swallows work.
     pub fn detached() -> Self {
@@ -302,7 +302,7 @@ fn derive(root: &Path, hash: &ContentHash, format: ImageFormat, quality: f32) ->
 
     let image = decode::decode(&original, format).map_err(internal)?;
     // Baked into the pixels here, because the variant carries no tag for a
-    // viewer to honour later. Skipping this is how every portrait photo in the
+    // viewer to honor later. Skipping this is how every portrait photo in the
     // product ends up sideways.
     let image = decode::apply_orientation(image, orientation);
 

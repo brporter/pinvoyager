@@ -100,11 +100,11 @@ pub(crate) struct OidcCore {
 
 /// Turns a configured issuer into the form discovery will accept.
 ///
-/// `Url` normalises `https://accounts.google.com` into
+/// `Url` normalizes `https://accounts.google.com` into
 /// `https://accounts.google.com/`, and OIDC requires the `issuer` in the
 /// discovery document to equal the identifier it was fetched for *exactly* —
 /// `openidconnect` compares the raw strings. Google returns the form without the
-/// slash, so passing the normalised `Url` straight through fails discovery for
+/// slash, so passing the normalized `Url` straight through fails discovery for
 /// the most ordinary configuration imaginable, with an error about issuer
 /// mismatch that reads like a security problem rather than a typo.
 ///

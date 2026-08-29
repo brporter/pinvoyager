@@ -7,7 +7,7 @@
 //! identity and receives a session for it. Anyone who can reach the endpoint
 //! can become any account.
 //!
-//! It exists because obtaining credentials for four providers is a serialised,
+//! It exists because obtaining credentials for four providers is a serialized,
 //! human-gated process — Apple alone needs a paid developer account — and the
 //! rest of the product cannot be built or tested while that is outstanding.
 //!

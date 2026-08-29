@@ -97,7 +97,7 @@ for dependencies (like PostgreSQL). Queries are checked at compile time using a 
   or token — D1 is verified by looking, not by intent.
 - **T8** — With the service already running, stop the database: `/health` continues to return
   200 and `/ready` returns 503. **Order matters** — a service *started* without a database
-  exits during migration and never serves either endpoint, which is correct behaviour but
+  exits during migration and never serves either endpoint, which is correct behavior but
   tests the wrong thing.
 - **T9** — `docker compose up` brings PostgreSQL to a healthy state, and the service connects
   to it with no further setup.

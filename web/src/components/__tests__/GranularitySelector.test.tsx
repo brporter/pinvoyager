@@ -48,7 +48,7 @@ describe("GranularitySelector", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "~10 km" }));
 
-    // Coarse draws an area, because a sharp pin at the centre of a rounding
+    // Coarse draws an area, because a sharp pin at the center of a rounding
     // makes a precision claim the data cannot support.
     expect(
       screen.queryByRole("img", { name: "A photograph at its exact recorded position" }),

@@ -246,8 +246,8 @@ async fn ingest_part(
             let take = (SNIFF_BYTES - header.len()).min(chunk.len());
             header.extend_from_slice(&chunk[..take]);
 
-            // Gate 2, and the stored-XSS defence. The moment enough bytes exist
-            // to identify the format, an unrecognised one ends the upload —
+            // Gate 2, and the stored-XSS defense. The moment enough bytes exist
+            // to identify the format, an unrecognized one ends the upload —
             // before the rest of the body is written, and long before any
             // decoder is handed the file. A `.jpg` full of HTML lands here.
             if header.len() == SNIFF_BYTES {
@@ -1229,7 +1229,7 @@ impl Rejection {
     }
 
     /// The magic-byte gate. A `.jpg` whose bytes are HTML lands here, and this
-    /// is the stored-XSS defence rather than a formatting nicety.
+    /// is the stored-XSS defense rather than a formatting nicety.
     fn not_an_image() -> Self {
         Rejection::Explicit {
             status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
@@ -1414,7 +1414,7 @@ mod tests {
         // Serving the bytes is deliberately anonymous-capable, because every
         // voyage is public (D6) and a published voyage whose images 404 for
         // anyone but its author is a public gallery with the pictures painted
-        // out. That route authorises per photograph — owner, or attached to a
+        // out. That route authorizes per photograph — owner, or attached to a
         // published voyage — rather than per session; see `viewable` and
         // `tests/photos_public_access.rs`.
         //

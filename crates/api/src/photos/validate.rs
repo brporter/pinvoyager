@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn accepted_formats_are_recognised_by_their_magic() {
+    fn accepted_formats_are_recognized_by_their_magic() {
         assert_eq!(sniff_format(&jpeg_header()), Some(ImageFormat::Jpeg));
         assert_eq!(sniff_format(&png_header()), Some(ImageFormat::Png));
         assert_eq!(sniff_format(&webp_header()), Some(ImageFormat::WebP));
@@ -447,7 +447,7 @@ mod tests {
 
     /// The probe must fail rather than succeed on a file whose bytes do not
     /// match the format it was told to expect. This is the second line of
-    /// defence behind the sniff: if the two ever disagree, the answer is a
+    /// defense behind the sniff: if the two ever disagree, the answer is a
     /// rejection, not a guess.
     #[test]
     fn probing_a_file_that_is_not_the_claimed_format_fails() {
@@ -508,7 +508,7 @@ mod tests {
 
     /// The HEIC path, end to end: a file libheif wrote, sniffed from its magic
     /// bytes and then probed for dimensions through libheif's container parse.
-    /// Both halves matter — an `ftyp` brand this module does not recognise
+    /// Both halves matter — an `ftyp` brand this module does not recognize
     /// would make the probe unreachable no matter how correct it is.
     #[test]
     fn dimensions_are_read_from_a_real_heic() {

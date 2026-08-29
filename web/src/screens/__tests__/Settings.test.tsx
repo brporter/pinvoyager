@@ -39,10 +39,10 @@ describe("readDefaultGranularity", () => {
     expect(readDefaultGranularity()).toBe(CAUTIOUS_DEFAULT);
   });
 
-  /** The important one. A value that is not a recognised setting — an older
+  /** The important one. A value that is not a recognized setting — an older
    *  spelling, a truncated write, something another script put there — must
    *  not be treated as permission to publish exact coordinates. */
-  it("falls back to a coarse setting rather than exact when the stored value is unrecognised", () => {
+  it("falls back to a coarse setting rather than exact when the stored value is unrecognized", () => {
     for (const junk of ["", "EXACT", "km5", "true", "null", "1km", "{}"]) {
       window.localStorage.setItem(KEY, junk);
       const resolved = readDefaultGranularity();

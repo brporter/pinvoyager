@@ -178,7 +178,7 @@ function fillHeight(desktop: boolean): CSSProperties {
 interface LayoutProps {
   voyage: Voyage;
   /** The whole selection, not just the id: the map needs to know which half of
-   *  the screen asked, so that clicking a pin does not also re-centre on it. */
+   *  the screen asked, so that clicking a pin does not also re-center on it. */
   selection: Selection | null;
   onSelectPin: (photoId: string) => void;
   onSelectPhoto: (photoId: string) => void;
@@ -391,7 +391,7 @@ function MobileLayout({
         precisionM={voyage.precision_m}
         selection={selection}
         onSelectPin={expandAndSelect}
-        // Attribution is a licence requirement, so it rides above the sheet
+        // Attribution is a license requirement, so it rides above the sheet
         // rather than sliding underneath it and disappearing.
         attributionOffset={height}
         style={{ position: "absolute", inset: 0 }}

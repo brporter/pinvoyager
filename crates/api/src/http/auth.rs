@@ -73,7 +73,7 @@ const GENERIC_FAILURE: &str = "We could not complete sign-in. Starting again nor
 /// Declining at the provider is a normal choice, not an error, and the design
 /// gives it a neutral screen. "Nothing was created" is the reassurance that
 /// matters, and it is true: nothing is written before the exchange.
-const CANCELLED: &str = "Sign-in was cancelled, so nothing was created.";
+const CANCELED: &str = "Sign-in was canceled, so nothing was created.";
 
 /// The provider-conflict copy, from `design/screens/auth-states.html`. The last
 /// sentence is a promise about server state, not a soothing noise — see
@@ -109,7 +109,7 @@ const MAX_REDIRECT_LEN: usize = 512;
 /// string. Registering only the GET produces a 405 that looks like a routing
 /// bug and is actually a protocol difference.
 ///
-/// The POST is registered on the same parameterised path rather than on a
+/// The POST is registered on the same parameterized path rather than on a
 /// literal `/auth/apple/callback`, which serves that exact URL while keeping
 /// one route per concept. A POST callback from another provider would be
 /// handled identically and would still have to pass every check, so there is
@@ -281,7 +281,7 @@ async fn callback(
 ///
 /// The body is taken as a string and handed to the provider whole. Apple's
 /// first-authorization `user` payload is a JSON object *inside* this body and
-/// arrives exactly once, ever (D1); re-serialising it here would mean this
+/// arrives exactly once, ever (D1); re-serializing it here would mean this
 /// handler deciding what parts of it survive, and anything it dropped would be
 /// unrecoverable. Extracting `code` and `state` is this handler's only claim on
 /// the body.
@@ -346,12 +346,12 @@ fn to_browser(
         Err(err) => err,
     };
 
-    // The four states the screen draws. `cancelled` is matched on the message
+    // The four states the screen draws. `canceled` is matched on the message
     // constant rather than on a variant because declining at the provider is
     // the one outcome that is not an error — it is a choice — and it reaches
     // here as an ordinary `BadRequest`.
     let status = match &err {
-        AppError::BadRequest(message) if message == CANCELLED => "cancelled",
+        AppError::BadRequest(message) if message == CANCELED => "canceled",
         AppError::Conflict(_) => "conflict",
         _ => "failed",
     };
@@ -453,7 +453,7 @@ async fn complete(
         // neutral screen promises.
         return Err(if error == "access_denied" {
             tracing::info!(provider = kind.as_str(), "user declined at the provider");
-            AppError::BadRequest(CANCELLED.to_owned())
+            AppError::BadRequest(CANCELED.to_owned())
         } else {
             rejected("provider returned an error")
         });
@@ -821,14 +821,14 @@ fn clamp_secs(value: u64) -> i64 {
 }
 
 /// Validates a caller-supplied destination, returning it only if it is a path
-/// on this site that we recognise.
+/// on this site that we recognize.
 ///
 /// This is the open-redirect check. A sign-in URL is one users are expected to
 /// click and share, so a `redirect_to` that can name another origin makes this
 /// service a convincing first hop for a phishing flow — and the browser will
 /// have shown our domain right up until the moment it leaves.
 ///
-/// The check rejects rather than repairs. Normalising a hostile value is where
+/// The check rejects rather than repairs. Normalizing a hostile value is where
 /// the interesting bypasses live: every layer that rewrites the string is
 /// another chance for two parsers to disagree about what it means.
 fn safe_redirect(candidate: &str) -> Option<String> {

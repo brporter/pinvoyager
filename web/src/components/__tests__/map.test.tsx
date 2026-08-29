@@ -26,7 +26,7 @@ describe("Pin", () => {
     expect(pin).toHaveAttribute("data-selected", "true");
   });
 
-  it("is a labelled graphic, not a dead tab stop, when it does nothing", async () => {
+  it("is a labeled graphic, not a dead tab stop, when it does nothing", async () => {
     render(
       <>
         <Pin label="A photograph at its exact recorded position" />
@@ -94,7 +94,7 @@ describe("MapArea", () => {
 });
 
 describe("Attribution", () => {
-  it("credits OpenStreetMap, which the ODbL licence requires", () => {
+  it("credits OpenStreetMap, which the ODbL license requires", () => {
     render(<Attribution />);
 
     expect(screen.getByRole("link", { name: "OpenStreetMap" })).toHaveAttribute(

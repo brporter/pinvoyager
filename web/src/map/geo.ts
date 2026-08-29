@@ -25,7 +25,7 @@
 const TILE_SIZE = 256;
 
 /**
- * WGS84 equatorial circumference, in metres.
+ * WGS84 equatorial circumference, in meters.
  *
  * Used for ground resolution. The value is the equatorial figure rather than a
  * mean, because Web Mercator's scale is defined at the equator and corrected by
@@ -100,7 +100,7 @@ export function unproject(point: WorldPoint, zoom: number): LngLat {
 }
 
 /**
- * Ground resolution: how many metres one screen pixel covers.
+ * Ground resolution: how many meters one screen pixel covers.
  *
  * Latitude-dependent, and that is the whole point of it. Mercator stretches
  * east–west distance by `1 / cos(latitude)`, so a 10 km circle drawn in
@@ -108,7 +108,7 @@ export function unproject(point: WorldPoint, zoom: number): LngLat {
  * drawn in Singapore. Sizing granularity areas with a single constant would
  * make the northern ones look far more precise than they are.
  */
-export function metresPerPixel(latitude: number, zoom: number): number {
+export function metersPerPixel(latitude: number, zoom: number): number {
   const clamped = clamp(latitude, -MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE);
   return (EARTH_CIRCUMFERENCE_M * Math.cos((clamped * Math.PI) / 180)) / worldSize(zoom);
 }
@@ -120,10 +120,10 @@ export function metresPerPixel(latitude: number, zoom: number): number {
  * `Coordinate.precision_m`, present only when the voyage is not at exact
  * precision — so the drawn circle is twice it. This is target 10: a voyage
  * rounded to ~10 km draws a circle 20 km across, and a viewer can see that the
- * photograph was taken somewhere inside it rather than at its centre.
+ * photograph was taken somewhere inside it rather than at its center.
  */
 export function areaDiameterPx(precisionM: number, latitude: number, zoom: number): number {
-  return (2 * precisionM) / metresPerPixel(latitude, zoom);
+  return (2 * precisionM) / metersPerPixel(latitude, zoom);
 }
 
 /**
@@ -133,10 +133,10 @@ export function areaDiameterPx(precisionM: number, latitude: number, zoom: numbe
  * voyage published at ~50 km precision with one photograph in it has a single
  * pin, and fitting a camera to a single point would otherwise zoom to street
  * level — showing a named junction for a position that is only known to within
- * fifty kilometres. Solving for the zoom that makes the *uncertainty* fill a
+ * fifty kilometers. Solving for the zoom that makes the *uncertainty* fill a
  * reasonable part of the viewport keeps the picture honest.
  *
- * Derived from {@link metresPerPixel}: given
+ * Derived from {@link metersPerPixel}: given
  * `mpp = C·cos(lat) / (256·2^z)` and a wanted `mpp = 2·precision / target`,
  * `z = log2( C·cos(lat)·target / (256·2·precision) )`.
  */
@@ -232,7 +232,7 @@ export const CLUSTER_RADIUS_PX = 44;
  * Greedy and seeded: walk the list in order, and each pin that has not yet been
  * taken starts a cluster and absorbs every remaining pin within
  * `radiusPx` **of the seed**. Absorbed pins do not go on to absorb their own
- * neighbours; without that restriction a line of pins each 40px from the next
+ * neighbors; without that restriction a line of pins each 40px from the next
  * would chain into one cluster spanning the continent, and the bubble would
  * appear somewhere none of the photographs were taken.
  *
@@ -283,7 +283,7 @@ export function clusterPins<T extends Clusterable>(
       id: seed.pin.id,
       // Averaged in world pixels and projected back, not averaged as latitude
       // and longitude. Mercator is not linear in latitude, so a bubble placed
-      // by averaging degrees would sit visibly off-centre from the pins it
+      // by averaging degrees would sit visibly off-center from the pins it
       // stands for at high latitudes.
       coordinate:
         members.length === 1

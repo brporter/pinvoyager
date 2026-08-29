@@ -146,7 +146,7 @@ fn generate_rsa_private_key_pem() -> String {
     let pem = String::from_utf8(output.stdout).expect("openssl should emit UTF-8 PEM");
 
     // OpenSSL 3 emits PKCS#8 from `genrsa`; LibreSSL (and OpenSSL 1.x) emit
-    // PKCS#1. The signer only takes PKCS#1, so normalise rather than depend on
+    // PKCS#1. The signer only takes PKCS#1, so normalize rather than depend on
     // which one happens to be installed.
     if pem.contains("BEGIN RSA PRIVATE KEY") {
         pem
@@ -336,14 +336,14 @@ impl MockOidcProvider {
 
 /// The issuer identifier as a real provider emits it.
 ///
-/// `Url` normalises a bare origin to carry a trailing slash — `http://host:port`
+/// `Url` normalizes a bare origin to carry a trailing slash — `http://host:port`
 /// becomes `http://host:port/` — but no real provider publishes it that way.
 /// Google's document says `https://accounts.google.com`, and OIDC compares the
 /// configured issuer against the published one for *exact* equality, so the
 /// service trims the slash off the configured side to match.
 ///
 /// The mock therefore has to publish the trimmed form too. Emitting the
-/// normalised one made discovery fail on a one-character difference, the
+/// normalized one made discovery fail on a one-character difference, the
 /// provider was silently disabled, and every rejection test in this file
 /// "passed" by never reaching its assertion.
 fn issuer_identifier(issuer: &Url) -> &str {

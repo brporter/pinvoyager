@@ -12,7 +12,7 @@ use tracing_subscriber::{
 use crate::config::TelemetryConfig;
 
 #[derive(Debug, thiserror::Error)]
-#[error("could not initialise telemetry")]
+#[error("could not initialize telemetry")]
 pub struct TelemetryError(#[source] pub Box<dyn std::error::Error + Send + Sync>);
 
 /// Installs the global subscriber. Called once, early, before anything that

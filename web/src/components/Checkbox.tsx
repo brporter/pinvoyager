@@ -7,8 +7,8 @@
  * screen-reader announcement are all the platform's rather than ours; only the
  * appearance is borrowed from the design system.
  *
- * State is signalled by a shape change (the tick) as well as a fill colour, so
- * it survives without colour perception.
+ * State is signalled by a shape change (the tick) as well as a fill color, so
+ * it survives without color perception.
  */
 
 import { useId, useState } from "react";

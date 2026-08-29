@@ -2,7 +2,7 @@
  * `/auth/callback` — `design/screens/auth-states.html`.
  *
  * Everything that happens after the redirect back from a provider. Four states:
- * verifying, cancelled, provider conflict, and one generic failure.
+ * verifying, canceled, provider conflict, and one generic failure.
  *
  * ## Why the failures all look the same
  *
@@ -21,7 +21,7 @@
  * query string:
  *
  * ```text
- * /auth/callback?status=cancelled&provider=google
+ * /auth/callback?status=canceled&provider=google
  * /auth/callback?status=conflict&provider=apple
  * /auth/callback?status=failed&provider=microsoft&ref=7f3a-2b91
  * ```
@@ -48,12 +48,12 @@ import { providerNameOf, providerOf } from "./providers";
 import { REDIRECT_PARAM, destinationOr, signInPath } from "./redirect";
 import { useAuth } from "./useAuth";
 
-type Outcome = "verifying" | "cancelled" | "conflict" | "failed";
+type Outcome = "verifying" | "canceled" | "conflict" | "failed";
 
 /**
  * The outcome named in the query string, or `null` when none was.
  *
- * `error=access_denied` is accepted alongside `status=cancelled` because that
+ * `error=access_denied` is accepted alongside `status=canceled` because that
  * is the parameter OAuth providers themselves use, and a callback proxied
  * straight through would carry it.
  */
@@ -64,8 +64,10 @@ function namedOutcome(params: URLSearchParams): Outcome | null {
     return null;
   }
 
-  if (raw === "cancelled" || raw === "canceled" || raw === "access_denied") {
-    return "cancelled";
+  // `"cancelled"` is the spelling this app emitted before, and a redirect
+  // issued by an older server can still be in flight during a deploy.
+  if (raw === "canceled" || raw === "cancelled" || raw === "access_denied") {
+    return "canceled";
   }
 
   if (raw === "conflict" || raw === "already_linked") {
@@ -136,11 +138,11 @@ export function AuthCallback() {
     );
   }
 
-  if (outcome === "cancelled") {
+  if (outcome === "canceled") {
     return (
       <StateCard
-        heading="Sign-in cancelled"
-        // Neutral, and grey rather than red: declining at the provider is a
+        heading="Sign-in canceled"
+        // Neutral, and gray rather than red: declining at the provider is a
         // normal choice, not an error. "Nothing was created" is the
         // reassurance that matters — someone who backed out wants to know they
         // did not leave an account behind.
@@ -242,7 +244,7 @@ export function AuthCallback() {
               onClick={() => {
                 // Back to where a link attempt started. A conflict can only
                 // arise from linking, which begins in Settings → Sign-in
-                // methods, so that is where cancelling belongs.
+                // methods, so that is where canceling belongs.
                 void navigate(user === null ? "/" : "/settings", { replace: true });
               }}
             >
@@ -317,7 +319,7 @@ function restartAt(provider: Provider): void {
 }
 
 /** The shared shape of the three settled states: icon, heading, prose,
- *  actions. `.as-card` centres all of it. */
+ *  actions. `.as-card` centers all of it. */
 function StateCard({
   heading,
   icon,

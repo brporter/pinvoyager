@@ -8,7 +8,7 @@
 //! the server is worse than no type at all, because it is confidently wrong at
 //! every call site.
 //!
-//! The defence is two tests, and **this is the half that makes the other half
+//! The defense is two tests, and **this is the half that makes the other half
 //! mean something**:
 //!
 //!  1. This file drives the real router against a real database and writes each
@@ -48,7 +48,7 @@
 //! Not re-serialized, not pretty-printed, not key-sorted. The claim the
 //! TypeScript side rests on is "this is what the service sent", and any
 //! reformatting step is a second serializer standing between the service and
-//! the artefact — one which could, for instance, drop a key whose value is
+//! the artifact — one which could, for instance, drop a key whose value is
 //! `null` and hide exactly the drift being looked for.
 
 use std::path::{Path, PathBuf};
@@ -76,7 +76,7 @@ const DEFAULT_URL: &str = "postgres://pinvoyager:pinvoyager@localhost:5432/pinvo
 const LAT: f64 = 43.061_234;
 const LON: f64 = 141.354_321;
 
-/// A few hundred metres from the first, so that a `km10` voyage collapses the
+/// A few hundred meters from the first, so that a `km10` voyage collapses the
 /// two into one place and `place_count` differs from `placed_count` in the
 /// captured fixture rather than being coincidentally equal.
 const NEAR_LAT: f64 = 43.063_210;

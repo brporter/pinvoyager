@@ -7,7 +7,7 @@
  * and the design system would quietly become documentation of what the app used
  * to look like.
  *
- * tokens.css     colour, type, spacing, radii, elevation, motion
+ * tokens.css     color, type, spacing, radii, elevation, motion
  * components.css the product's component styles — .pv-btn, .pv-card, .pv-pin
  *                and the rest. React components in src/components apply these
  *                class names rather than redefining the same rules in CSS

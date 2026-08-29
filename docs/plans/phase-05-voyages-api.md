@@ -54,7 +54,7 @@ the photos in that voyage to the library.
 - **T7** — Pagination is stable across insertions during traversal.
 - **T6/T9** — No N+1 queries. Loading a voyage with 48 photos issues a bounded number of
   queries, not one per photo. This is worth calling out specifically because `await` inside a
-  loop *looks* concurrent and is not — it serialises every round trip, and the cost scales
+  loop *looks* concurrent and is not — it serializes every round trip, and the cost scales
   with photo count on the product's most-visited endpoint. Assert on query count in a test
   rather than trusting a read of the code.
 

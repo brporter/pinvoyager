@@ -111,7 +111,7 @@ export function AccountMenu({ user }: { user: CurrentUser }) {
         }}
       >
         {/* No `label` on the Avatar: the button below already carries the
-            accessible name, and a labelled image inside a labelled button is
+            accessible name, and a labeled image inside a labeled button is
             the same person announced twice. */}
         <Avatar name={name} src={user.avatar_url} />
         <span className="pv-sr">

@@ -4,7 +4,7 @@
  * MapLibre cannot run here at all: it needs a WebGL context, and jsdom does not
  * implement one. Without a substitute, every test that renders a screen with a
  * map on it fails inside the MapLibre constructor, and the screen's own
- * behaviour — which is what those tests are about — never gets exercised.
+ * behavior — which is what those tests are about — never gets exercised.
  *
  * Picked up automatically by `vi.mock("maplibre-gl")` with no factory, because
  * Vitest looks for a `__mocks__` directory in the project root when the module
@@ -16,13 +16,13 @@
  * the order they were added and removed when the marker is removed. That is
  * what lets a test find a pin with the same queries a user's assistive
  * technology would use, and it is the only part of MapLibre the application's
- * own behaviour depends on.
+ * own behavior depends on.
  *
  * Also faithful, because too much depends on it: fitting the camera to a set of
  * bounds produces a realistic zoom. Clustering is a function of zoom, so a map
  * that reported a fixed zoom would merge or separate pins according to an
  * arbitrary number rather than according to how far apart they actually are —
- * two photographs a few hundred metres apart would come out as one bubble in
+ * two photographs a few hundred meters apart would come out as one bubble in
  * every test regardless of what the screen does. {@link zoomForBounds} works out
  * what zoom shows a rectangle inside an assumed 800×600 viewport, since jsdom
  * reports every element as zero-sized and there is no real one to measure.
@@ -86,7 +86,7 @@ function mercatorY(latitude: number): number {
 
 type BoundsPair = [[number, number], [number, number]];
 
-function centreOf(bounds: BoundsPair): [number, number] {
+function centerOf(bounds: BoundsPair): [number, number] {
   const [[west, south], [east, north]] = bounds;
   return [(west + east) / 2, (south + north) / 2];
 }
@@ -131,7 +131,7 @@ export class FakeMap {
   removed = false;
 
   private zoom: number;
-  private centre: [number, number] = [0, 0];
+  private center: [number, number] = [0, 0];
   private readonly listeners = new globalThis.Map<string, Listener[]>();
 
   constructor(options: FakeMapOptions) {
@@ -143,10 +143,10 @@ export class FakeMap {
     // here as well as in `fitBounds`.
     if (options.bounds !== undefined) {
       this.zoom = zoomForBounds(options.bounds as BoundsPair, options.fitBoundsOptions ?? {});
-      this.centre = centreOf(options.bounds as BoundsPair);
+      this.center = centerOf(options.bounds as BoundsPair);
     } else {
       this.zoom = typeof options.zoom === "number" ? options.zoom : 4;
-      if (Array.isArray(options.center)) this.centre = options.center as [number, number];
+      if (Array.isArray(options.center)) this.center = options.center as [number, number];
     }
 
     this.markerContainer = document.createElement("div");
@@ -194,7 +194,7 @@ export class FakeMap {
   }
 
   /**
-   * A rectangle around the centre.
+   * A rectangle around the center.
    *
    * jsdom performs no layout, so there is no viewport to derive one from. The
    * assumed 800x600 is converted to degrees at the current zoom, which is
@@ -206,13 +206,13 @@ export class FakeMap {
     const halfLng = ((ASSUMED_VIEWPORT.width / 2) / scale) * 360;
     const halfLat = ((ASSUMED_VIEWPORT.height / 2) / scale) * 360;
 
-    const [centreLng, centreLat] = this.centre;
+    const [centerLng, centerLat] = this.center;
 
     return {
-      getWest: () => Math.max(-180, centreLng - halfLng),
-      getEast: () => Math.min(180, centreLng + halfLng),
-      getSouth: () => Math.max(-85, centreLat - halfLat),
-      getNorth: () => Math.min(85, centreLat + halfLat),
+      getWest: () => Math.max(-180, centerLng - halfLng),
+      getEast: () => Math.min(180, centerLng + halfLng),
+      getSouth: () => Math.max(-85, centerLat - halfLat),
+      getNorth: () => Math.min(85, centerLat + halfLat),
     };
   }
 
@@ -226,7 +226,7 @@ export class FakeMap {
 
   easeTo(options: Record<string, unknown>): this {
     this.camera.push({ kind: "easeTo", options });
-    if (Array.isArray(options.center)) this.centre = options.center as [number, number];
+    if (Array.isArray(options.center)) this.center = options.center as [number, number];
     if (typeof options.zoom === "number") this.setZoom(options.zoom);
     this.fire("moveend");
     return this;
@@ -234,7 +234,7 @@ export class FakeMap {
 
   fitBounds(bounds: unknown, options: Record<string, unknown> = {}): this {
     this.camera.push({ kind: "fitBounds", options, bounds });
-    this.centre = centreOf(bounds as BoundsPair);
+    this.center = centerOf(bounds as BoundsPair);
     this.setZoom(zoomForBounds(bounds as BoundsPair, options));
     this.fire("moveend");
     return this;

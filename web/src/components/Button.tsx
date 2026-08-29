@@ -6,7 +6,7 @@
  * modifiers in `design/components.css`; this file chooses which of those class
  * names apply and nothing else.
  *
- * Two behaviours are worth knowing about:
+ * Two behaviors are worth knowing about:
  *
  *  - **Icon-only requires an accessible name.** The type below will not compile
  *    without an `aria-label` when `iconOnly` is set. An icon with no accessible

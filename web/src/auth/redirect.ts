@@ -14,7 +14,7 @@
  * and a value that passes there and fails here would be a needless downgrade.
  *
  * The check rejects rather than repairs, for the same reason the server does:
- * normalising a hostile value is where the interesting bypasses live.
+ * normalizing a hostile value is where the interesting bypasses live.
  */
 
 /**
@@ -37,7 +37,7 @@ export const REDIRECT_PARAM = "redirect_to";
 
 /**
  * Returns `candidate` unchanged when it names a path on this site that we
- * recognise, and `null` otherwise.
+ * recognize, and `null` otherwise.
  */
 export function safeRedirect(candidate: string | null | undefined): string | null {
   if (candidate === null || candidate === undefined) {

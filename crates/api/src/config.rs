@@ -108,7 +108,7 @@ pub struct AuthConfig {
     /// **Every provider is optional.** A deployment configures the ones it has
     /// credentials for, and the service starts with the rest disabled rather
     /// than refusing to boot. This is not just developer convenience: obtaining
-    /// four sets of OAuth credentials is a serialised, human-gated process, and
+    /// four sets of OAuth credentials is a serialized, human-gated process, and
     /// a service that cannot start until all four exist cannot be worked on.
     /// An unconfigured provider's endpoints return 404.
     #[serde(default)]

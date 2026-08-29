@@ -18,7 +18,7 @@ import {
   boundsOf,
   clusterPins,
   clusterTier,
-  metresPerPixel,
+  metersPerPixel,
   project,
   unproject,
   zoomForPrecision,
@@ -31,8 +31,8 @@ import {
 
 describe("project", () => {
   /** At zoom 0 the whole world is one 256px tile, so the null island is at its
-   *  centre. Every other projected figure is a scaling of this one. */
-  it("puts 0°, 0° at the centre of the zoom-0 world", () => {
+   *  center. Every other projected figure is a scaling of this one. */
+  it("puts 0°, 0° at the center of the zoom-0 world", () => {
     expect(project({ latitude: 0, longitude: 0 }, 0)).toEqual({ x: 128, y: 128 });
   });
 
@@ -94,17 +94,17 @@ describe("unproject", () => {
    Ground resolution
    ========================================================================== */
 
-describe("metresPerPixel", () => {
+describe("metersPerPixel", () => {
   /**
    * 40075016.686 m / 256 px. This is the published Web Mercator figure, and
    * quoting it here is the point — it is not derived from the implementation.
    */
   it("is 156543.03 m/px at the equator at zoom 0", () => {
-    expect(metresPerPixel(0, 0)).toBeCloseTo(156543.03392, 4);
+    expect(metersPerPixel(0, 0)).toBeCloseTo(156543.03392, 4);
   });
 
   it("halves with each zoom level", () => {
-    expect(metresPerPixel(0, 10)).toBeCloseTo(metresPerPixel(0, 9) / 2, 9);
+    expect(metersPerPixel(0, 10)).toBeCloseTo(metersPerPixel(0, 9) / 2, 9);
   });
 
   /**
@@ -116,27 +116,27 @@ describe("metresPerPixel", () => {
    * Singapore.
    */
   it("shrinks with latitude by cos(latitude)", () => {
-    expect(metresPerPixel(60, 10)).toBeCloseTo(metresPerPixel(0, 10) * Math.cos(Math.PI / 3), 6);
+    expect(metersPerPixel(60, 10)).toBeCloseTo(metersPerPixel(0, 10) * Math.cos(Math.PI / 3), 6);
   });
 
   it("is symmetric about the equator", () => {
-    expect(metresPerPixel(-45, 8)).toBeCloseTo(metresPerPixel(45, 8), 9);
+    expect(metersPerPixel(-45, 8)).toBeCloseTo(metersPerPixel(45, 8), 9);
   });
 });
 
 describe("areaDiameterPx", () => {
   /**
-   * A ~1 km voyage means "within one kilometre of this point", so the circle is
-   * two kilometres across. Drawing it at one kilometre across would understate
+   * A ~1 km voyage means "within one kilometer of this point", so the circle is
+   * two kilometers across. Drawing it at one kilometer across would understate
    * the imprecision by half, which is the direction that matters — it would
    * claim more accuracy than the data has.
    */
   it("draws a circle of twice the precision radius", () => {
     const zoom = 12;
     const latitude = 0;
-    const metres = metresPerPixel(latitude, zoom);
+    const meters = metersPerPixel(latitude, zoom);
 
-    expect(areaDiameterPx(1000, latitude, zoom)).toBeCloseTo(2000 / metres, 6);
+    expect(areaDiameterPx(1000, latitude, zoom)).toBeCloseTo(2000 / meters, 6);
   });
 
   it("grows as the camera zooms in", () => {
@@ -269,11 +269,11 @@ describe("clusterPins", () => {
   /**
    * The seed-only rule. At zoom 10 the merge distance is about 0.06°, so `b` is
    * within reach of `a` and `c` is within reach of `b` but not of `a`. If an
-   * absorbed pin went on to absorb its own neighbours, a line of photographs
+   * absorbed pin went on to absorb its own neighbors, a line of photographs
    * taken along a road would chain into one bubble spanning the whole route,
    * and that bubble would be drawn somewhere none of them were taken.
    */
-  it("does not let an absorbed pin drag in its own neighbours", () => {
+  it("does not let an absorbed pin drag in its own neighbors", () => {
     const clusters = clusterPins([pin("a", 0, 0), pin("b", 0, 0.05), pin("c", 0, 0.1)], 10);
 
     expect(clusters).toHaveLength(2);
@@ -305,7 +305,7 @@ describe("clusterPins", () => {
   /**
    * The bubble sits between its members rather than on the first of them.
    * Averaged in world pixels, not in degrees: Mercator is not linear in
-   * latitude, so averaging degrees puts the bubble visibly off-centre at high
+   * latitude, so averaging degrees puts the bubble visibly off-center at high
    * latitudes. At 60° the two are far enough apart to tell.
    */
   it("places a bubble at the middle of its members, measured on the map", () => {

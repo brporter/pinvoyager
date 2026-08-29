@@ -147,7 +147,7 @@ pub async fn consume(
     executor: impl PgExecutor<'_>,
     state: &str,
 ) -> Result<Option<PendingAttempt>, sqlx::Error> {
-    // This DELETE is the single-use property. Postgres serialises the two
+    // This DELETE is the single-use property. Postgres serializes the two
     // deleters of one row and only the first gets a RETURNING row, so a
     // replayed callback — or a genuinely concurrent one — finds nothing. A
     // SELECT followed by a DELETE would let both readers pass the check before
@@ -223,7 +223,7 @@ mod tests {
     }
 
     /// The binding value must survive a cookie round trip and still match, and
-    /// a different value must not — this is the whole of the link-CSRF defence,
+    /// a different value must not — this is the whole of the link-CSRF defense,
     /// so it is asserted rather than assumed.
     #[test]
     fn a_binding_value_matches_only_its_own_hash() {

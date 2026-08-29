@@ -188,5 +188,5 @@ docker run --rm -p 8080:8080 \
 | Startup fails naming a setting | It has no default and no value. See `.env.example`. |
 | `port is already allocated` | Something else holds 5432. Set `POSTGRES_PORT` in `.env` and update both URLs. |
 | Connection refused from the container | Used `localhost` where the container needs `db` (Compose) or `host.docker.internal` (plain `docker run`). |
-| `db` never reaches `healthy` | `docker compose logs db` — usually a half-initialised volume. `docker compose down -v`. |
+| `db` never reaches `healthy` | `docker compose logs db` — usually a half-initialized volume. `docker compose down -v`. |
 | Container build fails on a `query!` macro | The `.sqlx` cache is stale. Rerun `cargo sqlx prepare`. |

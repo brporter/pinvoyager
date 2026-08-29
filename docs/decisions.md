@@ -84,7 +84,7 @@ later.
 is, subject to conditions we have to actually meet:
 
 - Attribution must be visible. Already handled — `.pv-attribution` is on every map instance
-  and it was already a licence requirement under ODbL.
+  and it was already a license requirement under ODbL.
 - No bulk downloading, and no pre-fetching tiles beyond what a user is looking at.
 - A released application must not use it. This is a development-only arrangement, and
   shipping it would be a breach rather than merely impolite.
@@ -152,7 +152,7 @@ marker on a map is the whole feature.
   photo — which is precisely the point.
 - At coarse granularity a marker may sit over a *different* named place than where the photo
   was taken. This is one of the reasons the design draws an area rather than a pin at coarse
-  precision: an area over a region claims nothing about the label at its centre.
+  precision: an area over a region claims nothing about the label at its center.
 
 ## D6 — All voyages are public
 
@@ -286,7 +286,7 @@ sent whole for the browser to group. So the rectangle and the zoom are the quest
 markers are the answer.
 
 **What this costs.** Two implementations of clustering, in two languages, that will not always
-agree: the browser groups greedily by nearest neighbour, the server by a fixed grid. Their
+agree: the browser groups greedily by nearest neighbor, the server by a fixed grid. Their
 answers differ slightly at the edges of a cell. That is acceptable because they are never shown
 side by side — one draws a voyage, the other draws the world — and unifying them would mean
 either making a voyage's map chatty or shipping the planet to the browser.
@@ -294,7 +294,7 @@ either making a voyage's map chatty or shipping the planet to the browser.
 **What the server must never do.** Group first and round afterwards. Every photograph is
 rounded to *its own voyage's* granularity before anything is grouped, through the same
 `place()` call every other endpoint uses; a marker's published position is one real
-photograph's, never a computed centre of several. That last part is enforced by the type
+photograph's, never a computed center of several. That last part is enforced by the type
 system rather than by care: `Coordinate` has private fields and one constructor, so an average
 of several coordinates is not a thing that can be serialized. See D6.
 

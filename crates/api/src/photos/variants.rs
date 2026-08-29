@@ -112,7 +112,7 @@ fn fit_within(image: &DynamicImage, max_edge: u32) -> Cow<'_, DynamicImage> {
 /// Encodes a pixel buffer as lossy WebP through libwebp.
 ///
 /// **This is the strip.** The input is a `DynamicImage` — a width, a height and
-/// pixels, with nowhere for an EXIF block, an XMP packet or a colour profile to
+/// pixels, with nowhere for an EXIF block, an XMP packet or a color profile to
 /// hide — and libwebp's encoder writes only the bitstream chunks it generates
 /// itself. There is no metadata to carry forward because there is no metadata
 /// in the input. That structural property is what the `exiftool` test verifies
@@ -302,7 +302,7 @@ mod tests {
             }
 
             // The container itself, read without exiftool's help: no EXIF, XMP
-            // or colour-profile chunk may exist at all.
+            // or color-profile chunk may exist at all.
             let chunks = riff_chunks(&bytes);
             for chunk in &chunks {
                 assert!(

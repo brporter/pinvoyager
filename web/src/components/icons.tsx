@@ -7,8 +7,8 @@
  * accessible name, never the name itself. That is why `Button` requires an
  * `aria-label` when it renders nothing but an icon.
  *
- * Colour comes from `currentColor`, so an icon inherits whatever the
- * design-system class on its container decided. No icon sets its own colour.
+ * Color comes from `currentColor`, so an icon inherits whatever the
+ * design-system class on its container decided. No icon sets its own color.
  */
 
 import type { ReactNode, SVGProps } from "react";

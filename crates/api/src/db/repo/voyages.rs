@@ -223,7 +223,7 @@ pub async fn delete(
 /// attaches nothing" — should call this inside a transaction and roll back when
 /// the count is below `photo_ids.len()`, which also refuses a request that
 /// re-attaches something already present. That is the safe direction: the
-/// alternative silently half-honours a request the caller believes was applied
+/// alternative silently half-honors a request the caller believes was applied
 /// in full.
 pub async fn attach_photos(
     executor: impl PgExecutor<'_>,
@@ -362,7 +362,7 @@ pub async fn reorder(
     // surprise.
     //
     // Like the rest of the file the ownership predicate is in the statement.
-    // The signature has no way to report "not yours", so this is defence in
+    // The signature has no way to report "not yours", so this is defense in
     // depth under a handler that has already established ownership, not the
     // handler's only check — see the note in the module's report.
     sqlx::query!(
@@ -970,7 +970,7 @@ mod tests {
     }
 
     /// T3, at the repository level: the foreign photo is not attached, and the
-    /// count tells the handler that the request was not honoured in full so it
+    /// count tells the handler that the request was not honored in full so it
     /// can roll back and return 403.
     #[sqlx::test]
     async fn attaching_another_users_photo_attaches_nothing(pool: PgPool) {
@@ -1229,7 +1229,7 @@ mod tests {
         );
     }
 
-    /// The documented behaviour for a stale list: ids that are not in the
+    /// The documented behavior for a stale list: ids that are not in the
     /// voyage are ignored, and photos the caller left out keep their relative
     /// order behind the ones that were named. Neither is an error, because both
     /// are what an ordinary race between two tabs produces.

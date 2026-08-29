@@ -9,7 +9,7 @@
  * ## Drafts
  *
  * The owner viewing their own profile sees their drafts, each with a Draft
- * badge over the cover. Nobody else sees them at all — not greyed out, not
+ * badge over the cover. Nobody else sees them at all — not grayed out, not
  * counted, not hinted at. That is the client half of the server's rule that a
  * draft answers 404 rather than 403, so the existence of unpublished work does
  * not leak through a status code or through a gap in a grid. The two halves
@@ -110,7 +110,7 @@ export function Profile() {
         }}
       >
         {/* `.pv-avatar` is a grid box, so `text-align: center` on the header
-            does not centre it — the design file gives it `margin: 0 auto`, and
+            does not center it — the design file gives it `margin: 0 auto`, and
             `Avatar` takes no style, so the flex row does the same job. */}
         <div
           className={desktop ? "pv-inline-3" : undefined}

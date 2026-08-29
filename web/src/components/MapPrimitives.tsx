@@ -49,9 +49,9 @@ export interface PinProps {
  * Selection changes hue, scale and halo at once. Hue alone would fail for a
  * meaningful number of users, and on a map the marker often sits on an
  * arbitrary background where a single-signal change is easy to miss even with
- * full colour vision.
+ * full color vision.
  *
- * Without `onClick` it renders as a labelled graphic rather than a button. The
+ * Without `onClick` it renders as a labeled graphic rather than a button. The
  * design file draws every pin as a `<button>`, but a button that does nothing
  * is a dead stop in the tab order — which is exactly what the granularity
  * preview would otherwise put there.
@@ -91,7 +91,7 @@ export interface ClusterProps {
   top?: MapCoord;
   /** Three tiers by count, as drawn: 38px, 46px, 56px. */
   size?: ClusterSize;
-  /** Given, the bubble becomes a button — the usual behaviour is to zoom in. */
+  /** Given, the bubble becomes a button — the usual behavior is to zoom in. */
   onClick?: () => void;
   /** Overrides the accessible name. Defaults to "N photos here". */
   label?: string;
@@ -166,7 +166,7 @@ export interface MapAreaProps {
  * MapArea.
  *
  * A coarse voyage draws an area, not a point. Rendering a sharp pin at the
- * centre of a 10 km rounding makes a precision claim the data cannot support,
+ * center of a 10 km rounding makes a precision claim the data cannot support,
  * and it visually undoes the choice the user deliberately made. The circle's
  * radius reflects the actual precision, so what is drawn is what is known.
  */
@@ -197,13 +197,13 @@ export interface AttributionProps {
 /**
  * Attribution.
  *
- * OpenStreetMap attribution is required by the ODbL licence under which the map
+ * OpenStreetMap attribution is required by the ODbL license under which the map
  * data is published. It is not a courtesy: it appears on every map instance,
- * and removing it is a licence violation. There is no prop to hide it.
+ * and removing it is a license violation. There is no prop to hide it.
  *
  * The design file draws the notice as plain text; `.pv-attribution a` exists in
  * the stylesheet, so the copyright link is rendered here — which is what the
- * licence actually asks for.
+ * license actually asks for.
  */
 export function Attribution({ dark = false, children, className }: AttributionProps) {
   return (

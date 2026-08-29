@@ -45,9 +45,9 @@ export const GRANULARITY_LABEL: Record<Granularity, string> = {
 const EXPLANATION: Record<Granularity, string> = {
   exact:
     "Photos appear at the coordinates recorded by your camera. Anyone can see the precise spot each was taken.",
-  km1: "Photos appear somewhere within about a kilometre — enough to show the neighbourhood, not the address.",
-  km10: "Photos appear within about ten kilometres — roughly the town or district, not the street.",
-  km50: "Photos appear within about fifty kilometres — the region only.",
+  km1: "Photos appear somewhere within about a kilometer — enough to show the neighborhood, not the address.",
+  km10: "Photos appear within about ten kilometers — roughly the town or district, not the street.",
+  km50: "Photos appear within about fifty kilometers — the region only.",
 };
 
 /** Preview circle diameters, in the design's preview scale. `exact` draws a pin

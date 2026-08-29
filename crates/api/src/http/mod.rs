@@ -86,7 +86,7 @@ pub async fn serve(state: AppState) -> Result<(), std::io::Error> {
 /// Resolves `deadline` after a shutdown signal is observed, and never before.
 async fn drain_timeout(started: tokio::sync::oneshot::Receiver<()>, deadline: Duration) {
     if started.await.is_err() {
-        // The sender was dropped without signalling: the server finished for
+        // The sender was dropped without signaling: the server finished for
         // some other reason. Never resolve, so this branch cannot win the
         // race and swallow the server's own result.
         std::future::pending::<()>().await;

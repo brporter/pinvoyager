@@ -3,7 +3,7 @@
  *
  * `.si-card` from `design/screens/sign-in.html` and `.as-card` from
  * `design/screens/auth-states.html` are the same card at two widths, one of
- * them centre-aligned. Neither is in `design/components.css` — they are
+ * them center-aligned. Neither is in `design/components.css` — they are
  * screen-local styles in their own design files — so they are reproduced here
  * as inline style rather than invented as new design-system classes.
  */
@@ -12,7 +12,7 @@ import type { ReactNode } from "react";
 
 export function AuthCard({
   children,
-  /** `.as-card` is 400px and centre-aligned; `.si-card` is 380px and not. */
+  /** `.as-card` is 400px and center-aligned; `.si-card` is 380px and not. */
   variant = "signin",
   labelledBy,
 }: {

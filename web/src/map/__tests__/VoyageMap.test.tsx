@@ -26,7 +26,7 @@ function pin(id: string, latitude: number, longitude: number): VoyagePin {
   return { id, coordinate: { latitude, longitude }, label: `Photograph ${id}` };
 }
 
-/** Two photographs half a metre apart and one half a degree away. Fitting all
+/** Two photographs half a meter apart and one half a degree away. Fitting all
  *  three lands the camera at a zoom where the first two overlap and the third
  *  does not, which is the situation clustering exists for. */
 const NEAR_A = pin("a", 43.06, 141.35);
@@ -122,7 +122,7 @@ describe("VoyageMap — what is on the map", () => {
   });
 
   /**
-   * Required by the ODbL licence the map data is published under. It is not a
+   * Required by the ODbL license the map data is published under. It is not a
    * courtesy, there is no prop to hide it, and it must be on every map
    * instance — which is why this is asserted rather than assumed.
    */
@@ -211,7 +211,7 @@ describe("VoyageMap — clustering", () => {
 describe("VoyageMap — granularity", () => {
   /**
    * Target 10. A voyage rounded to ~10 km draws a circle 20 km across, because
-   * a sharp pin at the centre of a 10 km rounding claims a precision the data
+   * a sharp pin at the center of a 10 km rounding claims a precision the data
    * does not have — and it visually undoes the choice the user deliberately
    * made when they published at that setting.
    */
@@ -249,7 +249,7 @@ describe("VoyageMap — granularity", () => {
   /**
    * A single photograph has no span to fit, so the camera would otherwise go to
    * its maximum and show a named street corner for a position known only to
-   * within fifty kilometres. The cap is the same defect target 10 is about,
+   * within fifty kilometers. The cap is the same defect target 10 is about,
    * expressed as a camera rather than as a marker.
    */
   it("does not zoom past what the coordinates know", () => {

@@ -585,7 +585,7 @@
 .pv-cluster--md { min-width: 46px; height: 46px; margin-left: -23px; margin-top: -23px; font-size: var(--pv-text-sm); }
 .pv-cluster--lg { min-width: 56px; height: 56px; margin-left: -28px; margin-top: -28px; font-size: var(--pv-text-base); }
 
-/* Coarse granularity draws an AREA, not a point. A sharp pin at the centre
+/* Coarse granularity draws an AREA, not a point. A sharp pin at the center
    of a 10km rounding is a precision claim the data cannot support, and it
    visually undoes the choice the user made. */
 .pv-map-area {

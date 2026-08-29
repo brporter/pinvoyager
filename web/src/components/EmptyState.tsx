@@ -26,7 +26,7 @@ export interface EmptyStateProps {
   /** Usually a single `Button`. */
   action?: ReactNode;
   /** `danger` tints the icon for the "could not be loaded" variant. The design
-   *  file sets that colour inline; `design/components.css` has no
+   *  file sets that color inline; `design/components.css` has no
    *  `.pv-empty-icon--danger` modifier yet, so the inline style is mirrored
    *  here rather than invented elsewhere. */
   tone?: "default" | "danger";

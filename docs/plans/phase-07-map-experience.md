@@ -35,11 +35,11 @@ is unaffected and is what this phase now delivers.
 
    **(a) Serve the archive, let the client read it.** `pmtiles.js` inside MapLibre issues HTTP
    Range requests against the `.pmtiles` file and decodes the format in the browser. The
-   server only has to honour ranges, which `tower-http`'s file serving does. Least code.
+   server only has to honor ranges, which `tower-http`'s file serving does. Least code.
 
    **(b) Decode server-side and serve `/{z}/{x}/{y}.mvt`.** The `pmtiles` crate reads the
    format natively, so this is a genuinely small amount of work in Rust. Smaller client
-   payloads, fewer round trips, and far better CDN cache behaviour — per-tile URLs cache
+   payloads, fewer round trips, and far better CDN cache behavior — per-tile URLs cache
    cleanly where byte ranges into one 100 GB file do not.
 
    Given the `pmtiles` crate exists, (b) is the better default here. **HTTP range request
@@ -47,7 +47,7 @@ is unaffected and is what this phase now delivers.
 3. Tile responses carry correct caching headers, and tile requests are cheap enough to serve
    under the load a map pan generates — one gesture can request dozens of tiles.
 4. MapLibre GL JS in voyage detail. **The styling half of this target is blocked by D4a.**
-   Raster tiles arrive already drawn, so the basemap cannot be recoloured to match the design
+   Raster tiles arrive already drawn, so the basemap cannot be recolored to match the design
    tokens and the dark basemap in `design/components/map-primitives.html` is unreachable until
    vector tiles are in place. Build the map so that swapping the source later is a change to
    one style definition rather than to the map code.
@@ -110,7 +110,7 @@ Everything lives under `web/src/map/`, and the division of it is the point:
 
 `MapCanvas.tsx` is the only file in the application that imports `maplibre-gl`. Swapping the
 basemap for the self-hosted vector archive means rewriting `style.ts`; swapping MapLibre for
-another library means rewriting `MapCanvas.tsx`. Neither reaches the pin behaviour.
+another library means rewriting `MapCanvas.tsx`. Neither reaches the pin behavior.
 
 Pins and clusters are real DOM buttons positioned by MapLibre markers, not features drawn into
 the WebGL canvas. A pin drawn on a canvas cannot be tabbed to, has no accessible name, and
@@ -156,14 +156,14 @@ updated to settle this.**
   its own 82.86 kB stylesheet, shared by both map boundaries so moving from discovery to a
   voyage does not download it twice. Searching the built entry chunk for the string `maplibre`
   returns zero matches.
-- The discovery map's own behaviour is asserted in `src/map/__tests__/DiscoverMap.test.tsx`, and
+- The discovery map's own behavior is asserted in `src/map/__tests__/DiscoverMap.test.tsx`, and
   the endpoint's in `crates/api/tests/discover_map.rs`, which drives the production router.
 - The arithmetic in `geo.ts` is checked against independently derived figures — 156543.03 m/px
   at the equator at zoom 0, the `cos(latitude)` correction, and `zoomForPrecision` being the
   exact inverse of `areaDiameterPx`.
 - The tests were shown not to be vacuous by breaking the implementation and confirming each
-  break failed a test. In the browser: removing the latitude correction from `metresPerPixel`;
-  letting an absorbed pin absorb its own neighbours; drawing the granularity circle at the
+  break failed a test. In the browser: removing the latitude correction from `metersPerPixel`;
+  letting an absorbed pin absorb its own neighbors; drawing the granularity circle at the
   precision radius instead of its diameter; panning the camera for a pin click as well as a list
   click; leaving the selected pin in the clustering pool; and ignoring `prefers-reduced-motion`
   in camera movement. On the server: dropping `v.published` from the rectangle query; rounding
@@ -202,7 +202,7 @@ same `place()` call every other endpoint uses — and only then is grouped. Grou
 coordinates and publishing the group's position would make what the map draws a function of
 values that were never allowed out.
 
-**A marker's position is a real photograph's published position**, not a computed centre. That
+**A marker's position is a real photograph's published position**, not a computed center. That
 is forced rather than chosen: `Coordinate` has private fields and one constructor, so an
 average of several coordinates is not something that can be serialized at all. The
 representative is the lowest photograph id in the group, so the same rectangle draws the same

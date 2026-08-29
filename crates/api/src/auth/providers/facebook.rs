@@ -42,7 +42,7 @@ const GRAPH_VERSION: &str = "v23.0";
 const SCOPE: &str = "public_profile";
 
 /// Exactly the fields used below. Graph returns whatever is asked for, so the
-/// list is the whole of the data-minimisation story for this provider.
+/// list is the whole of the data-minimization story for this provider.
 const ME_FIELDS: &str = "id,name,picture.type(large)";
 
 pub(crate) struct FacebookProvider {
@@ -158,7 +158,7 @@ impl crate::auth::AuthProvider for FacebookProvider {
     ) -> Result<VerifiedIdentity, AuthError> {
         // Encoded explicitly rather than through `reqwest`'s `form()` helper,
         // which needs the optional `form` feature that this crate does not
-        // enable. `url`'s serialiser produces the same bytes.
+        // enable. `url`'s serializer produces the same bytes.
         let body = url::form_urlencoded::Serializer::new(String::new())
             .append_pair("client_id", &self.client_id)
             .append_pair("client_secret", self.client_secret.expose_secret())
@@ -181,7 +181,7 @@ impl crate::auth::AuthProvider for FacebookProvider {
 
         // Facebook answers a failed exchange with 400 and a JSON error body. The
         // status is checked before parsing so a rejection does not present as a
-        // deserialisation error.
+        // deserialization error.
         let response = response
             .error_for_status()
             .map_err(|err| AuthError::Provider(format!("code exchange was rejected: {err}")))?;

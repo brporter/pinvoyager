@@ -21,7 +21,7 @@ const PROVIDER_NAME: Record<Provider, string> = {
  * The display name for a provider named in a URL, or `null`.
  *
  * Looked up rather than interpolated. The value comes from the address bar and
- * ends up inside a sentence, so an unrecognised one produces copy with no
+ * ends up inside a sentence, so an unrecognized one produces copy with no
  * provider name in it — "Verifying your account" — instead of rendering
  * whatever the caller wrote.
  */

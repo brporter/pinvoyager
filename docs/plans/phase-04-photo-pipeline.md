@@ -78,7 +78,7 @@ stored in WebP.
 - **T6/T8** — **Upload a batch of fifty large photos and hammer an unrelated endpoint
   concurrently.** Its latency must stay flat. If it degrades, image work is running on runtime
   worker threads or a pool connection is being held across processing — this is the check that
-  proves D8 is actually being honoured, and it is invisible to any single-request test.
+  proves D8 is actually being honored, and it is invisible to any single-request test.
 - **T7** — Filling the bounded channel applies backpressure rather than growing without limit
   or dropping work silently.
 - **T9** — Response headers are as specified. Requesting a variant that does not exist returns

@@ -122,7 +122,7 @@ pub trait AuthProvider: Send + Sync {
 /// The configured providers.
 ///
 /// Providers are individually optional. Obtaining four sets of OAuth
-/// credentials is a serialised, human-gated process, and a service that cannot
+/// credentials is a serialized, human-gated process, and a service that cannot
 /// start until all four exist cannot be worked on. An unconfigured provider's
 /// endpoints return 404.
 pub struct ProviderRegistry {
@@ -133,7 +133,7 @@ pub struct ProviderRegistry {
 ///
 /// Fixed, because [`ProviderRegistry::configured`] feeds the sign-in screen and
 /// a `HashMap`'s iteration order would reshuffle the buttons on every restart —
-/// a UI that moves under a user who has learnt where their provider is.
+/// a UI that moves under a user who has learned where their provider is.
 const DISPLAY_ORDER: [ProviderKind; 4] = [
     ProviderKind::Google,
     ProviderKind::Microsoft,
@@ -225,7 +225,7 @@ impl ProviderRegistry {
                     tracing::warn!(
                         provider = kind.as_str(),
                         error = %err,
-                        "provider disabled: it could not be initialised at startup"
+                        "provider disabled: it could not be initialized at startup"
                     );
                 }
                 None => {

@@ -7,8 +7,8 @@
  *
  * Two states are worth reading the design note about:
  *
- *  - **Selected** is an outline with an offset rather than a colour overlay,
- *    because it has to remain visible against a photograph of any colour —
+ *  - **Selected** is an outline with an offset rather than a color overlay,
+ *    because it has to remain visible against a photograph of any color —
  *    including a photograph that happens to be teal.
  *  - **Unplaced** is normal, not exceptional. Screenshots, scans and anything
  *    shot with location services off carry no GPS EXIF at all, which is a large

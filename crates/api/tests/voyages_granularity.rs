@@ -53,7 +53,7 @@ use pinvoyager_api::voyages::Granularity;
 // The coordinate under test.
 //
 // Distinctive on purpose. A round number like 43.0 / 141.0 would appear in a
-// rounded response by coincidence — it is a plausible cell centre — and the
+// rounded response by coincidence — it is a plausible cell center — and the
 // grep would then fail against a perfectly correct implementation. Six decimal
 // places is also exactly what the column stores (`numeric(9, 6)`), so the value
 // round-trips without the database itself rewriting the digits.
@@ -73,18 +73,18 @@ const EXACT_LAT_DIGITS: &str = "43.061234";
 const EXACT_LON_DIGITS: &str = "141.354321";
 
 /// What the sweep actually searches for: five decimal places, roughly one
-/// metre.
+/// meter.
 ///
 /// A prefix rather than the full value, so that a leak dressed up as a
 /// truncation — `43.06123`, or `43.061234000001` from a float round trip —
 /// still trips it. It cannot collide with a legitimately rounded value: the
-/// coarsest step this test uses is ~10 km, and a 10 km cell centre agreeing
-/// with the truth to one metre would be a coincidence of one in ten million,
-/// not a rounding artefact.
+/// coarsest step this test uses is ~10 km, and a 10 km cell center agreeing
+/// with the truth to one meter would be a coincidence of one in ten million,
+/// not a rounding artifact.
 const LAT_PREFIX: &str = "43.06123";
 const LON_PREFIX: &str = "141.35432";
 
-/// A second photo a few hundred metres from the first: ~220 m north and ~290 m
+/// A second photo a few hundred meters from the first: ~220 m north and ~290 m
 /// east, which is far enough apart to be distinct at exact precision and far
 /// closer than the ~10 km cell they must collapse into.
 const NEAR_LAT: f64 = 43.063_210;
@@ -529,7 +529,7 @@ async fn the_exact_coordinate_appears_in_no_response_at_km10(pool: PgPool) {
             // The detail view: the obvious one.
             format!("/api/voyages/{voyage}"),
             // The discovery list: the endpoint nobody thinks to check, and the
-            // one that leaks at full precision if a summary carries a centre.
+            // one that leaks at full precision if a summary carries a center.
             "/api/voyages".to_owned(),
             "/api/voyages?limit=50".to_owned(),
             // The map payload, which exists precisely to carry coordinates.
@@ -671,9 +671,9 @@ async fn rounding_is_stable_across_reads(pool: PgPool) {
 // T5 — clustering.
 // ---------------------------------------------------------------------------
 
-/// Two photos a few hundred metres apart report the *same* coordinate at ~10 km.
+/// Two photos a few hundred meters apart report the *same* coordinate at ~10 km.
 ///
-/// This is the specified behaviour — "granularity semantics just lump photos
+/// This is the specified behavior — "granularity semantics just lump photos
 /// together in a middle-cluster for the point" — and it is also what makes the
 /// setting convincing. A coarse voyage that drew twelve distinct pins in a
 /// tight, evenly-spaced scatter would advertise that each one had been nudged
@@ -781,7 +781,7 @@ async fn a_draft_is_404_to_everyone_but_its_owner(pool: PgPool) {
 //
 // Why not something simpler:
 //
-// * `pg_stat_statements` counts *calls per normalised statement* and is an
+// * `pg_stat_statements` counts *calls per normalized statement* and is an
 //   extension that may not be installed. It also aggregates across the whole
 //   server, so a concurrently running test pollutes it.
 // * Timing is not a count. A test that asserts "loading 48 photos takes less
@@ -1087,7 +1087,7 @@ async fn loading_a_voyage_issues_a_bounded_number_of_queries(pool: PgPool) {
         forty_eight_photos <= four_photos + 2,
         "loading 48 photos cost {forty_eight_photos} statements against {four_photos} for 4. The \
          cost is scaling with photo count, which is an `await` inside a loop on the product's \
-         most-visited endpoint — it looks concurrent, it serialises every round trip, and it gets \
+         most-visited endpoint — it looks concurrent, it serializes every round trip, and it gets \
          worse with every photo a user adds."
     );
 

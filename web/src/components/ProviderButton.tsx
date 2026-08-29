@@ -7,7 +7,7 @@
  * ## Do not restyle or redraw these
  *
  * Google and Apple both publish binding branding requirements: exact wordmark,
- * minimum size, permitted colour variants, required clear space.
+ * minimum size, permitted color variants, required clear space.
  * Non-compliance is grounds for rejection during provider app review, which
  * blocks launch. The four SVGs below are copied verbatim from the design file —
  * treat any change as a correctness question rather than a taste question, and
@@ -15,8 +15,8 @@
  *
  * The skins live in `.pv-provider--*` in `design/components.css`, including the
  * per-provider hex values the guidelines mandate. Those are the one place in
- * the design system where literal colours are permitted, precisely because they
- * are not ours to tokenise.
+ * the design system where literal colors are permitted, precisely because they
+ * are not ours to tokenize.
  */
 
 import type { ButtonHTMLAttributes, ReactElement } from "react";

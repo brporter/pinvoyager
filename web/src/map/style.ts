@@ -18,10 +18,10 @@
  * URL would be a breach of it rather than merely impolite.
  *
  * The consequence that shows up visually: raster tiles arrive already drawn.
- * There is no way to recolour them, so the dark basemap in
+ * There is no way to recolor them, so the dark basemap in
  * `design/components/map-primitives.html` is unreachable until the self-hosted
  * vector archive that decision D4 describes is in place. The map is a
- * light-coloured OpenStreetMap render regardless of the page theme, and the
+ * light-colored OpenStreetMap render regardless of the page theme, and the
  * pins and clusters sit on top of it.
  *
  * ## Switching to vector tiles later
@@ -64,7 +64,7 @@ const SOURCE_MAX_ZOOM = 19;
  */
 export const MAX_ZOOM = SOURCE_MAX_ZOOM + 1;
 
-/** The tiles are a light-coloured render. See the note above about D4a. */
+/** The tiles are a light-colored render. See the note above about D4a. */
 export const BASEMAP_IS_DARK = false;
 
 /**
@@ -73,7 +73,7 @@ export const BASEMAP_IS_DARK = false;
  * MapLibre's own attribution control is switched off in `MapCanvas` because the
  * design draws this notice itself (`.pv-attribution`), so this string is
  * carried on the source for completeness and is not what the user reads. The
- * rendered notice is the `Attribution` component, and it is a licence
+ * rendered notice is the `Attribution` component, and it is a license
  * requirement under ODbL rather than a courtesy.
  */
 export const ATTRIBUTION = "© OpenStreetMap contributors";

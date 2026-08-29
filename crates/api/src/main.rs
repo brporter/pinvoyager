@@ -14,8 +14,8 @@ use pinvoyager_api::{AppState, Config, db, http, telemetry};
 #[tokio::main]
 async fn main() -> ExitCode {
     if let Err(err) = run().await {
-        // Telemetry may not be initialised yet, so this goes to stderr
-        // directly. Losing a startup failure to an uninitialised subscriber is
+        // Telemetry may not be initialized yet, so this goes to stderr
+        // directly. Losing a startup failure to an uninitialized subscriber is
         // a genuinely annoying way to spend an afternoon.
         eprintln!("fatal: {err}");
         let mut source = std::error::Error::source(&*err);
@@ -43,7 +43,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Discovery happens once, here. A provider that fails to come up is logged
     // and disabled rather than fatal — one provider's outage must not stop the
     // service from serving the other three.
-    // Third line of defence behind `#[cfg(debug_assertions)]` and the flag
+    // Third line of defense behind `#[cfg(debug_assertions)]` and the flag
     // itself. Loud because a forged-login endpoint reachable by accident is the
     // whole game, and a warning nobody notices is the same as no warning.
     #[cfg(debug_assertions)]

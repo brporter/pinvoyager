@@ -6,7 +6,7 @@
  *
  *  1. `aria-invalid="true"` on the control, which the design system turns into
  *     a red border.
- *  2. A visible message carrying an icon as well as colour, because colour
+ *  2. A visible message carrying an icon as well as color, because color
  *     alone is never the only signal.
  *  3. `aria-describedby` pointing at that message, so a screen reader announces
  *     it when the control takes focus rather than leaving someone to discover a

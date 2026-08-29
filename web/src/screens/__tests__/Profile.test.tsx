@@ -2,7 +2,7 @@
  * Profile — who sees a draft, and who must not know one exists.
  *
  * The draft test is the one that matters. A stranger seeing a Draft badge, a
- * greyed-out card, or a count that does not add up would undo the server's
+ * grayed-out card, or a count that does not add up would undo the server's
  * choice to answer 404 rather than 403 for an unpublished voyage.
  */
 

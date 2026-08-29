@@ -14,7 +14,7 @@
  * It owns no knowledge of voyages, photographs, pins or selection; those are
  * `VoyageMap.tsx`. The two are separated because the camera and the tile source
  * are the parts that change when the basemap is swapped for self-hosted vector
- * tiles, and the pin behaviour is the part that must not have to change with
+ * tiles, and the pin behavior is the part that must not have to change with
  * it.
  *
  * ## Markers rather than a symbol layer
@@ -83,11 +83,11 @@ export interface MapView {
   zoom: number;
 
   /**
-   * Moves the camera, honouring the reduced-motion preference.
+   * Moves the camera, honoring the reduced-motion preference.
    *
    * Offered here rather than as an exported hook so that nothing outside this
    * file needs the MapLibre instance to move the map. That is what keeps the
-   * pin and selection behaviour independent of the mapping library: swapping
+   * pin and selection behavior independent of the mapping library: swapping
    * MapLibre out means rewriting this file, not every caller.
    *
    * `zoom` is absolute, not a delta, and omitting it leaves the zoom alone.
@@ -125,7 +125,7 @@ export interface MapCanvasProps {
   maxFitZoom?: number;
   /**
    * Pixels to lift the attribution by, so the mobile sheet does not cover it.
-   * The notice is a licence requirement, so it is not allowed to slide out of
+   * The notice is a license requirement, so it is not allowed to slide out of
    * sight behind another element.
    */
   attributionOffset?: number;
@@ -287,7 +287,7 @@ export function MapCanvas({
    * the camera, the camera settles, `moveend` updates this component's state,
    * the callback is rebuilt, the effect's dependencies have changed, and the
    * effect eases the camera again. That is an endless flight, and it is not a
-   * test artefact — `moveend` fires in a browser for the same reason.
+   * test artifact — `moveend` fires in a browser for the same reason.
    */
   const moveTo = useCallback(
     (coordinate: LngLat, options?: { zoom?: number }) => {
@@ -357,7 +357,7 @@ export interface MapMarkerProps {
   /**
    * Drawn at the coordinate. Positioned by the design system's own rules — see
    * the note on the anchor element below — so a `.pv-pin` puts its visible tip
-   * on the point and a `.pv-cluster` centres its bubble on it.
+   * on the point and a `.pv-cluster` centers its bubble on it.
    */
   children: ReactNode;
 }
@@ -371,8 +371,8 @@ export interface MapMarkerProps {
  * involved, so panning a voyage with a hundred pins does not run a hundred
  * component renders per frame.
  *
- * The anchor element is deliberately **zero-sized**. MapLibre centres it on the
- * coordinate, and a zero-sized box's centre is its top-left, so the coordinate
+ * The anchor element is deliberately **zero-sized**. MapLibre centers it on the
+ * coordinate, and a zero-sized box's center is its top-left, so the coordinate
  * ends up at the element's origin. Everything drawn inside then positions
  * itself with the same `position: absolute` and negative margins the design
  * system already uses on `.pv-map` — `.pv-pin` offsets by half its width and
@@ -409,7 +409,7 @@ export function MapMarker({ coordinate, children }: MapMarkerProps) {
     // The coordinate is not a dependency on purpose. A marker that moves is
     // repositioned by the effect below; tearing it down and rebuilding it would
     // destroy the portal's host element, which throws away any focus inside it
-    // — so a keyboard user whose selected pin shifted by a metre would lose
+    // — so a keyboard user whose selected pin shifted by a meter would lose
     // their place on the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, element]);

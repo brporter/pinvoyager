@@ -57,9 +57,9 @@ describe("/auth/callback", () => {
 
   it("names the provider in the cancellation copy and offers a way back", () => {
     stubMe(401);
-    renderAt("/auth/callback?status=cancelled&provider=google");
+    renderAt("/auth/callback?status=canceled&provider=google");
 
-    expect(screen.getByRole("heading", { name: "Sign-in cancelled" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sign-in canceled" })).toBeInTheDocument();
     expect(
       screen.getByText(/You declined access at Google, so nothing was created\./),
     ).toBeInTheDocument();

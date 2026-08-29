@@ -9,7 +9,7 @@
 //! * **D8** — every database operation is async, and nothing that blocks may
 //!   run on a runtime worker thread. CPU-bound work goes through
 //!   [`blocking::run_blocking`], never inline in a handler.
-//! * **D7** — user uploads are served only through an authorising handler,
+//! * **D7** — user uploads are served only through an authorizing handler,
 //!   never as static files.
 
 pub mod auth;

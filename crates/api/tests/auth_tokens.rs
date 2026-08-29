@@ -55,7 +55,7 @@ async fn registry_for(mock: &MockOidcProvider) -> ProviderRegistry {
 }
 
 /// A provider that failed discovery is *disabled*, not fatal — which is correct
-/// behaviour, and which would also make every rejection test below pass without
+/// behavior, and which would also make every rejection test below pass without
 /// verifying anything, because there would be no provider to call. So the
 /// absence of the provider is an error here, loudly.
 #[track_caller]
@@ -123,7 +123,7 @@ async fn the_mock_publishes_the_key_it_signs_with_and_only_that_key() {
     // would disable the provider rather than fail a token check — and every
     // rejection test would then pass for the wrong reason.
     // Compared against the issuer *identifier*, not `issuer().as_str()`: `Url`
-    // normalises a bare origin to carry a trailing slash, real providers
+    // normalizes a bare origin to carry a trailing slash, real providers
     // publish it without one, and the service trims the configured side to
     // match. Asserting against the un-trimmed form is what let a one-character
     // mismatch disable the provider while this self-check still passed.
@@ -318,7 +318,7 @@ async fn an_expired_token_is_rejected() {
 }
 
 // ---------------------------------------------------------------------------
-// Nonce. The replay defence, and the one most easily left out, because
+// Nonce. The replay defense, and the one most easily left out, because
 // everything works without it.
 // ---------------------------------------------------------------------------
 

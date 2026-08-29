@@ -1,5 +1,5 @@
 /**
- * Behaviour of the voyage create/edit screen.
+ * Behavior of the voyage create/edit screen.
  *
  * The two things worth protecting here are the ones that are silently wrong
  * rather than visibly broken: a validation message that lands in a banner

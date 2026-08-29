@@ -304,7 +304,7 @@ describe("the captured fixtures", () => {
     expect(me.identities.length).toBeGreaterThan(0);
     expect(me.user.avatar_url).toBeNull();
 
-    // Counted after rounding: two photographs a few hundred metres apart are
+    // Counted after rounding: two photographs a few hundred meters apart are
     // one place at ~10 km. If these were equal the fixture would not
     // distinguish the two counts, and a client that confused them would pass.
     expect(voyageDetail.placed_count).toBe(2);

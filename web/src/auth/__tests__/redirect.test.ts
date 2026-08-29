@@ -30,7 +30,7 @@ describe("safeRedirect", () => {
       // reaches the server's `Location`.
       "/discover\r\nSet-Cookie: a=b",
       "/discover\nX: y",
-      // On-site is not by itself enough. An unrecognised path is a typo or a
+      // On-site is not by itself enough. An unrecognized path is a typo or a
       // probe, not a destination.
       "/admin",
       // Prefix matches without a separator — the reason the check looks at the
@@ -44,7 +44,7 @@ describe("safeRedirect", () => {
     }
   });
 
-  it("keeps a recognised on-site path verbatim", () => {
+  it("keeps a recognized on-site path verbatim", () => {
     const allowed = [
       "/",
       "/discover",

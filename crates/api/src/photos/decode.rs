@@ -67,7 +67,7 @@ pub fn decode(path: &Path, format: ImageFormat) -> Result<DynamicImage, PhotoErr
 /// Bakes an EXIF orientation into the pixels.
 ///
 /// Necessary because the variant is stripped of metadata: a photo shot in
-/// portrait carries orientation 6 and looks correct only because viewers honour
+/// portrait carries orientation 6 and looks correct only because viewers honor
 /// the tag. Strip the tag without rotating the pixels and every portrait photo
 /// in the product appears sideways — a bug that looks like a display problem
 /// and is actually a pipeline one.
@@ -280,7 +280,7 @@ pub(crate) mod testutil {
 
     /// An image with no two quadrants alike.
     ///
-    /// Asymmetry in *both* axes is the whole point: a square of one colour, or
+    /// Asymmetry in *both* axes is the whole point: a square of one color, or
     /// a pattern symmetric about either axis, cannot tell a rotation from a
     /// mirror, which is exactly the confusion the orientation tests exist to
     /// catch.
@@ -603,7 +603,7 @@ mod tests {
         context
             .encode_image(&heif_image, &mut encoder, None)
             .expect("encode heic fixture");
-        Some(context.write_to_bytes().expect("serialise heic fixture"))
+        Some(context.write_to_bytes().expect("serialize heic fixture"))
     }
 
     /// The HEIC path (D9), exercised through libheif in both directions.
@@ -622,8 +622,8 @@ mod tests {
         let decoded = decode(&path, ImageFormat::Heic).expect("decode heic");
         assert_eq!(decoded.dimensions(), (width, height));
 
-        // Lossless in, so the quadrants should come back recognisably — but
-        // through a YCbCr round trip, hence "recognisably" rather than "equal".
+        // Lossless in, so the quadrants should come back recognizably — but
+        // through a YCbCr round trip, hence "recognizably" rather than "equal".
         let [top_left, top_right, bottom_left, bottom_right] = corners(&decoded);
         assert!(top_left.0[0] > 200 && top_left.0[1] < 60, "{top_left:?}");
         assert!(top_right.0[1] > 200 && top_right.0[0] < 60, "{top_right:?}");

@@ -124,7 +124,7 @@ fn is_iso_bmff(reader: &mut BufReader<File>) -> bool {
     matches!(reader.read_exact(&mut header), Ok(())) && &header[4..8] == b"ftyp"
 }
 
-/// When the shutter fired, normalised to UTC.
+/// When the shutter fired, normalized to UTC.
 ///
 /// `DateTimeOriginal` is preferred over `DateTime`: the former is when the
 /// picture was taken, the latter is when the file was last written, and an edit
@@ -255,7 +255,7 @@ mod tests {
     use crate::photos::decode::testutil::{ScratchDir, exiftool, write_jpeg};
 
     /// Tolerance for a coordinate that has been through exiftool's
-    /// decimal → DMS-rational → decimal round trip. Roughly a centimetre;
+    /// decimal → DMS-rational → decimal round trip. Roughly a centimeter;
     /// tight enough that any *rounding* of the value would blow straight
     /// through it.
     const EPSILON: f64 = 1e-9;

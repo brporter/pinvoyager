@@ -123,7 +123,7 @@ describe("protected routes, signed in", () => {
 describe("the redirect target is validated, not merely carried", () => {
   it("refuses an off-site destination handed to the sign-in screen", async () => {
     stubMe(200, SIGNED_IN);
-    // A signed-in user following a crafted link. Honouring this would send the
+    // A signed-in user following a crafted link. Honoring this would send the
     // browser to another origin from a URL that showed our domain the whole
     // way — which is exactly what makes a sign-in link worth forging.
     renderAt("/signin?redirect_to=https%3A%2F%2Fevil.example%2F");
@@ -153,7 +153,7 @@ describe("the redirect target is validated, not merely carried", () => {
     });
   });
 
-  it("honours a destination that does pass", async () => {
+  it("honors a destination that does pass", async () => {
     stubMe(200, SIGNED_IN);
     renderAt("/signin?redirect_to=%2Fvoyages%2Fabc%2Fedit");
 

@@ -49,18 +49,18 @@ use pinvoyager_api::voyages::Granularity;
 /// Sapporo, roughly, to six decimal places — exactly what `numeric(9, 6)`
 /// stores, so the value round-trips without the database rewriting the digits.
 ///
-/// Deliberately not a round number. `43.0` is a plausible cell centre and would
+/// Deliberately not a round number. `43.0` is a plausible cell center and would
 /// appear in a correctly rounded response by coincidence, so a sweep for it
 /// would fail against a perfectly good implementation.
 const EXACT_LAT: f64 = 43.061_234;
 const EXACT_LON: f64 = 141.354_321;
 
-/// What the sweep searches for: five decimal places, roughly one metre.
+/// What the sweep searches for: five decimal places, roughly one meter.
 ///
 /// A prefix rather than the whole value, so a leak dressed up as a truncation
-/// still trips it. It cannot collide with a legitimate ~10 km cell centre —
-/// that would be an agreement to within a metre, a coincidence of one in ten
-/// million rather than a rounding artefact.
+/// still trips it. It cannot collide with a legitimate ~10 km cell center —
+/// that would be an agreement to within a meter, a coincidence of one in ten
+/// million rather than a rounding artifact.
 const LAT_PREFIX: &str = "43.06123";
 const LON_PREFIX: &str = "141.35432";
 
@@ -383,8 +383,8 @@ async fn each_voyage_is_rounded_to_its_own_precision(pool: PgPool) {
 // Clustering
 // ---------------------------------------------------------------------------
 
-/// Two photographs a few hundred metres apart, drawn as one marker when the
-/// camera is far out and as two when it is close in. This is the behaviour the
+/// Two photographs a few hundred meters apart, drawn as one marker when the
+/// camera is far out and as two when it is close in. This is the behavior the
 /// endpoint exists for.
 #[sqlx::test]
 async fn nearby_photographs_merge_at_a_low_zoom_and_separate_at_a_high_one(pool: PgPool) {
@@ -546,7 +546,7 @@ async fn a_latitude_off_the_globe_is_refused(pool: PgPool) {
 /// "in range" for it. What the value then projects to is a pixel coordinate
 /// with no grid cell.
 ///
-/// This asserts the behaviour, not which line produces it — the range checks and
+/// This asserts the behavior, not which line produces it — the range checks and
 /// the explicit `is_finite` guard both reject it as the code stands.
 #[sqlx::test]
 async fn a_coordinate_that_is_not_a_number_is_refused(pool: PgPool) {

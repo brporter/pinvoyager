@@ -27,7 +27,7 @@
 //! Two things follow that are easy to get wrong:
 //!
 //! * **The list endpoint needs it too.** A voyage summary that carried a
-//!   "centre" coordinate would leak at exactly the same precision as the
+//!   "center" coordinate would leak at exactly the same precision as the
 //!   detail view, and it is the endpoint nobody thinks to check.
 //! * **So do error messages.** An error that echoes a coordinate back — "no
 //!   photo at 43.06, 141.35" — leaks it just as effectively as a success.
@@ -105,7 +105,7 @@ const MAX_PHOTO_IDS: usize = 500;
 const TITLE_REQUIRED: &str = "A title is required before publishing.";
 const TITLE_TOO_LONG: &str = "That title is longer than we can store.";
 const DESCRIPTION_TOO_LONG: &str = "That description is longer than we can store.";
-const UNKNOWN_GRANULARITY: &str = "That is not a location precision we recognise.";
+const UNKNOWN_GRANULARITY: &str = "That is not a location precision we recognize.";
 const NO_PHOTOS_NAMED: &str = "Name at least one photograph.";
 const TOO_MANY_PHOTOS: &str = "That is more photographs than one request can carry.";
 const NOT_YOUR_PHOTO: &str =
@@ -161,7 +161,7 @@ fn place(
 
 /// Parses a granularity as stored, failing **closed**.
 ///
-/// The column has a CHECK constraint, so an unrecognised value means this build
+/// The column has a CHECK constraint, so an unrecognized value means this build
 /// is older than the migration that added a fifth step. The safe reading of an
 /// unknown precision is the coarsest one available, never `exact`: a rollback
 /// to a previous release must not turn every coarse voyage into an exact one
@@ -242,7 +242,7 @@ struct VoyageResponse {
     /// What to print beside a pin, so the client does not invent its own
     /// wording for the precision it is looking at.
     granularity_label: &'static str,
-    /// Radius in metres for the area phase 7 draws instead of a pin. `null` at
+    /// Radius in meters for the area phase 7 draws instead of a pin. `null` at
     /// exact precision, which is the only case where a sharp pin is honest.
     precision_m: Option<u32>,
     created_at: DateTime<Utc>,
@@ -293,11 +293,11 @@ struct VoyagePhotoResponse {
 /// The design's card shows a cover image, a title, an author and the
 /// granularity *label* — the label is the point: a browser scanning the grid
 /// can see that one creator publishes exact coordinates and another publishes
-/// to ~50 km before the map loads. A "centre" coordinate on a card would leak
+/// to ~50 km before the map loads. A "center" coordinate on a card would leak
 /// at exactly the precision the detail view does, from the endpoint nobody
 /// thinks to check.
 ///
-/// If a later phase does want a centre here, it must be an
+/// If a later phase does want a center here, it must be an
 /// [`Option<Coordinate>`] built through [`place`] — this struct has no `f64`
 /// field for it to be added as, which is the point of the shape.
 #[derive(Debug, Serialize)]
@@ -787,7 +787,7 @@ struct DiscoverMapQuery {
 /// A group of photographs the discovery map draws as one marker.
 #[derive(Debug, Serialize)]
 struct DiscoverCluster {
-    /// **A real photograph's published position**, not a computed centre.
+    /// **A real photograph's published position**, not a computed center.
     ///
     /// That is a deliberate constraint rather than a convenience. [`Coordinate`]
     /// has private fields and one constructor, so the only way to put a
@@ -922,7 +922,7 @@ struct Bbox {
 }
 
 const BAD_BOUNDS: &str = "That is not a rectangle we can look in.";
-const BAD_ZOOM: &str = "That is not a zoom level we recognise.";
+const BAD_ZOOM: &str = "That is not a zoom level we recognize.";
 
 /// The zoom levels the map can be at. Zero is the whole world in one tile; the
 /// tile source stops at 19 and the client allows one blurry level past it.
@@ -991,7 +991,7 @@ fn to_degrees(value: f64, low: f64, high: f64) -> rust_decimal::Decimal {
 
 /// Groups already-rounded positions into one marker per grid cell.
 ///
-/// A fixed grid rather than the greedy nearest-neighbour grouping the browser
+/// A fixed grid rather than the greedy nearest-neighbor grouping the browser
 /// uses for a single voyage. Both are defensible; the grid is chosen here
 /// because it is linear in the number of photographs rather than quadratic, and
 /// this endpoint's input is bounded by [`DISCOVER_MAP_LIMIT`] rather than by
@@ -1636,7 +1636,7 @@ mod tests {
 
     /// The endpoint nobody thinks to check. A discovery card carries the
     /// precision *label* and no location whatsoever — the label is what tells a
-    /// browser what they are about to look at, and a centre coordinate would
+    /// browser what they are about to look at, and a center coordinate would
     /// leak at exactly the precision the detail view does.
     #[test]
     fn a_discovery_card_carries_a_precision_label_and_no_location() {
@@ -1994,7 +1994,7 @@ mod tests {
     /// cell.
     #[test]
     fn places_are_counted_after_rounding() {
-        // Two points a few hundred metres apart: distinct at exact precision,
+        // Two points a few hundred meters apart: distinct at exact precision,
         // one place at ~50 km.
         let near = |lat: f64, lon: f64| VoyagePhoto {
             latitude: Some(lat),

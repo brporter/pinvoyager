@@ -166,7 +166,7 @@ describe("DiscoverMap — what it draws", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  /** Required by the ODbL licence, on every map instance, including this one. */
+  /** Required by the ODbL license, on every map instance, including this one. */
   it("shows the OpenStreetMap attribution", () => {
     answer();
     renderMap();

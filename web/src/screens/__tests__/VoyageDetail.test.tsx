@@ -1,5 +1,5 @@
 /**
- * Behaviour of the voyage detail screen.
+ * Behavior of the voyage detail screen.
  *
  * The API hooks are mocked rather than a server being stood up: what these
  * tests are about is what the screen does with a voyage once it has one, and
@@ -33,7 +33,7 @@ vi.mock("../../api/hooks", () => ({ useVoyage: vi.fn() }));
 // MapLibre needs a WebGL context and jsdom has none, so the real library cannot
 // be constructed here at all. The substitute in `web/__mocks__/maplibre-gl.ts`
 // keeps markers as real DOM elements, which is the only part of it this
-// screen's behaviour depends on.
+// screen's behavior depends on.
 vi.mock("maplibre-gl");
 
 /* -- fixtures ------------------------------------------------------------ */
@@ -139,7 +139,7 @@ function renderScreen() {
  * The map is code-split — `src/map/LazyVoyageMap.tsx` — so it is not in the
  * first render, and until its chunk resolves the screen shows a placeholder of
  * the same dimensions. The zoom controls are the readiness signal because they
- * exist only in the real map component, whereas the labelled region exists in
+ * exist only in the real map component, whereas the labeled region exists in
  * the placeholder too and would match immediately.
  */
 async function mapReady(): Promise<void> {
