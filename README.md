@@ -1,15 +1,16 @@
 # PinVoyager
 
-A public photo-travelogue site. Sign in with a social provider, upload photos, and group
-them into **voyages** rendered as pins on an interactive map. Pin locations come from EXIF
-data in the photos themselves, at a granularity each user controls.
+A photo travelogue site. Users sign in with a social provider, upload photos, and group
+them into **voyages** shown on an interactive map. The app reads locations from photo EXIF
+data and lets each user choose the precision shown to the public.
 
-Every voyage is public. There is no private mode.
+Draft voyages are visible only to their owners. Published voyages are public.
 
 ## Status
 
-Pre-implementation. The repository currently holds the design system and the phase plans.
-No application code exists yet.
+The Rust API and React app are in the repository. See the [phase index](docs/plans/README.md)
+for work completed and work still in progress. See [running locally](docs/running.md) to start
+the app.
 
 ## Repository layout
 
@@ -17,7 +18,10 @@ No application code exists yet.
 |---|---|
 | `docs/decisions.md` | Locked architectural decisions. Read this before proposing anything that contradicts one. |
 | `docs/plans/` | One document per phase. The unit of work. |
+| `docs/designs/` | Mermaid diagrams of routes and data flows, based on the current code. |
 | `design/` | Design system source — tokens, component previews, screens, flow diagrams. |
+| `crates/api/` | Rust API, database migrations, and integration tests. |
+| `web/` | React app, API client, maps, and component tests. |
 
 ## How work is organized
 
@@ -43,6 +47,7 @@ Claude Design project for review.
 
 - **Backend** — Rust: axum, tokio, sqlx, PostgreSQL
 - **Frontend** — React, TypeScript, Vite, MapLibre GL JS
-- **Map tiles** — self-hosted Protomaps `.pmtiles`, OpenStreetMap data
-- **Auth** — OIDC/OAuth2 against Google, Microsoft, Apple, and Facebook. No credentials of
-  any kind are stored.
+- **Map tiles** — OpenStreetMap raster tiles during development; self-hosted Protomaps
+  `.pmtiles` remain planned for release
+- **Auth** — OIDC/OAuth2 against Google, Microsoft, Apple, and Facebook. The app stores no
+  user passwords or long-lived provider tokens.

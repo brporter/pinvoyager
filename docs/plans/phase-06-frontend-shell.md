@@ -60,9 +60,9 @@ Everything under `design/components/` and `design/screens/`.
 
 ## Notes
 
-T2 is the load-bearing target. The reason phase 1 produced a real `tokens.css` rather than a
-specification document is so this import is direct. Copying values into a TypeScript theme
-object would make the design system a snapshot that immediately starts drifting.
+T2 requires the frontend to import `design/tokens.css` directly. Phase 1 created that file
+so the app and design previews use the same values. Copying those values into a TypeScript
+theme would create a second set that could diverge.
 
 The map placeholder should occupy the true dimensions from the design so the layout is
-genuinely exercised at both breakpoints before phase 7 drops a real map into it.
+checked at both breakpoints before phase 7 adds the real map.

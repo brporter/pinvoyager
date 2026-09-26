@@ -154,18 +154,20 @@ marker on a map is the whole feature.
   was taken. This is one of the reasons the design draws an area rather than a pin at coarse
   precision: an area over a region claims nothing about the label at its center.
 
-## D6 — All voyages are public
+## D6 — Published voyages are public
 
-There is no private or unlisted mode. Anything uploaded and attached to a voyage is world-
-readable.
+Draft voyages are owner-only and return 404 to other callers. Once published, a voyage and
+its attached photos are public. There is no private or unlisted published mode. Owner-only
+photo metadata may include exact coordinates; public responses apply the voyage's chosen
+granularity.
 
 **Why:** it is the product. Introducing visibility levels later would touch every query,
 every cache, and every authorization check, so it must not be assumed away now.
 
-**Consequences that are load-bearing, not optional:**
+**Required consequences:**
 
-- **Derived variants must be re-encoded with all metadata stripped.** Every voyage being
-  public means a served image is a public artifact. If a user selects coarse granularity but
+- **Derived variants must be re-encoded with all metadata stripped.** Published voyages
+  make served images public artifacts. If a user selects coarse granularity but
   the served JPEG still carries its original GPS EXIF, the granularity setting is decorative
   and leaks exact coordinates to anyone who downloads the file. Stripping is what makes the
   setting real.
@@ -300,7 +302,7 @@ of several coordinates is not a thing that can be serialized. See D6.
 
 ---
 
-## Defaults, not yet load-bearing
+## Defaults that can change
 
 Chosen as reasonable starting points. Change them here if you disagree; nothing depends on
 them deeply yet.

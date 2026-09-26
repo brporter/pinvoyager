@@ -4,7 +4,7 @@
 
 - Read `docs/decisions.md` before changing architecture or product behavior. It outranks the phase plans. Update it first if a settled decision needs to change.
 - For phase work, read the relevant document in `docs/plans/` and the working agreement in `docs/plans/README.md`. Treat its numbered targets and acceptance criteria as the scope; resolve consequential open questions before implementation. Update phase status only when the acceptance criteria are met.
-- `README.md` still describes the repository as pre-implementation. Use the current code and `docs/running.md` for the actual application and local setup.
+- Use `README.md` for the repository overview and `docs/running.md` for local setup.
 
 ## Repository map
 
@@ -12,6 +12,7 @@
 - `web/`: React and TypeScript app, API client, screens, map, and component tests.
 - `design/`: design system and HTML reference screens. `design/tokens.css` is the shared source for visual tokens; the app imports it through `web/src/styles/index.css`.
 - `docs/plans/`: phased delivery plans. `docs/decisions.md` records binding product and architecture choices.
+- `docs/designs/`: diagrams of current routes and data flows, derived from the code.
 - `.sqlx/`: committed offline query metadata. Regenerate it after changing checked SQL queries.
 
 ## Product and implementation constraints

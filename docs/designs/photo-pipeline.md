@@ -4,7 +4,7 @@ Upload → validate → store → extract EXIF → derive variants → serve.
 
 Three rules govern all of it:
 
-- **Variants carry no metadata.** Every voyage is public, so a served image is a
+- **Variants carry no metadata.** Published voyages are public, so a served image is a
   public artifact. If a user picks coarse granularity and the served file still
   carries its original GPS EXIF, the setting is decorative.
 - **Nothing is served from disk directly.** Every read goes through a handler

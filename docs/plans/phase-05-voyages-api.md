@@ -17,7 +17,7 @@ the photos in that voyage to the library.
 - No frontend (phases 6–7).
 - No comments, likes, follows, or any social layer.
 - No search or discovery ranking (phase 8).
-- No visibility levels. All voyages are public per D6.
+- No private or unlisted published voyages. Drafts remain owner-only; see D6.
 
 ## Targets
 

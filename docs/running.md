@@ -91,7 +91,7 @@ normally. Re-running with the same `subject` signs in to the same account rather
 than creating a second one, exactly as a returning provider sign-in does.
 
 `subject` is stored as the **provider subject**, not as an email — this service
-holds no email address anywhere. An email-shaped string is simply a memorable
+holds no email address anywhere. An email-shaped string is a memorable
 handle for choosing which account you are.
 
 **This is a complete authentication bypass.** It is absent from release builds

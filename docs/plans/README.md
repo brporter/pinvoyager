@@ -2,9 +2,8 @@
 
 Work on PinVoyager is organized into numbered phases. Each phase has one document here.
 
-These documents are the interface between you and whoever executes the work. They exist so
-that a phase can be handed over and carried out largely independently, without a running
-conversation to fill in gaps.
+Each plan gives the next person enough detail to complete a phase without guessing at its
+targets or acceptance criteria.
 
 ## Index
 
@@ -16,12 +15,11 @@ conversation to fill in gaps.
 | 4 | Photo pipeline | complete | [phase-04-photo-pipeline.md](phase-04-photo-pipeline.md) |
 | 5 | Voyages API | complete | [phase-05-voyages-api.md](phase-05-voyages-api.md) |
 | 6 | Frontend shell | complete | [phase-06-frontend-shell.md](phase-06-frontend-shell.md) |
-| 7 | Map experience | not started | [phase-07-map-experience.md](phase-07-map-experience.md) |
+| 7 | Map experience | in progress — tile hosting and manual checks remain | [phase-07-map-experience.md](phase-07-map-experience.md) |
 | 8 | Discovery & polish | not started | [phase-08-discovery-polish.md](phase-08-discovery-polish.md) |
 
-Phases 2–8 are first drafts. They are deliberately unfinished — sharpen the targets of a
-phase before starting it, not all of them up front, because what you learn in phase 3 will
-change what you want from phase 4.
+Before starting a phase, check its targets against the current code and decisions. Update
+outdated targets and open questions before building.
 
 ## Working agreement
 
@@ -46,6 +44,15 @@ is your call, not the executor's.
 
 **Decisions live in `docs/decisions.md`.** Anything settled there is settled. A phase document
 that contradicts it is a bug in the phase document.
+
+## Writing plans and handoff notes
+
+- Use plain English and active voice. Name the actor and the observable result.
+- Cite a file and line number when describing existing code. Include a command, response, or
+  screen example when it makes a target easier to check.
+- Remove filler words and explain terms a new contributor may not know.
+- Use [TEMPLATE.md](TEMPLATE.md) for new phases. Keep targets, acceptance criteria, and status
+  in sync when work changes.
 
 ## Conventions
 

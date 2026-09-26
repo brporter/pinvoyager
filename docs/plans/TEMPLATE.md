@@ -6,29 +6,26 @@
 
 ## Goal
 
-One paragraph. What is true when this phase is done that is not true now. Write it as an
-outcome, not an activity — "a user can sign in with Google and their session survives a
-restart," not "implement Google auth."
+State the result in one paragraph. For example: "A user can sign in with Google, and their
+session survives a restart."
 
 ## Non-goals
 
-What this phase deliberately does not do. This section is what keeps scope from creeping
-mid-execution, so it is worth being specific about the tempting adjacent work.
+Name work outside this phase so readers can see its limits.
 
 - ...
 
 ## Targets
 
-Numbered, independently verifiable, and specific enough that two people would agree on
-whether one is met.
+Number each target. State what someone can check to decide whether it is complete.
 
 1. ...
 2. ...
 
 ## Acceptance criteria
 
-How each target is proven. A command to run, a screen to look at, a test that passes, an
-HTTP response to observe. One entry per target where possible.
+Give a check for each target where possible: a command, a screen, a test result, or an HTTP
+response. For example: "POST /api/photos with a file over 25 MB returns 413."
 
 - **T1** — ...
 - **T2** — ...
@@ -42,11 +39,12 @@ surface.
 
 ## Open questions
 
-Things that are genuinely undecided and would change the work. Anything here should be
-resolved before execution starts rather than assumed.
+List decisions that would change the work. Resolve them before implementation.
 
 - ...
 
 ## Notes
 
-Context, gotchas, links to provider documentation, prior art. Free-form.
+Add context and source links. Cite files and line numbers for claims about existing code.
+Use plain English and active voice. Show a command, response, or file example when it makes
+a target or decision clearer. Remove filler words and unexplained jargon.

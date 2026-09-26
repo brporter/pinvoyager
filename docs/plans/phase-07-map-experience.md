@@ -1,6 +1,6 @@
 # Phase 7 — Map experience
 
-**Status:** complete, except for targets 1–3 (deferred under D4a) and the hand checks below
+**Status:** in progress — tile hosting and the manual checks under "Still outstanding" remain
 **Depends on:** phase 6
 **Owner:** Claude
 

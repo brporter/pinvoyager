@@ -10,7 +10,7 @@ There are two maps and they work differently on purpose.
 
 ## The granularity boundary
 
-Every voyage is public, and exact coordinates are stored so a user can loosen or
+Published voyages are public, and the database stores exact coordinates so a user can loosen or
 tighten precision later. This code is the only thing standing between an EXIF
 coordinate and the world.
 

@@ -119,9 +119,9 @@ sequenceDiagram
 
 The destination is validated on the client in `safeRedirect`
 (`web/src/auth/redirect.ts:43`) and again on the server in
-`http::auth::safe_redirect`. The client copy is not load-bearing for security;
-it exists so the client never sends a destination the server would silently
-drop, which would strand the user at `/` with no explanation.
+`http::auth::safe_redirect`. The server makes the security decision. The client
+checks the same destination so it does not send a value the server would drop
+and leave the user at `/` without an explanation.
 
 The allowlist is `/`, `/discover`, `/settings`, `/upload`, `/voyages`, matching
 a prefix only at a `/` boundary — so `/settings-evil.example` does not pass on
