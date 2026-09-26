@@ -16,6 +16,25 @@ export default defineConfig({
     },
   },
 
+  optimizeDeps: {
+    // MapLibre decodes tiles in a Web Worker, which it loads as a sibling file
+    // (`maplibre-gl-worker.mjs`) rather than as an import. Vite's dependency
+    // pre-bundler rewrites the entry but does not carry the worker across, so
+    // the dev server logs
+    //
+    //   The file does not exist at ".../deps/maplibre-gl-worker.mjs"
+    //
+    // and the map renders no tiles at all — a gray panel with the pins drawn
+    // correctly on top of it, which looks like a tile-server problem rather
+    // than a bundler one.
+    //
+    // Excluding it costs nothing: maplibre-gl ships as a single pre-bundled
+    // ESM file, so pre-bundling it again buys no request savings. This affects
+    // the dev server only; the production build resolves the worker through
+    // Rollup and has always been correct.
+    exclude: ["maplibre-gl"],
+  },
+
   server: {
     port: 5173,
     proxy: {
