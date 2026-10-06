@@ -9,7 +9,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -100,17 +100,19 @@ function mutationResult(partial: {
 interface Setup {
   data?: Voyage;
   update?: Parameters<typeof mutationResult>[0];
+  remove?: ReturnType<typeof vi.fn>;
+  removeError?: Error | null;
 }
 
-function setup({ data = voyage(), update = {} }: Setup = {}) {
+function setup({ data = voyage(), update = {}, remove = vi.fn(), removeError = null }: Setup = {}) {
   const mutate = update.mutate ?? vi.fn();
   vi.mocked(useVoyage).mockReturnValue(queryResult({ data }));
   vi.mocked(useUpdateVoyage).mockReturnValue(mutationResult({ ...update, mutate }));
   vi.mocked(useDeleteVoyage).mockReturnValue(
-    mutationResult({}) as unknown as ReturnType<typeof useDeleteVoyage>,
+    mutationResult({ mutate: remove as UpdateResult["mutate"], error: removeError }) as unknown as ReturnType<typeof useDeleteVoyage>,
   );
 
-  render(
+  const view = render(
     <MemoryRouter initialEntries={["/voyages/v1/edit"]}>
       <Routes>
         <Route path="/voyages/:id/edit" element={<VoyageEdit />} />
@@ -119,10 +121,22 @@ function setup({ data = voyage(), update = {} }: Setup = {}) {
     </MemoryRouter>,
   );
 
-  return { mutate };
+  return { mutate, view };
+}
+
+function renderAt(path: string, route = "/voyages/:id/edit") {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path={route} element={<VoyageEdit />} />
+        <Route path="*" element={<span>elsewhere</span>} />
+      </Routes>
+    </MemoryRouter>,
+  );
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
@@ -256,6 +270,12 @@ describe("VoyageEdit — publishing", () => {
     );
   });
 
+  it("discards changes and returns to the voyage", async () => {
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByText("elsewhere")).toBeInTheDocument();
+  });
+
   it("clears the description rather than leaving it alone when it is emptied", async () => {
     const { mutate } = setup();
 
@@ -266,6 +286,17 @@ describe("VoyageEdit — publishing", () => {
       expect.objectContaining({ description: null }),
       expect.anything(),
     );
+  });
+
+  it("starts with an empty description when the voyage has none", () => {
+    setup({ data: voyage({ description: null }) });
+    expect(screen.getByLabelText("Description")).toHaveValue("");
+  });
+
+  it("unpublishes a public voyage", async () => {
+    const { mutate } = setup({ data: voyage({ published: true }) });
+    await userEvent.click(screen.getByRole("button", { name: "Unpublish voyage" }));
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ published: false }), expect.anything());
   });
 
   it("offers to unpublish an already public voyage", () => {
@@ -286,9 +317,65 @@ describe("VoyageEdit — photographs", () => {
     expect(grid.querySelectorAll('[data-unplaced="true"]')).toHaveLength(1);
     expect(screen.getByText(/1 photo with no location data/)).toBeInTheDocument();
   });
+
+  it("uses the plural unplaced-photo explanation", () => {
+    setup({
+      data: voyage({
+        photos: [
+          photo({ id: "p1", position: 1 }),
+          photo({ id: "p2", position: 2, coordinate: null, placed: false }),
+          photo({ id: "p3", position: 3, coordinate: null, placed: false }),
+        ],
+        photo_count: 3,
+        unplaced_count: 2,
+      }),
+    });
+    expect(screen.getByText(/2 photos with no location data/)).toBeInTheDocument();
+  });
+
+  it("uses the wide edit layout on desktop", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("min-width: 768px"),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    setup();
+    expect(document.querySelector('div[style*="grid-template-columns"]'))
+      .toHaveStyle({ gridTemplateColumns: "1fr 360px" });
+  });
 });
 
 describe("VoyageEdit — states", () => {
+  it("shows the unavailable state when no voyage id is present", () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({}));
+    renderAt("/edit", "/edit");
+
+    expect(screen.getByText("This voyage is not here")).toBeInTheDocument();
+  });
+
+  it("shows the unavailable state for a missing voyage", () => {
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({ isSuccess: false, isError: true, error: new ApiRequestError({
+        status: 404, code: "not_found", message: "Missing", requestId: null,
+      }) }),
+    );
+    renderAt("/voyages/v1/edit");
+
+    expect(screen.getByText("This voyage is not here")).toBeInTheDocument();
+  });
+
+  it("renders a retry message without a request reference for a regular error", () => {
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({ isSuccess: false, isError: true, error: new Error("offline") }),
+    );
+    renderAt("/voyages/v1/edit");
+
+    expect(screen.getByText(/could not be loaded/)).toBeInTheDocument();
+    expect(screen.queryByText(/Quote reference/)).not.toBeInTheDocument();
+  });
+
   it("says it is loading rather than rendering an empty form", () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ isPending: true, isSuccess: false }));
     vi.mocked(useUpdateVoyage).mockReturnValue(mutationResult({}));
@@ -339,5 +426,68 @@ describe("VoyageEdit — states", () => {
     expect(screen.getByText(/req-3/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it("shows an empty-photo state when the voyage has no photos", () => {
+    setup({ data: voyage({ photo_count: 0, photos: [] }) });
+
+    expect(screen.getByText("No photographs yet")).toBeInTheDocument();
+  });
+
+  it("shows successful save feedback and allows it to be dismissed", async () => {
+    const { mutate } = setup({ update: { mutate: vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined)) } });
+    await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    expect(mutate).toHaveBeenCalled();
+    expect(screen.getByText("Your changes are saved.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("Your changes are saved.")).not.toBeInTheDocument();
+  });
+
+  it("shows published and unpublished feedback after successful changes", async () => {
+    const mutate = vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined));
+    const { view } = setup({ update: { mutate } });
+
+    await userEvent.click(screen.getByRole("button", { name: "Publish voyage" }));
+    expect(screen.getByText(/Locations are shown at ~10 km/)).toBeInTheDocument();
+    view.unmount();
+
+    const unpublish = vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined));
+    setup({ data: voyage({ published: true }), update: { mutate: unpublish } });
+    await userEvent.click(screen.getByRole("button", { name: "Unpublish voyage" }));
+    expect(screen.getByText("Your changes are saved.")).toBeInTheDocument();
+  });
+
+  it("confirms and cancels voyage deletion", async () => {
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: "Delete voyage" }));
+    expect(screen.getByRole("button", { name: "Delete permanently" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(screen.queryByRole("button", { name: "Delete permanently" })).not.toBeInTheDocument();
+  });
+
+  it("shows a deletion error and a fallback when its message is empty", () => {
+    setup({ removeError: new Error("") });
+    expect(screen.getByRole("alert")).toHaveTextContent("That did not delete");
+    expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong at our end.");
+  });
+
+  it("deletes the voyage and returns to discovery after success", async () => {
+    const remove = vi.fn((_id, options) => options?.onSuccess?.());
+    setup({ remove });
+    await userEvent.click(screen.getByRole("button", { name: "Delete voyage" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
+    expect(remove).toHaveBeenCalledWith("v1", expect.anything());
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+  });
+
+  it("submits Enter as a draft save", async () => {
+    const { mutate } = setup();
+    fireEvent.submit(screen.getByLabelText(/Title/).closest("form") as HTMLFormElement);
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Three weeks in Hokkaido",
+      description: "Late winter, mostly on foot.",
+      granularity: "km10",
+    }), expect.anything());
   });
 });

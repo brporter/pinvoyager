@@ -121,6 +121,19 @@ describe("DiscoverMap — the question it asks", () => {
 /* -- what it draws ------------------------------------------------------- */
 
 describe("DiscoverMap — what it draws", () => {
+  it("renders no markers while the viewport query has no response yet", () => {
+    vi.mocked(useDiscoverMap).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      isSuccess: false,
+    } as unknown as UseQueryResult<DiscoverMapPayload>);
+    renderMap();
+
+    expect(pins()).toHaveLength(0);
+    expect(clusters()).toHaveLength(0);
+  });
+
   it("draws a pin for a marker standing for one photograph", () => {
     answer({ clusters: [marker({ count: 1 })] });
     renderMap();

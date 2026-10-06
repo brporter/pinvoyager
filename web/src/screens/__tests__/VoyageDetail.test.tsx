@@ -12,7 +12,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -121,13 +121,23 @@ function stubViewport(desktop: boolean): void {
   }));
 }
 
-function renderScreen() {
+function renderScreen(auth: AuthState = ANONYMOUS) {
   return render(
-    <AuthContext.Provider value={ANONYMOUS}>
+    <AuthContext.Provider value={auth}>
       <MemoryRouter initialEntries={["/voyages/v1"]}>
         <Routes>
           <Route path="/voyages/:id" element={<VoyageDetail />} />
         </Routes>
+      </MemoryRouter>
+    </AuthContext.Provider>,
+  );
+}
+
+function renderWithoutVoyageId() {
+  return render(
+    <AuthContext.Provider value={ANONYMOUS}>
+      <MemoryRouter initialEntries={["/not-a-voyage"]}>
+        <Routes><Route path="*" element={<VoyageDetail />} /></Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
   );
@@ -232,6 +242,19 @@ describe("VoyageDetail — selection", () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
+  it("shows the selected photo state when it has no coordinate", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({
+      photos: [photo({ ...PLACED_A, coordinate: null })], photo_count: 1, placed_count: 1,
+      place_count: 1, unplaced_count: 0,
+    }) }));
+    renderScreen();
+    await mapReady();
+
+    const strip = screen.getByRole("group", { name: "Photos in this voyage" });
+    await userEvent.click(within(strip).getByRole("button"));
+    expect(screen.getByText(/No location/)).toBeInTheDocument();
+  });
+
   it("does not scroll the list when the selection came from the list itself", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
@@ -242,6 +265,30 @@ describe("VoyageDetail — selection", () => {
     await userEvent.click(within(strip).getAllByRole("button")[0]);
 
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("clears a photo selection when that photo is chosen again", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    renderScreen();
+    await mapReady();
+
+    const strip = screen.getByRole("group", { name: "Photos in this voyage" });
+    const photoButton = within(strip).getAllByRole("button")[0];
+    await userEvent.click(photoButton);
+    expect(photoButton).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(photoButton);
+    expect(photoButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("clears a pin selection with the close control", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    renderScreen();
+    await mapReady();
+    await userEvent.click(mapPins()[0]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Close selection" }));
+    expect(screen.getByRole("button", { name: "Collapse photo list" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close selection" })).not.toBeInTheDocument();
   });
 });
 
@@ -268,6 +315,42 @@ describe("VoyageDetail — precision", () => {
     expect(within(rail).getByRole("heading", { level: 1 })).toHaveTextContent(
       "Three weeks in Hokkaido",
     );
+  });
+});
+
+describe("VoyageDetail — date groups", () => {
+  it("groups photos from the same capture date under one heading", async () => {
+    stubViewport(true);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({
+      data: voyage({ photos: [PLACED_A, photo({
+        ...PLACED_B,
+        id: "same-day",
+        captured_at: "2025-02-14T18:30:00Z",
+      })] }),
+    }));
+    renderScreen();
+    await mapReady();
+
+    expect(screen.getAllByRole("heading", { name: "February 14" })).toHaveLength(1);
+  });
+
+  it("keeps photos with missing or invalid capture dates in an unknown-date group", async () => {
+    const missingDate = photo({ id: "no-date", position: 1, captured_at: null });
+    const invalidDate = photo({ id: "bad-date", position: 2, captured_at: "not-a-date" });
+    vi.mocked(useVoyage).mockReturnValue(queryResult({
+      data: voyage({ photos: [missingDate, invalidDate], photo_count: 2, placed_count: 2 }),
+    }));
+    stubViewport(true);
+    const desktop = renderScreen();
+    await mapReady();
+    expect(screen.getByRole("heading", { name: "Date unknown" })).toBeInTheDocument();
+    desktop.unmount();
+
+    stubViewport(false);
+    renderScreen();
+    await mapReady();
+    await userEvent.click(screen.getAllByRole("button", { name: /Photograph/ })[0]);
+    expect(screen.getByText("Capture time unknown")).toBeInTheDocument();
   });
 });
 
@@ -301,9 +384,27 @@ describe("VoyageDetail — unplaced photographs", () => {
 
     expect(screen.queryByText(/no location/)).not.toBeInTheDocument();
   });
+
+  it("uses the plural count when several photographs have no location", async () => {
+    const unplaced = [UNPLACED, photo({
+      id: "p4", position: 4, coordinate: null, placed: false, captured_at: null,
+    })];
+    vi.mocked(useVoyage).mockReturnValue(queryResult({
+      data: voyage({ photos: [PLACED_A, ...unplaced], photo_count: 3, placed_count: 1, unplaced_count: 2 }),
+    }));
+    renderScreen();
+    await mapReady();
+
+    expect(screen.getByText("2 photos have no location")).toBeInTheDocument();
+  });
 });
 
 describe("VoyageDetail — states", () => {
+  it("shows the missing state when the route has no voyage id", () => {
+    renderWithoutVoyageId();
+    expect(screen.getByText("This voyage is not here")).toBeInTheDocument();
+  });
+
   it("reports that it is loading rather than rendering an empty screen", () => {
     vi.mocked(useVoyage).mockReturnValue(
       queryResult({ isPending: true, isSuccess: false, data: undefined }),
@@ -311,6 +412,15 @@ describe("VoyageDetail — states", () => {
     renderScreen();
 
     expect(screen.getByText("Loading this voyage…")).toBeInTheDocument();
+  });
+
+  it("shows the desktop skeleton rail while loading", () => {
+    stubViewport(true);
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({ isPending: true, isSuccess: false, data: undefined }),
+    );
+    renderScreen();
+    expect(document.querySelectorAll(".pv-photo--square")).toHaveLength(4);
   });
 
   it("offers a retry and a request reference when the read fails", async () => {
@@ -353,6 +463,15 @@ describe("VoyageDetail — states", () => {
     expect(screen.getByText("This voyage is not here")).toBeInTheDocument();
   });
 
+  it("shows a generic read error when the failure is not an API error", () => {
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({ isError: true, isSuccess: false, error: new Error("offline") }),
+    );
+    renderScreen();
+
+    expect(screen.getByText("This voyage could not be loaded")).toBeInTheDocument();
+  });
+
   it("has something to say about a voyage with no photographs", async () => {
     vi.mocked(useVoyage).mockReturnValue(
       queryResult({
@@ -363,6 +482,28 @@ describe("VoyageDetail — states", () => {
     await mapReady();
 
     expect(screen.getByText("No photographs yet")).toBeInTheDocument();
+  });
+
+  it("labels a draft in the mobile sheet", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({
+      data: voyage({ published: false }),
+    }));
+    renderScreen();
+    await mapReady();
+
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+  });
+
+  it("shows an empty photo rail on desktop and labels an unpublished voyage as a draft", async () => {
+    stubViewport(true);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({
+      data: voyage({ photos: [], published: false, photo_count: 0, placed_count: 0, unplaced_count: 0 }),
+    }));
+    renderScreen();
+    await mapReady();
+
+    expect(screen.getAllByText("No photographs yet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Draft").length).toBeGreaterThan(0);
   });
 });
 
@@ -383,9 +524,28 @@ describe("VoyageDetail — the mobile sheet", () => {
       "aria-expanded",
       "true",
     );
+    await userEvent.keyboard(" ");
+    expect(screen.getByRole("button", { name: "Expand photo list" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Expand photo list" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   it("opens the sheet when a pin is chosen, because the point is to see the photograph", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+    }));
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
 
@@ -394,5 +554,65 @@ describe("VoyageDetail — the mobile sheet", () => {
 
     expect(screen.getByRole("button", { name: "Collapse photo list" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close selection" })).toBeInTheDocument();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "auto",
+    });
+  });
+
+  it("supports arrow keys to expand and collapse the sheet", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    renderScreen();
+    await mapReady();
+
+    const grip = screen.getByRole("button", { name: "Expand photo list" });
+    grip.focus();
+    await userEvent.keyboard("{ArrowUp}");
+    expect(screen.getByRole("button", { name: "Collapse photo list" })).toBeInTheDocument();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Expand photo list" })).toBeInTheDocument();
+  });
+
+  it("resizes the sheet while dragging and snaps to the nearest rest position", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    renderScreen();
+    await mapReady();
+
+    const grip = screen.getByRole("button", { name: "Expand photo list" });
+    fireEvent.pointerDown(grip, { pointerId: 1, clientY: 300 });
+    fireEvent.pointerMove(grip, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(grip, { pointerId: 1, clientY: 100 });
+    expect(screen.getByRole("button", { name: "Collapse photo list" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(grip, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(grip, { pointerId: 1, clientY: 300 });
+    fireEvent.pointerUp(grip, { pointerId: 1, clientY: 300 });
+    expect(screen.getByRole("button", { name: "Expand photo list" })).toBeInTheDocument();
+  });
+
+  it("ignores pointer moves and releases when no drag is active", async () => {
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    renderScreen();
+    await mapReady();
+
+    const grip = screen.getByRole("button", { name: "Expand photo list" });
+    fireEvent.pointerMove(grip, { pointerId: 2, clientY: 20 });
+    fireEvent.pointerUp(grip, { pointerId: 2, clientY: 20 });
+    expect(grip).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+describe("VoyageDetail — ownership", () => {
+  it("shows the edit action to the voyage owner", async () => {
+    stubViewport(true);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    const view = renderScreen({ ...ANONYMOUS, status: "authenticated", user: {
+      id: "u1", display_name: "Owner", avatar_url: null, created_at: "2026-01-01T00:00:00Z",
+    } });
+
+    await mapReady();
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/voyages/v1/edit");
+    view.unmount();
   });
 });

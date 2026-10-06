@@ -114,6 +114,7 @@ describe("Avatar", () => {
     expect(initialsOf("Bryan Michael Porter")).toBe("BP");
     expect(initialsOf("Prince")).toBe("P");
     expect(initialsOf("  spaced   out  ")).toBe("SO");
+    expect(initialsOf("😀 Porter")).toBe("😀P");
   });
 
   it("returns no initials when there is no name to derive them from", () => {

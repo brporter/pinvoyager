@@ -14,7 +14,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVoyages } from "../../api/hooks";
-import { Discover } from "../Discover";
+import { Discover, monthYear, referenceOf, VoyageGridSkeleton } from "../Discover";
+import { useIsDesktop } from "../../shell/useIsDesktop";
 import {
   ADA,
   apiFailure,
@@ -26,14 +27,46 @@ import {
 } from "./support";
 
 vi.mock("../../api/hooks", () => ({ useVoyages: vi.fn() }));
+// This suite tests the feed screen's states and actions; map behavior has its
+// own coverage in `web/src/map/__tests__/DiscoverMap.test.tsx`.
+vi.mock("../../map", () => ({
+  LazyDiscoverMap: () => null,
+  LazyVoyageMap: () => null,
+}));
+vi.mock("../../shell/useIsDesktop", () => ({ useIsDesktop: vi.fn(() => false) }));
 
 const mockedUseVoyages = vi.mocked(useVoyages);
+const mockedUseIsDesktop = vi.mocked(useIsDesktop);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedUseIsDesktop.mockReturnValue(false);
 });
 
 describe("Discover", () => {
+  it("omits a month label for an invalid publication date", () => {
+    expect(monthYear("not-a-date")).toBe("");
+  });
+
+  it("uses the requested skeleton count when one is provided", () => {
+    const { container } = renderScreen(<VoyageGridSkeleton desktop count={4} />);
+    expect(container.querySelectorAll(".pv-voyage-card")).toHaveLength(4);
+  });
+
+  it("sizes the default skeleton grid for desktop and mobile", () => {
+    const desktop = renderScreen(<VoyageGridSkeleton desktop />);
+    expect(desktop.container.querySelectorAll(".pv-voyage-card")).toHaveLength(6);
+    desktop.unmount();
+
+    const mobile = renderScreen(<VoyageGridSkeleton desktop={false} />);
+    expect(mobile.container.querySelectorAll(".pv-voyage-card")).toHaveLength(2);
+  });
+
+  it("returns an API request reference and ignores other errors", () => {
+    expect(referenceOf(apiFailure(500, "req-123").error)).toBe("req-123");
+    expect(referenceOf(new Error("offline"))).toBeNull();
+  });
+
   it("states the mechanism in the hero rather than a slogan", () => {
     mockedUseVoyages.mockReturnValue(loadedFeed([voyage()]));
     renderScreen(<Discover />);
@@ -46,6 +79,20 @@ describe("Discover", () => {
     expect(
       screen.getByText(/reads the location your camera recorded/i),
     ).toBeInTheDocument();
+  });
+
+  it("uses the desktop hero and three-column layout when the viewport is wide", () => {
+    mockedUseIsDesktop.mockReturnValue(true);
+    mockedUseVoyages.mockReturnValue(loadedFeed([voyage()]));
+    renderScreen(<Discover />);
+
+    expect(screen.getByRole("link", { name: "Browse voyages" })).toHaveAttribute(
+      "href",
+      "#pv-discover-recent",
+    );
+    expect(screen.getByRole("heading", { name: "Everywhere people have been" })
+      .parentElement?.getAttribute("style"))
+      .toContain("var(--pv-space-6)");
   });
 
   it("shows each voyage's precision label on its card", () => {

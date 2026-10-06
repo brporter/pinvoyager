@@ -53,6 +53,16 @@ describe("Photo", () => {
     expect(onSelect).toHaveBeenCalledTimes(3);
   });
 
+  it("ignores keyboard keys other than Enter and Space", async () => {
+    const onSelect = vi.fn();
+    render(<Photo label="Snowy street" onSelect={onSelect} gradient={1} />);
+    screen.getByRole("button", { name: "Snowy street" }).focus();
+
+    await userEvent.keyboard("{ArrowDown}");
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("reports its selected state when it is activatable", () => {
     render(<Photo label="Snowy street" selected onSelect={() => {}} gradient={1} />);
 
@@ -114,5 +124,11 @@ describe("Filmstrip", () => {
     await userEvent.tab();
 
     expect(screen.getByRole("button", { name: "After" })).toHaveFocus();
+  });
+
+  it("omits the group role when no accessible label is provided", () => {
+    const { container } = render(<Filmstrip><Photo ratio="1:1" gradient={2} /></Filmstrip>);
+
+    expect(container.querySelector(".pv-filmstrip")).not.toHaveAttribute("role");
   });
 });

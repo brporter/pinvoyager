@@ -103,4 +103,19 @@ describe("Attribution", () => {
     );
     expect(screen.getByText(/contributors/)).toBeInTheDocument();
   });
+
+  it("uses caller-provided attribution content and its dark style", () => {
+    const { container } = render(
+      <Attribution dark className="custom-attribution">
+        Map data © contributors
+      </Attribution>,
+    );
+
+    expect(screen.getByText("Map data © contributors")).toBeInTheDocument();
+    expect(container.querySelector(".pv-attribution")).toHaveClass(
+      "pv-attribution--dark",
+      "custom-attribution",
+    );
+    expect(screen.queryByRole("link", { name: "OpenStreetMap" })).not.toBeInTheDocument();
+  });
 });

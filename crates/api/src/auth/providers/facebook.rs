@@ -49,6 +49,7 @@ pub(crate) struct FacebookProvider {
     client_id: String,
     client_secret: SecretString,
     redirect_uri: String,
+    graph_api_root: Url,
     http: reqwest::Client,
 }
 
@@ -58,6 +59,16 @@ impl FacebookProvider {
     /// three this provider cannot fail to come up for a reason outside our
     /// control.
     pub(crate) fn new(config: &FacebookProviderConfig, base_url: &Url) -> Result<Self, AuthError> {
+        let graph_api_root = Url::parse(&format!("https://graph.facebook.com/{GRAPH_VERSION}/"))
+            .map_err(|err| AuthError::Configuration(format!("bad Graph API URL: {err}")))?;
+        Self::build(config, base_url, graph_api_root)
+    }
+
+    fn build(
+        config: &FacebookProviderConfig,
+        base_url: &Url,
+        graph_api_root: Url,
+    ) -> Result<Self, AuthError> {
         let redirect_uri = super::callback_uri(base_url, ProviderKind::Facebook)?;
 
         // The same client the OIDC providers use, for the same reasons: a
@@ -71,15 +82,45 @@ impl FacebookProvider {
             // into a second redacting wrapper rather than out of one.
             client_secret: SecretString::from(config.client_secret.expose_secret()),
             redirect_uri: redirect_uri.as_str().to_owned(),
+            graph_api_root,
             http,
         })
     }
 
     fn graph_url(&self, path: &str) -> Result<Url, AuthError> {
-        Url::parse(&format!(
-            "https://graph.facebook.com/{GRAPH_VERSION}/{path}"
-        ))
-        .map_err(|err| AuthError::Configuration(format!("bad Graph API URL: {err}")))
+        self.graph_api_root
+            .join(path)
+            .map_err(|err| AuthError::Configuration(format!("bad Graph API URL: {err}")))
+    }
+
+    fn authorize_at(&self, endpoint: &str) -> Result<AuthorizationRedirect, AuthError> {
+        let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
+        let state = CsrfToken::new_random();
+        // Facebook has no ID token and so nothing to carry a `nonce`. One is
+        // still generated because the pending attempt has a column for it and a
+        // uniform record is easier to reason about than a conditional one; it is
+        // simply never checked, because there is nothing to check it against.
+        let nonce = Nonce::new_random();
+
+        let url = facebook_authorization_url(
+            endpoint,
+            &[
+                ("client_id", self.client_id.as_str()),
+                ("redirect_uri", self.redirect_uri.as_str()),
+                ("state", state.secret().as_str()),
+                ("response_type", "code"),
+                ("scope", SCOPE),
+                ("code_challenge", challenge.as_str()),
+                ("code_challenge_method", challenge.method().as_str()),
+            ],
+        )?;
+
+        Ok(AuthorizationRedirect {
+            url,
+            state: state.secret().to_owned(),
+            nonce: nonce.secret().to_owned(),
+            pkce_verifier: verifier.secret().to_owned(),
+        })
     }
 
     async fn fetch_profile(&self, access_token: &str) -> Result<MeResponse, AuthError> {
@@ -117,36 +158,9 @@ impl crate::auth::AuthProvider for FacebookProvider {
     }
 
     fn authorize(&self) -> Result<AuthorizationRedirect, AuthError> {
-        let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-        let state = CsrfToken::new_random();
-        // Facebook has no ID token and so nothing to carry a `nonce`. One is
-        // still generated because the pending attempt has a column for it and a
-        // uniform record is easier to reason about than a conditional one; it is
-        // simply never checked, because there is nothing to check it against.
-        let nonce = Nonce::new_random();
-
-        let url = Url::parse_with_params(
-            &format!("https://www.facebook.com/{GRAPH_VERSION}/dialog/oauth"),
-            &[
-                ("client_id", self.client_id.as_str()),
-                ("redirect_uri", self.redirect_uri.as_str()),
-                ("state", state.secret().as_str()),
-                ("response_type", "code"),
-                ("scope", SCOPE),
-                ("code_challenge", challenge.as_str()),
-                ("code_challenge_method", challenge.method().as_str()),
-            ],
-        )
-        .map_err(|err| {
-            AuthError::Configuration(format!("could not build the Facebook authorize URL: {err}"))
-        })?;
-
-        Ok(AuthorizationRedirect {
-            url,
-            state: state.secret().to_owned(),
-            nonce: nonce.secret().to_owned(),
-            pkce_verifier: verifier.secret().to_owned(),
-        })
+        self.authorize_at(&format!(
+            "https://www.facebook.com/{GRAPH_VERSION}/dialog/oauth"
+        ))
     }
 
     async fn exchange(
@@ -246,3 +260,13 @@ struct PictureData {
     url: Option<String>,
     is_silhouette: Option<bool>,
 }
+
+fn facebook_authorization_url(base_url: &str, params: &[(&str, &str)]) -> Result<Url, AuthError> {
+    Url::parse_with_params(base_url, params).map_err(|err| {
+        AuthError::Configuration(format!("could not build the Facebook authorize URL: {err}"))
+    })
+}
+
+#[cfg(test)]
+#[path = "facebook_tests.rs"]
+mod tests;

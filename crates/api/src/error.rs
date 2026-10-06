@@ -112,21 +112,25 @@ impl IntoResponse for AppError {
         // response withholds has to land here, correlated by the request id
         // that the middleware layer puts on the surrounding span and on the
         // `x-request-id` response header.
+        let status_code = status.as_u16();
         if status.is_server_error() {
+            let error_message = self.to_string();
+            let error_chain = SourceChain(&self).to_string();
             tracing::error!(
-                status = status.as_u16(),
+                status = status_code,
                 code,
-                error = %self,
-                error.chain = %SourceChain(&self),
+                error = %error_message,
+                error.chain = %error_chain,
                 "request failed"
             );
         } else {
             // A 4xx is the client's mistake, not ours. Logging these at error
             // level trains people to ignore error level.
+            let error_message = self.to_string();
             tracing::debug!(
-                status = status.as_u16(),
+                status = status_code,
                 code,
-                error = %self,
+                error = %error_message,
                 "request rejected"
             );
         }
@@ -157,3 +161,7 @@ impl fmt::Display for SourceChain<'_> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

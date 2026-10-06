@@ -28,6 +28,7 @@ and it is easy to get wrong by merely *decoding* a token:
 
 - Fetch and cache each provider's JWKS; validate the ID token's signature against it
 - Validate `iss`, `aud`, and `exp`
+- Configure OIDC issuers with HTTP or HTTPS URLs that include a host; plain HTTP is for local test providers, while deployed providers use HTTPS.
 - Use PKCE on the authorization code exchange
 - Generate and check `state` (CSRF) and `nonce` (replay) on every attempt
 - Facebook is **not** OIDC-conformant. It has no ID token to verify. It requires an OAuth2

@@ -30,6 +30,7 @@ describe("safeRedirect", () => {
       // reaches the server's `Location`.
       "/discover\r\nSet-Cookie: a=b",
       "/discover\nX: y",
+      "/discover/😀",
       // On-site is not by itself enough. An unrecognized path is a typo or a
       // probe, not a destination.
       "/admin",

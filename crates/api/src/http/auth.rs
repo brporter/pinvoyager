@@ -342,9 +342,14 @@ fn to_browser(
         // The jar from `complete`, not the one passed in — on success it
         // carries the session cookie that was just issued.
         Ok(ok) => return ok.into_response(),
-        Err(AppError::NotFound) => return AppError::NotFound.into_response(),
+        Err(AppError::NotFound) => {
+            return (jar.add(binding_cookie_removal()), AppError::NotFound).into_response();
+        }
         Err(err) => err,
     };
+    // `complete` returns an error without its updated jar. Clear the browser
+    // binding here as well so rejected callbacks do not leave a stale cookie.
+    let jar = jar.add(binding_cookie_removal());
 
     // The four states the screen draws. `canceled` is matched on the message
     // constant rather than on a variant because declining at the provider is
@@ -373,14 +378,15 @@ fn to_browser(
         .take(64)
         .collect();
 
-    let mut target = format!("/auth/callback?status={status}&provider={}", kind.as_str());
+    let provider_name = kind.as_str();
+    let mut target = format!("/auth/callback?status={status}&provider={provider_name}");
     if !request_id.is_empty() {
         target.push_str("&ref=");
         target.push_str(&request_id);
     }
 
     tracing::warn!(
-        provider = kind.as_str(),
+        provider = provider_name,
         status,
         "sign-in failed; redirecting to the callback screen"
     );
@@ -415,12 +421,6 @@ async fn complete(
         return Err(rejected("no pending attempt for this state"));
     };
 
-    // Every path below returns through this jar, so the binding cookie is
-    // cleared whether the flow succeeds or fails. Leaving it behind would let a
-    // browser accumulate one per abandoned sign-in, and a stale value can only
-    // ever cause a confusing mismatch later.
-    let jar = jar.add(binding_cookie_removal());
-
     // The callback must arrive in the browser that started the flow.
     //
     // This is what closes link CSRF: an attacker can hand a victim a URL
@@ -431,6 +431,12 @@ async fn complete(
     let presented = jar
         .get(BINDING_COOKIE)
         .map(|cookie| BindingValue::from_cookie_value(cookie.value()));
+
+    // Every path below returns through this jar, so the binding cookie is
+    // cleared whether the flow succeeds or fails. Read it before adding the
+    // removal cookie: CookieJar::get observes the jar's current value, and the
+    // removal value is empty.
+    let jar = jar.add(binding_cookie_removal());
 
     match presented {
         Some(value) if value.matches(&attempt.binding_hash) => {}
@@ -557,16 +563,7 @@ async fn sign_in(state: &AppState, identity: &VerifiedIdentity) -> AppResult<Ses
 
                 identities::create(&mut *tx, user.id, provider, &identity.subject)
                     .await
-                    .map_err(|err| {
-                        if unique_violation(&err) {
-                            // Two first sign-ins for the same subject raced and the
-                            // unique index arbitrated. The loser retries and lands
-                            // in the branch above; this is not a 500.
-                            rejected("concurrent first sign-in for the same identity")
-                        } else {
-                            err.into()
-                        }
-                    })?;
+                    .map_err(first_sign_in_identity_error)?;
 
                 user.id
             }
@@ -597,8 +594,9 @@ async fn link(state: &AppState, user_id: Uuid, identity: &VerifiedIdentity) -> A
         identities::find_by_provider_subject(&mut *tx, provider, &identity.subject).await?
     {
         if existing.user_id != user_id {
+            let provider_name = identity.provider.as_str();
             tracing::warn!(
-                provider = identity.provider.as_str(),
+                provider = provider_name,
                 linking_user_id = %user_id,
                 owning_user_id = %existing.user_id,
                 "refused to link an identity owned by another account"
@@ -617,20 +615,30 @@ async fn link(state: &AppState, user_id: Uuid, identity: &VerifiedIdentity) -> A
 
     identities::create(&mut *tx, user_id, provider, &identity.subject)
         .await
-        .map_err(|err| {
-            if unique_violation(&err) {
-                // Another flow claimed this identity between the SELECT and the
-                // INSERT. The unique index is the real guard; the check above
-                // exists to produce a better message, not to be the mechanism.
-                AppError::Conflict(ALREADY_LINKED.to_owned())
-            } else {
-                err.into()
-            }
-        })?;
+        .map_err(link_identity_error)?;
 
     tx.commit().await?;
 
     Ok(())
+}
+
+fn first_sign_in_identity_error(err: sqlx::Error) -> AppError {
+    if unique_violation(&err) {
+        // Two first sign-ins for the same subject raced and the unique index
+        // arbitrated. The loser retries and lands in the branch above.
+        rejected("concurrent first sign-in for the same identity")
+    } else {
+        err.into()
+    }
+}
+
+fn link_identity_error(err: sqlx::Error) -> AppError {
+    if unique_violation(&err) {
+        // Another flow claimed this identity between the SELECT and the INSERT.
+        AppError::Conflict(ALREADY_LINKED.to_owned())
+    } else {
+        err.into()
+    }
 }
 
 /// Signs the caller out (T10).
@@ -939,88 +947,5 @@ fn field<'a>(fields: &'a [(String, String)], name: &str) -> Option<&'a str> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The values a phishing attempt actually uses. Each of these is a way of
-    /// naming another origin with a string that starts with a slash, or of
-    /// smuggling a second header past `Location`.
-    #[test]
-    fn off_site_destinations_are_refused() {
-        for candidate in [
-            "https://evil.example/",
-            "//evil.example/",
-            "/\\evil.example",
-            "/\\/evil.example",
-            "http:/evil.example",
-            "evil.example",
-            "/discover\r\nSet-Cookie: a=b",
-            "/discover\nX: y",
-            // Not on the allowlist, and on-site is not by itself enough: an
-            // unknown path is a typo or a probe.
-            "/admin",
-            // Prefix without a separator — the reason the check looks at the
-            // byte after the match.
-            "/settings-evil.example",
-            "/voyagesomething",
-        ] {
-            assert_eq!(safe_redirect(candidate), None, "accepted {candidate:?}");
-        }
-    }
-
-    #[test]
-    fn on_site_destinations_are_kept_verbatim() {
-        for candidate in [
-            "/",
-            "/discover",
-            "/settings",
-            "/voyages/0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
-            "/discover?near=me#top",
-        ] {
-            assert_eq!(
-                safe_redirect(candidate).as_deref(),
-                Some(candidate),
-                "refused {candidate:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn an_over_long_destination_is_refused() {
-        let long = format!("/discover?q={}", "a".repeat(MAX_REDIRECT_LEN));
-        assert_eq!(safe_redirect(&long), None);
-    }
-
-    /// A stored value is validated again on use, so an unvalidated row cannot
-    /// become a redirect.
-    #[test]
-    fn a_stored_destination_falls_back_when_it_no_longer_passes() {
-        assert_eq!(
-            destination(Some("https://evil.example/"), SIGNED_IN_DESTINATION),
-            SIGNED_IN_DESTINATION
-        );
-        assert_eq!(destination(None, LINKED_DESTINATION), LINKED_DESTINATION);
-        assert_eq!(
-            destination(Some("/settings"), SIGNED_IN_DESTINATION),
-            "/settings"
-        );
-    }
-
-    /// Apple's body is form-encoded, and its `user` payload is JSON inside one
-    /// of the fields — so the field parser has to survive `{`, `"` and `%`.
-    #[test]
-    fn form_fields_are_read_from_an_apple_style_body() {
-        let body = "state=abc&code=xyz&user=%7B%22name%22%3A%7B%22firstName%22%3A%22Ada%22%7D%7D";
-        let fields: Vec<(String, String)> = url::form_urlencoded::parse(body.as_bytes())
-            .into_owned()
-            .collect();
-
-        assert_eq!(field(&fields, "state"), Some("abc"));
-        assert_eq!(field(&fields, "code"), Some("xyz"));
-        assert_eq!(field(&fields, "error"), None);
-        assert_eq!(
-            field(&fields, "user"),
-            Some(r#"{"name":{"firstName":"Ada"}}"#)
-        );
-    }
-}
+#[path = "auth_tests.rs"]
+mod tests;

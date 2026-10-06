@@ -60,7 +60,9 @@ export function safeRedirect(candidate: string | null | undefined): string | nul
   // splitting attempt once this reaches the server, and non-ASCII bytes, which
   // have to be percent-encoded to be legal in a URL anyway.
   for (const character of candidate) {
-    const code = character.codePointAt(0) ?? 0;
+    // String iteration yields non-empty code-point strings, so index zero is
+    // always present (including for astral characters such as emoji).
+    const code = character.codePointAt(0)!;
     if (code < 0x20 || code >= 0x7f) {
       return null;
     }
@@ -68,7 +70,8 @@ export function safeRedirect(candidate: string | null | undefined): string | nul
 
   // Only the path is matched. A query string or fragment is the application's
   // business; the origin is settled by the checks above plus the allowlist.
-  const path = candidate.split(/[?#]/, 1)[0] ?? DEFAULT_DESTINATION;
+  // `split` always returns at least one entry, including for an empty string.
+  const path = candidate.split(/[?#]/, 1)[0]!;
 
   const allowed = ALLOWED_REDIRECTS.some(
     (prefix) =>

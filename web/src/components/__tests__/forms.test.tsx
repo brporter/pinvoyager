@@ -199,6 +199,16 @@ describe("Switch", () => {
     expect(onCheckedChange).toHaveBeenLastCalledWith(true);
   });
 
+  it("ignores keyboard keys other than Space and Enter", async () => {
+    const onCheckedChange = vi.fn();
+    render(<Switch checked={false} onCheckedChange={onCheckedChange} label="Publish voyage" />);
+    screen.getByRole("switch", { name: "Publish voyage" }).focus();
+
+    await userEvent.keyboard("{ArrowDown}");
+
+    expect(onCheckedChange).not.toHaveBeenCalled();
+  });
+
   it("is reachable by keyboard", async () => {
     render(<Switch checked={false} onCheckedChange={() => {}} label="Publish voyage" />);
 

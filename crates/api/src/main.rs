@@ -56,8 +56,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let providers = ProviderRegistry::from_config(&config.auth).await?;
+    let configured_providers = providers.configured();
     tracing::info!(
-        providers = ?providers.configured(),
+        providers = ?configured_providers,
         "authentication providers ready"
     );
 
@@ -75,3 +76,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;

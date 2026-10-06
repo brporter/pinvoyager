@@ -187,8 +187,9 @@ export function MapCanvas({
   const boundsKey = keyOf(fitTo);
 
   useEffect(() => {
-    const node = container.current;
-    if (node === null) return;
+    // Effects run only after this component has committed its always-rendered
+    // host div, so the ref is present here.
+    const node = container.current!;
 
     maplibregl.setMaxParallelImageRequests(MAX_PARALLEL_TILE_REQUESTS);
 

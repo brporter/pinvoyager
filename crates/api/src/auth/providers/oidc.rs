@@ -111,6 +111,12 @@ pub(crate) struct OidcCore {
 /// Trimming is safe: an issuer identifier is defined as having no trailing
 /// slash.
 fn issuer_url(issuer: &Url) -> Result<IssuerUrl, AuthError> {
+    if !matches!(issuer.scheme(), "http" | "https") || issuer.host_str().is_none() {
+        return Err(AuthError::Configuration(
+            "invalid issuer URL: expected an HTTP or HTTPS URL with a host".to_owned(),
+        ));
+    }
+
     IssuerUrl::new(issuer.as_str().trim_end_matches('/').to_owned())
         .map_err(|err| AuthError::Configuration(format!("invalid issuer URL: {err}")))
 }
@@ -299,8 +305,9 @@ impl OidcCore {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
             if cached.jwks_fetched_at.elapsed() < JWKS_MIN_REFETCH_INTERVAL {
+                let provider_name = self.kind.as_str();
                 tracing::debug!(
-                    provider = self.kind.as_str(),
+                    provider = provider_name,
                     "unknown signing key, but a JWKS refetch happened recently — not refetching"
                 );
                 return Err(AuthError::TokenVerification(
@@ -312,8 +319,9 @@ impl OidcCore {
             cached.metadata.jwks_uri().clone()
         };
 
+        let provider_name = self.kind.as_str();
         tracing::info!(
-            provider = self.kind.as_str(),
+            provider = provider_name,
             "refetching JWKS after an unknown signing key"
         );
 
@@ -387,34 +395,5 @@ impl crate::auth::AuthProvider for StandardOidcProvider {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_configured_issuer_keeps_the_spelling_the_provider_uses() {
-        // The `Url` type has already appended a slash to the first of these by
-        // the time configuration is parsed. Both must come out identical, and
-        // identical to what Google's discovery document says.
-        for configured in [
-            "https://accounts.google.com",
-            "https://accounts.google.com/",
-        ] {
-            let url = Url::parse(configured).expect("test URL should parse");
-            let issuer = issuer_url(&url).expect("issuer should be accepted");
-            assert_eq!(issuer.as_str(), "https://accounts.google.com");
-        }
-    }
-
-    #[test]
-    fn an_issuer_with_a_path_keeps_it() {
-        // Microsoft's issuer is a path under a shared host, and the tenant
-        // segment is the part that must survive.
-        let url = Url::parse("https://login.microsoftonline.com/tenant-id/v2.0/")
-            .expect("test URL should parse");
-        let issuer = issuer_url(&url).expect("issuer should be accepted");
-        assert_eq!(
-            issuer.as_str(),
-            "https://login.microsoftonline.com/tenant-id/v2.0"
-        );
-    }
-}
+#[path = "oidc_tests.rs"]
+mod tests;

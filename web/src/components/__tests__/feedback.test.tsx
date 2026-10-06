@@ -26,6 +26,13 @@ describe("Badge", () => {
 });
 
 describe("Toast", () => {
+  it("uses the polite info role and default tone when none is supplied", () => {
+    const { container } = render(<Toast title="Photos saved" />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Photos saved");
+    expect(container.querySelector(".pv-toast")).not.toHaveClass("pv-toast--info");
+  });
+
   it("announces a failure by interrupting", () => {
     // A failed upload the user does not hear about is a failed upload they
     // will not retry.

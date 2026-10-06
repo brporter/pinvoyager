@@ -105,4 +105,10 @@ describe("Button", () => {
 
     expect(screen.getByRole("button", { name: "Publish voyage" })).toHaveFocus();
   });
+
+  it("renders an icon-only control without a child label", () => {
+    render(<Button aria-label="Close dialog" />);
+
+    expect(screen.getByRole("button", { name: "Close dialog" })).toBeEmptyDOMElement();
+  });
 });

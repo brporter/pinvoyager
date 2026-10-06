@@ -287,6 +287,23 @@ describe("VoyageMap — selection", () => {
     );
   });
 
+  it("does not move the camera when the selected photo is absent from the pins", () => {
+    renderMap({ selection: { photoId: "missing-photo", source: "photo" } });
+
+    expect(camera().camera.filter((call) => call.kind === "easeTo")).toHaveLength(0);
+    expect(within(mapRegion()).queryByRole("button", { name: "Photograph missing-photo" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("reports activation of the already selected pin", async () => {
+    const onSelectPin = vi.fn();
+    renderMap({ selection: { photoId: "b", source: "photo" }, onSelectPin });
+
+    await userEvent.click(within(mapRegion()).getByRole("button", { name: "Photograph b" }));
+
+    expect(onSelectPin).toHaveBeenCalledWith("b");
+  });
+
   /** Half of target 8: choosing a photograph in the list brings the map to it.
    *  Without this the rail and the map are two lists that happen to share a
    *  screen. */

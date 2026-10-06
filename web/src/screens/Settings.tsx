@@ -472,7 +472,7 @@ function ProvidersSection({
               consequence and the remedy. */}
           <Toast tone="warning" title="This is your only way in">
             Link another provider before unlinking{" "}
-            {PROVIDER_NAME[[...linked.keys()][0] ?? "google"]}, or you will lose
+            {PROVIDER_NAME[[...linked.keys()][0]!]}, or you will lose
             access to this account permanently.
           </Toast>
         </div>

@@ -63,6 +63,56 @@ describe("Dropzone", () => {
     expect(screen.getByText("Drop photos here")).toBeInTheDocument();
   });
 
+  it("tracks nested drag enters until the pointer leaves the whole zone", () => {
+    render(<Dropzone onFiles={() => {}} />);
+    const element = zone();
+    const files = transfer([file("a.jpg", "image/jpeg")]);
+
+    fireEvent.dragEnter(element, { dataTransfer: files });
+    fireEvent.dragEnter(element, { dataTransfer: files });
+    fireEvent.dragLeave(element, { dataTransfer: files });
+    expect(element).toHaveAttribute("data-state", "dragover");
+    fireEvent.dragLeave(element, { dataTransfer: files });
+    expect(element).not.toHaveAttribute("data-state");
+  });
+
+  it("accepts a dragover with no inspectable item list", () => {
+    render(<Dropzone onFiles={() => {}} />);
+    const element = zone();
+
+    fireEvent.dragOver(element);
+
+    expect(screen.getByText("Release to upload 0 photos")).toBeInTheDocument();
+    expect(element).toHaveAttribute("data-state", "dragover");
+  });
+
+  it("keeps the current drag count when dragover follows a nested enter", () => {
+    render(<Dropzone onFiles={() => {}} />);
+    const element = zone();
+    const files = transfer([file("a.jpg", "image/jpeg")]);
+
+    fireEvent.dragEnter(element, { dataTransfer: files });
+    fireEvent.dragOver(element, { dataTransfer: files });
+
+    expect(element).toHaveAttribute("data-state", "dragover");
+    expect(screen.getByText("Release to upload 1 photo")).toBeInTheDocument();
+  });
+
+  it("treats unknown file types as possible images and ignores non-file drag items", () => {
+    render(<Dropzone onFiles={() => {}} />);
+    const element = zone();
+    const dataTransfer = {
+      items: [
+        { kind: "string", type: "text/plain" },
+        { kind: "file", type: "" },
+      ],
+    } as unknown as DataTransfer;
+
+    fireEvent.dragEnter(element, { dataTransfer });
+
+    expect(screen.getByText("Release to upload 1 photo")).toBeInTheDocument();
+  });
+
   it("hands over every dropped file, including the ones it warned about", () => {
     // A batch that quietly loses two files is worse than one that reports them:
     // the per-file list is where "Not an image file — skipped" is shown.
@@ -75,6 +125,20 @@ describe("Dropzone", () => {
     expect(onFiles).toHaveBeenCalledOnce();
     expect(onFiles.mock.calls[0]?.[0]).toHaveLength(2);
     expect(screen.getByText("Drop photos here")).toBeInTheDocument();
+  });
+
+  it("ignores drops and file selections that contain no files", () => {
+    const onFiles = vi.fn();
+    render(<Dropzone onFiles={onFiles} />);
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (input == null) throw new Error("no file input");
+
+    fireEvent.drop(zone());
+    fireEvent.drop(zone(), { dataTransfer: transfer([]) });
+    fireEvent.change(input, { target: { files: null } });
+
+    expect(onFiles).not.toHaveBeenCalled();
+    expect(input.value).toBe("");
   });
 
   it("offers a real control for choosing files rather than a pointer-only one", async () => {
@@ -93,11 +157,17 @@ describe("Dropzone", () => {
   });
 
   it("does not react to a drag when disabled", () => {
-    render(<Dropzone onFiles={() => {}} disabled />);
+    const onFiles = vi.fn();
+    render(<Dropzone onFiles={onFiles} disabled />);
+    const element = zone();
 
-    fireEvent.dragEnter(zone(), { dataTransfer: transfer([file("a.jpg", "image/jpeg")]) });
+    fireEvent.dragEnter(element, { dataTransfer: transfer([file("a.jpg", "image/jpeg")]) });
+    fireEvent.dragOver(element, { dataTransfer: transfer([file("a.jpg", "image/jpeg")]) });
+    fireEvent.dragLeave(element, { dataTransfer: transfer([file("a.jpg", "image/jpeg")]) });
+    fireEvent.drop(element, { dataTransfer: transfer([file("a.jpg", "image/jpeg")]) });
 
     expect(screen.getByText("Drop photos here")).toBeInTheDocument();
+    expect(onFiles).not.toHaveBeenCalled();
   });
 });
 

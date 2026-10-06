@@ -206,18 +206,23 @@ async fn ingest(
     let result = ingest_part(state, owner_id, multipart, &temp_path).await;
 
     if result.is_err() {
-        // Best effort: a leaked temporary is a disk-space problem, and reporting
-        // an upload that failed as though it had not is a correctness one.
-        match tokio::fs::remove_file(&temp_path).await {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => {
-                tracing::warn!(error = %err, "could not remove a rejected upload's temporary file");
-            }
-        }
+        discard_failed_upload(&temp_path).await;
     }
 
     result
+}
+
+async fn discard_failed_upload(path: &FsPath) {
+    // Best effort: a leaked temporary is a disk-space problem, and reporting
+    // an upload that failed as though it had not is a correctness one.
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            let error_message = err.to_string();
+            tracing::warn!(error = %error_message, "could not remove a rejected upload's temporary file");
+        }
+    }
 }
 
 async fn ingest_part(
@@ -862,30 +867,8 @@ struct Part {
     filename: Option<String>,
 }
 
-/// Where a [`Multipart`]'s bytes come from.
-///
-/// The test variant exists because `Body::from(Vec<u8>)` delivers the entire
-/// body as a single frame, and every interesting bug in a streaming parser is
-/// about a delimiter or a header landing across a frame boundary. A test that
-/// only ever sees one frame cannot find them.
-enum Source {
-    Body(Body),
-    #[cfg(test)]
-    Frames(std::collections::VecDeque<Bytes>),
-}
-
-impl Source {
-    async fn next(&mut self) -> Option<Result<Bytes, axum::Error>> {
-        match self {
-            Source::Body(body) => next_frame(body).await,
-            #[cfg(test)]
-            Source::Frames(frames) => frames.pop_front().map(Ok),
-        }
-    }
-}
-
 struct Multipart {
-    source: Source,
+    body: Body,
     /// `\r\n--{boundary}`. Every delimiter in a well-formed body is preceded by
     /// CRLF, and searching for the pair is what makes a boundary appearing
     /// *inside* image data harmless.
@@ -904,10 +887,6 @@ struct Multipart {
 
 impl Multipart {
     fn new(content_type: &str, body: Body, limit: u64) -> Result<Self, Rejection> {
-        Self::from_source(content_type, Source::Body(body), limit)
-    }
-
-    fn from_source(content_type: &str, source: Source, limit: u64) -> Result<Self, Rejection> {
         let boundary = boundary(content_type).ok_or_else(|| {
             AppError::BadRequest("Expected a multipart/form-data request body.".to_owned())
         })?;
@@ -917,7 +896,7 @@ impl Multipart {
         delimiter.extend_from_slice(boundary.as_bytes());
 
         Ok(Self {
-            source,
+            body,
             delimiter,
             // Seeded with a synthetic CRLF so that the very first delimiter —
             // which sits at offset zero with nothing before it — matches the
@@ -1079,7 +1058,7 @@ impl Multipart {
 
     /// Pulls one frame off the source, enforcing the request size cap.
     async fn fill(&mut self) -> Result<(), Rejection> {
-        match self.source.next().await {
+        match next_frame(&mut self.body).await {
             Some(Ok(data)) => {
                 self.read += data.len() as u64;
                 if self.read > self.limit {
@@ -1338,418 +1317,5 @@ impl IntoResponse for Rejection {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use axum::http::Request;
-    use secrecy::SecretString;
-    use sqlx::postgres::PgPoolOptions;
-    use tower::ServiceExt as _;
-
-    use super::*;
-    use crate::config::{Config, DatabaseConfig, PhotosConfig, ServerConfig, TelemetryConfig};
-    use crate::photos::worker::STATUS_FAILED;
-
-    /// A state whose pool is lazy and never connects. Enough to prove routing
-    /// and every check that happens before a query.
-    fn test_state() -> AppState {
-        let config = Config {
-            server: ServerConfig {
-                bind: "127.0.0.1:0".parse().expect("valid socket addr"),
-                shutdown_timeout_secs: 5,
-                request_timeout_secs: 5,
-            },
-            database: DatabaseConfig {
-                url: SecretString::from("postgres://nobody@127.0.0.1:1/none"),
-                max_connections: 1,
-                min_connections: 0,
-                acquire_timeout_secs: 1,
-            },
-            telemetry: TelemetryConfig::default(),
-            auth: crate::config::AuthConfig {
-                base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
-                session: Default::default(),
-                providers: Default::default(),
-                dev_login: false,
-            },
-            photos: PhotosConfig::default(),
-        };
-
-        let pool = PgPoolOptions::new()
-            .acquire_timeout(Duration::from_secs(2))
-            .connect_lazy("postgres://nobody@127.0.0.1:1/none")
-            .expect("a syntactically valid url makes a lazy pool");
-
-        AppState::new(
-            pool,
-            Arc::new(config),
-            crate::auth::ProviderRegistry::empty(),
-            crate::photos::worker::VariantQueue::detached(),
-        )
-    }
-
-    async fn status_of(method: &str, uri: &str) -> StatusCode {
-        crate::http::router(test_state())
-            .oneshot(
-                Request::builder()
-                    .method(method)
-                    .uri(uri)
-                    .body(Body::empty())
-                    .expect("valid request"),
-            )
-            .await
-            .expect("router is infallible")
-            .status()
-    }
-
-    /// The routes exist and every one of them requires a session. 401 rather
-    /// than 404 is also what proves they are merged into the router at all — an
-    /// unwired route would 404 here, with no database involved either way.
-    #[tokio::test]
-    async fn every_metadata_route_requires_a_session() {
-        let id = Uuid::now_v7();
-
-        // Note what is *not* in this list: `GET /api/photos/{id}/{variant}`.
-        //
-        // Serving the bytes is deliberately anonymous-capable, because every
-        // voyage is public (D6) and a published voyage whose images 404 for
-        // anyone but its author is a public gallery with the pictures painted
-        // out. That route authorizes per photograph — owner, or attached to a
-        // published voyage — rather than per session; see `viewable` and
-        // `tests/photos_public_access.rs`.
-        //
-        // The *metadata* routes stay session-gated. They return exact
-        // coordinates to an owner, and the granularity boundary lives in
-        // `http::voyages`; opening them would route around it.
-        for (method, uri) in [
-            ("GET", "/api/photos".to_owned()),
-            ("POST", "/api/photos".to_owned()),
-            ("GET", format!("/api/photos/{id}")),
-            ("DELETE", format!("/api/photos/{id}")),
-        ] {
-            assert_eq!(
-                status_of(method, &uri).await,
-                StatusCode::UNAUTHORIZED,
-                "{method} {uri}"
-            );
-        }
-    }
-
-    fn header_of(headers: &HeaderMap, name: header::HeaderName) -> Option<&str> {
-        headers.get(name).and_then(|value| value.to_str().ok())
-    }
-
-    /// T9's header set, asserted without a database and without a file — which
-    /// is what makes it a test that will still be run in a year.
-    #[test]
-    fn a_served_image_carries_the_security_headers() {
-        let tag = etag(&"a".repeat(64), VariantKind::Display);
-        let headers = image_headers(&tag, 4096, None);
-
-        assert_eq!(
-            header_of(&headers, header::CONTENT_TYPE),
-            Some("image/webp"),
-            "the type is ours, never the upload's"
-        );
-        assert_eq!(
-            header_of(&headers, header::X_CONTENT_TYPE_OPTIONS),
-            Some("nosniff")
-        );
-        assert_eq!(
-            header_of(&headers, header::CACHE_CONTROL),
-            Some(IMAGE_CACHE_CONTROL)
-        );
-        assert_eq!(header_of(&headers, header::ETAG), Some(tag.as_str()));
-        assert_eq!(header_of(&headers, header::CONTENT_LENGTH), Some("4096"));
-
-        let disposition =
-            header_of(&headers, header::CONTENT_DISPOSITION).expect("content disposition");
-        assert!(disposition.starts_with("inline; filename="));
-        assert!(
-            disposition.ends_with(".webp\""),
-            "the filename is ours: {disposition}"
-        );
-    }
-
-    #[test]
-    fn last_modified_is_an_http_date() {
-        let headers = image_headers("\"tag\"", 1, Some(SystemTime::UNIX_EPOCH));
-        assert_eq!(
-            header_of(&headers, header::LAST_MODIFIED),
-            Some("Thu, 01 Jan 1970 00:00:00 GMT")
-        );
-    }
-
-    /// The tag is derived from content and variant, so two variants of one
-    /// photo never collide and one variant of two photos never does either.
-    #[test]
-    fn etags_are_content_derived() {
-        let a = "a".repeat(64);
-        let b = "b".repeat(64);
-
-        assert_eq!(etag(&a, VariantKind::Thumb), etag(&a, VariantKind::Thumb));
-        assert_ne!(etag(&a, VariantKind::Thumb), etag(&a, VariantKind::Full));
-        assert_ne!(etag(&a, VariantKind::Thumb), etag(&b, VariantKind::Thumb));
-    }
-
-    /// A variant that does not exist yet is an ordinary race — an upload
-    /// returns before its variants do — and must never be a 500.
-    #[test]
-    fn a_pending_variant_is_not_a_server_error() {
-        let status = availability(STATUS_PENDING)
-            .expect_err("pending is not servable")
-            .into_response()
-            .status();
-        assert_eq!(status, StatusCode::CONFLICT);
-
-        for terminal in [STATUS_FAILED, "something-a-later-migration-adds"] {
-            let status = availability(terminal)
-                .expect_err("not servable")
-                .into_response()
-                .status();
-            assert_eq!(status, StatusCode::NOT_FOUND, "{terminal}");
-        }
-
-        assert!(availability(STATUS_READY).is_ok());
-    }
-
-    /// The design's rejection branches, which `AppError` alone cannot express.
-    #[test]
-    fn domain_failures_keep_their_status() {
-        let cases = [
-            (PhotoError::TooLarge, StatusCode::PAYLOAD_TOO_LARGE),
-            (PhotoError::NotAnImage, StatusCode::UNSUPPORTED_MEDIA_TYPE),
-            (PhotoError::TooManyPixels, StatusCode::UNPROCESSABLE_ENTITY),
-            (
-                PhotoError::Undecodable("truncated".to_owned()),
-                StatusCode::UNPROCESSABLE_ENTITY,
-            ),
-            (
-                PhotoError::Unencodable("libwebp".to_owned()),
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ),
-        ];
-
-        for (err, expected) in cases {
-            assert_eq!(Rejection::from(err).into_response().status(), expected);
-        }
-    }
-
-    /// 429 with a `Retry-After`, not a reset connection (T12).
-    #[test]
-    fn the_rate_limiter_refuses_with_a_retry_after() {
-        let user = Uuid::now_v7();
-
-        // Two per minute: two succeed, the third does not.
-        assert!(take_upload_token(user, 2).is_ok());
-        assert!(take_upload_token(user, 2).is_ok());
-
-        let response = take_upload_token(user, 2)
-            .expect_err("the third upload is over budget")
-            .into_response();
-
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-        let retry = response
-            .headers()
-            .get(header::RETRY_AFTER)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-            .expect("retry-after is set");
-        assert!(
-            (1..=60).contains(&retry),
-            "implausible retry-after: {retry}"
-        );
-    }
-
-    /// Buckets are per user: one account exhausting its budget must not refuse
-    /// anybody else's upload.
-    #[test]
-    fn the_rate_limiter_is_per_user() {
-        let noisy = Uuid::now_v7();
-        let quiet = Uuid::now_v7();
-
-        assert!(take_upload_token(noisy, 1).is_ok());
-        assert!(take_upload_token(noisy, 1).is_err());
-        assert!(take_upload_token(quiet, 1).is_ok());
-    }
-
-    // -- the multipart reader ------------------------------------------------
-
-    fn multipart_body(boundary: &str, parts: &[(&str, Option<&str>, &[u8])]) -> Vec<u8> {
-        let mut body = Vec::new();
-        for (name, filename, content) in parts {
-            body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
-            body.extend_from_slice(
-                format!("Content-Disposition: form-data; name=\"{name}\"").as_bytes(),
-            );
-            if let Some(filename) = filename {
-                body.extend_from_slice(format!("; filename=\"{filename}\"").as_bytes());
-            }
-            body.extend_from_slice(b"\r\nContent-Type: application/octet-stream\r\n\r\n");
-            body.extend_from_slice(content);
-            body.extend_from_slice(b"\r\n");
-        }
-        body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
-        body
-    }
-
-    fn reader(boundary_value: &str, body: Vec<u8>, limit: u64) -> Multipart {
-        Multipart::new(
-            &format!("multipart/form-data; boundary={boundary_value}"),
-            Body::from(body),
-            limit,
-        )
-        .expect("a valid boundary")
-    }
-
-    /// The same body delivered `frame_size` bytes at a time, which is the shape
-    /// a real network body has and an in-memory one never does.
-    fn chunked_reader(boundary_value: &str, body: Vec<u8>, frame_size: usize) -> Multipart {
-        let frames = body
-            .chunks(frame_size)
-            .map(Bytes::copy_from_slice)
-            .collect();
-
-        Multipart::from_source(
-            &format!("multipart/form-data; boundary={boundary_value}"),
-            Source::Frames(frames),
-            u64::MAX,
-        )
-        .expect("a valid boundary")
-    }
-
-    async fn collect(multipart: &mut Multipart) -> Vec<(Option<String>, Vec<u8>)> {
-        let mut parts = Vec::new();
-        while let Some(part) = multipart.next_part().await.expect("a well-formed body") {
-            let mut content = Vec::new();
-            while let Some(chunk) = multipart.next_chunk().await.expect("a well-formed part") {
-                content.extend_from_slice(&chunk);
-            }
-            parts.push((part.filename, content));
-        }
-        parts
-    }
-
-    #[tokio::test]
-    async fn several_files_in_one_request_are_read_in_order() {
-        let raw = multipart_body(
-            "pv",
-            &[
-                ("caption", None, b"not a file"),
-                ("files", Some("one.jpg"), b"\xff\xd8\xff\xe0one"),
-                ("files", Some("two.png"), b"\x89PNGtwo"),
-            ],
-        );
-
-        let parts = collect(&mut reader("pv", raw, 1 << 20)).await;
-
-        assert_eq!(parts.len(), 3);
-        assert_eq!(parts[0].0, None, "an ordinary field has no filename");
-        assert_eq!(parts[1].0.as_deref(), Some("one.jpg"));
-        assert_eq!(parts[1].1, b"\xff\xd8\xff\xe0one");
-        assert_eq!(parts[2].1, b"\x89PNGtwo");
-    }
-
-    /// The case a naive split on the boundary gets wrong: image bytes that
-    /// happen to contain the boundary text without the CRLF that precedes a
-    /// real delimiter.
-    #[tokio::test]
-    async fn a_boundary_inside_the_data_is_not_a_delimiter() {
-        let content = b"before--pv still the same file after".to_vec();
-        let raw = multipart_body("pv", &[("files", Some("a.bin"), &content)]);
-
-        let parts = collect(&mut reader("pv", raw, 1 << 20)).await;
-
-        assert_eq!(parts.len(), 1);
-        assert_eq!(parts[0].1, content);
-    }
-
-    /// Every delimiter, header line and part boundary can land across a frame
-    /// boundary. Sweeping the frame size exercises all of those splits, and
-    /// one-byte frames exercise every one of them at once.
-    #[tokio::test]
-    async fn a_delimiter_split_across_frames_still_matches() {
-        let content: Vec<u8> = (0u8..=255).cycle().take(3000).collect();
-        let raw = multipart_body(
-            "pv-boundary",
-            &[
-                ("files", Some("a.bin"), &content),
-                ("files", Some("b.bin"), b"second"),
-            ],
-        );
-
-        for frame_size in [1, 2, 3, 7, 13, 64, 1000] {
-            let parts = collect(&mut chunked_reader("pv-boundary", raw.clone(), frame_size)).await;
-
-            assert_eq!(parts.len(), 2, "frame size {frame_size}");
-            assert_eq!(parts[0].0.as_deref(), Some("a.bin"), "{frame_size}");
-            assert_eq!(parts[0].1, content, "frame size {frame_size}");
-            assert_eq!(parts[1].1, b"second", "frame size {frame_size}");
-        }
-    }
-
-    /// T12's mid-stream half: a body that exceeds the cap is refused with a 413
-    /// even though nothing declared a `Content-Length`.
-    #[tokio::test]
-    async fn an_oversized_body_is_refused_with_413() {
-        let raw = multipart_body("pv", &[("files", Some("a.bin"), &vec![0u8; 4096])]);
-        let mut multipart = reader("pv", raw, 512);
-
-        let status = loop {
-            match multipart.next_part().await {
-                Ok(Some(_)) => while let Ok(Some(_)) = multipart.next_chunk().await {},
-                Ok(None) => panic!("the whole body was accepted"),
-                Err(rejection) => break rejection.into_response().status(),
-            }
-        };
-
-        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-    }
-
-    /// A truncated upload must not be stored as though it were whole.
-    #[tokio::test]
-    async fn a_body_with_no_closing_delimiter_is_refused() {
-        let mut raw = multipart_body("pv", &[("files", Some("a.bin"), b"0123456789")]);
-        raw.truncate(raw.len() - 12);
-
-        let mut multipart = reader("pv", raw, 1 << 20);
-        multipart.next_part().await.expect("headers are intact");
-
-        let result = loop {
-            match multipart.next_chunk().await {
-                Ok(Some(_)) => continue,
-                other => break other,
-            }
-        };
-
-        assert!(result.is_err(), "a truncated body was accepted as complete");
-    }
-
-    #[test]
-    fn only_a_multipart_content_type_is_accepted() {
-        assert_eq!(
-            boundary("multipart/form-data; boundary=abc").as_deref(),
-            Some("abc")
-        );
-        assert_eq!(
-            boundary("multipart/form-data; charset=utf-8; boundary=\"a b\"").as_deref(),
-            Some("a b")
-        );
-        assert_eq!(boundary("application/json"), None);
-        assert_eq!(boundary("multipart/form-data"), None);
-        assert_eq!(boundary("multipart/form-data; boundary="), None);
-        assert_eq!(
-            boundary(&format!("multipart/form-data; boundary={}", "x".repeat(71))),
-            None
-        );
-    }
-
-    #[test]
-    fn find_locates_a_needle_only_where_it_is() {
-        assert_eq!(find(b"hello world", b"world"), Some(6));
-        assert_eq!(find(b"aaab", b"aab"), Some(1));
-        assert_eq!(find(b"abc", b"abcd"), None);
-        assert_eq!(find(b"", b"a"), None);
-        assert_eq!(find(b"abc", b""), None);
-    }
-}
+#[path = "photos_tests.rs"]
+mod tests;

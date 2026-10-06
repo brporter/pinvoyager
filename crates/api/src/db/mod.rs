@@ -100,3 +100,7 @@ pub async fn ping(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("SELECT 1").execute(pool).await?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

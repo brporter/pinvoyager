@@ -86,10 +86,11 @@ pub async fn login(
         None => ProviderKind::Google,
     };
     let db_provider = DbProvider::from(kind);
+    let provider_name = kind.as_str();
 
     tracing::warn!(
         subject = %request.subject,
-        provider = kind.as_str(),
+        provider = provider_name,
         "DEV LOGIN: forging a session without any provider verification"
     );
 
@@ -128,3 +129,7 @@ pub async fn login(
         .into_response(),
     ))
 }
+
+#[cfg(test)]
+#[path = "dev_tests.rs"]
+mod tests;

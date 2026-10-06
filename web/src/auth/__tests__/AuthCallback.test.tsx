@@ -9,6 +9,7 @@
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -65,6 +66,17 @@ describe("/auth/callback", () => {
     ).toBeInTheDocument();
   });
 
+  it("returns to sign-in with the validated destination after cancellation", async () => {
+    stubMe(401);
+    renderAt("/auth/callback?status=cancelled&redirect_to=%2Fvoyages%2Fv1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
+
+    await waitFor(() => {
+      expect(location()).toBe("/signin?redirect_to=%2Fvoyages%2Fv1");
+    });
+  });
+
   it("shows one generic failure and quotes the reference", () => {
     stubMe(401);
     renderAt("/auth/callback?status=bad_signature&provider=microsoft&ref=7f3a-2b91");
@@ -77,12 +89,61 @@ describe("/auth/callback", () => {
     expect(screen.getByText("Reference 7f3a-2b91")).toBeInTheDocument();
   });
 
+  it("retries a failed callback at sign-in while preserving its safe destination", async () => {
+    stubMe(401);
+    renderAt("/auth/callback?status=failed&redirect_to=%2Fsettings");
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(location()).toBe("/signin?redirect_to=%2Fsettings");
+    });
+  });
+
   it("verifies while the session read is in flight rather than declaring failure", () => {
     stubMe(401);
     renderAt("/auth/callback?provider=google");
 
     expect(screen.getByRole("heading", { name: "Signing you in…" })).toBeInTheDocument();
     expect(screen.getByText("Verifying your Google account.")).toBeInTheDocument();
+  });
+
+  it("accepts pending as the explicit verifying outcome", () => {
+    stubMe(401);
+    renderAt("/auth/callback?status=pending&provider=unknown");
+
+    expect(screen.getByRole("heading", { name: "Signing you in…" })).toBeInTheDocument();
+    expect(screen.getByText("Verifying your account.")).toBeInTheDocument();
+  });
+
+  it("restarts the conflicting provider and lets a signed-in user cancel to settings", async () => {
+    stubMe(200, SIGNED_IN);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+    renderAt("/auth/callback?status=already_linked&provider=apple");
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with Apple instead" }));
+    expect(assign).toHaveBeenCalledWith("/auth/apple/start");
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(location()).toBe("/settings"));
+  });
+
+  it("does not offer a provider restart for an unrecognized provider", () => {
+    stubMe(401);
+    renderAt("/auth/callback?status=conflict&provider=not-a-provider");
+
+    expect(screen.queryByRole("button", { name: /Sign in with/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("sends an anonymous user home when they cancel a provider conflict", async () => {
+    stubMe(401);
+    renderAt("/auth/callback?status=conflict&provider=apple");
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(location()).toBe("/"));
   });
 
   it("falls through to the failure state once the session says nobody is signed in", async () => {

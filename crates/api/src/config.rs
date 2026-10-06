@@ -371,3 +371,7 @@ impl Default for TelemetryConfig {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;

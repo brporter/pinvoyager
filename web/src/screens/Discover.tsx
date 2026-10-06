@@ -2,9 +2,8 @@
  * Discover — implements `design/screens/discover.html`.
  *
  * The public landing page and the browse surface. Every voyage on PinVoyager is
- * public, so a signed-out visitor is a first-class user here rather than
- * someone being held at a gate: the hero, the grid and the pagination all work
- * with no session at all.
+ * public, so a signed-out visitor is a first-class user here: the hero, the
+ * grid and the pagination all work with no session at all.
  *
  * Three decisions come straight from the design's annotations:
  *

@@ -26,8 +26,15 @@ pub fn init(config: &TelemetryConfig) -> Result<(), TelemetryError> {
     // without editing anything. An invalid `RUST_LOG` is a hard failure rather
     // than a silent fallback: quietly ignoring it means the operator spends
     // the next ten minutes wondering where their logs went.
-    let directives =
-        std::env::var(EnvFilter::DEFAULT_ENV).unwrap_or_else(|_| config.log_level.clone());
+    let directives = std::env::var(EnvFilter::DEFAULT_ENV).ok();
+    init_with_directives(config, directives.as_deref())
+}
+
+fn init_with_directives(
+    config: &TelemetryConfig,
+    environment_directives: Option<&str>,
+) -> Result<(), TelemetryError> {
+    let directives = environment_directives.unwrap_or(&config.log_level);
     let filter = EnvFilter::try_new(&directives).map_err(|err| TelemetryError(Box::new(err)))?;
 
     let registry = tracing_subscriber::registry();
@@ -69,3 +76,7 @@ where
         Box::new(fmt::layer().pretty())
     }
 }
+
+#[cfg(test)]
+#[path = "telemetry_tests.rs"]
+mod tests;

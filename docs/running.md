@@ -128,10 +128,22 @@ cargo test                    # needs the database up
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 
-# Sends a real SIGTERM to the test process, so it is #[ignore]d by default
-# and must run alone.
-cargo test --lib -- --ignored sigterm --test-threads=1
+# Backend coverage (requires cargo-llvm-cov and PostgreSQL)
+# Run serially because shutdown tests send signals to their test process.
+cargo coverage -- --test-threads=1
 ```
+
+Install the coverage subcommand once with `cargo install cargo-llvm-cov --locked`.
+`cargo coverage` instruments all workspace tests and fails unless line,
+function, and region coverage each reach 100%. Start PostgreSQL and set
+`DATABASE_URL` as described under [First run](#first-run) first. See the
+[coverage plan](coverage-plan.md) for the current baseline, branch coverage
+limitation, and work needed to reach the thresholds.
+
+The backend command uses stable Rust and checks lines, functions, and regions.
+Rust branch instrumentation requires nightly, so this project does not collect
+branch percentages. Tests should cover both outcomes of each meaningful
+conditional instead.
 
 ## Queries and the offline cache
 

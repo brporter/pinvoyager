@@ -67,9 +67,10 @@ function DiscoverMarkers({ view }: { view: MapView }) {
   // The zoom is rounded before it becomes part of the question. A fractional
   // zoom would make every frame of a pinch a different cache key and a
   // different request, for an answer that changes only when the grouping does.
-  const query = useDiscoverMap(
-    view.window === null ? null : { ...view.window, zoom: Math.round(view.zoom) },
-  );
+  // MapCanvas renders its children only after the map loads and its initial
+  // bounds have been committed (see MapCanvas tests). A null window cannot
+  // reach this child, so the query always has a concrete viewport.
+  const query = useDiscoverMap({ ...view.window!, zoom: Math.round(view.zoom) });
 
   const clusters = query.data?.clusters ?? [];
 

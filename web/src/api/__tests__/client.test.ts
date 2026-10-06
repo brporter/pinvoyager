@@ -11,11 +11,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiRequestError,
+  NetworkError,
   UnauthorizedError,
+  attachPhotos,
+  createVoyage,
   deleteVoyage,
+  deletePhoto,
+  detachPhoto,
+  errorFrom,
+  getDiscoverMap,
+  getMe,
+  getPhoto,
   getVoyage,
+  getVoyageMap,
   isUnauthorized,
+  listPhotos,
   listVoyages,
+  reorderPhotos,
+  signInUrl,
+  signOut,
   updateVoyage,
 } from "../client";
 
@@ -169,5 +183,142 @@ describe("the fetch wrapper", () => {
     expect(error).toBeInstanceOf(ApiRequestError);
     expect(error.status).toBe(502);
     expect(error.code).toBe("unknown");
+  });
+
+  it("uses generic fields for an empty or structurally invalid error body", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 503 }))));
+    const empty = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
+    expect(empty.message).toBe("The request failed.");
+
+    stubFetch(
+      respond(400, { code: 12, message: false, errors: "not an array" }),
+    );
+    const invalid = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
+    expect(invalid.code).toBe("unknown");
+    expect(invalid.message).toBe("The request failed.");
+    expect(invalid.fieldErrors).toEqual([]);
+
+    stubFetch(respond(400, "a primitive error value"));
+    const primitive = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
+    expect(primitive.code).toBe("unknown");
+
+    stubFetch(respond(400, null));
+    const nullBody = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
+    expect(nullBody.code).toBe("unknown");
+    expect(nullBody.message).toBe("The request failed.");
+  });
+
+  it("wraps fetch rejection as a network error and passes an abort signal", async () => {
+    const cause = new TypeError("connection reset");
+    const fetch = vi.fn().mockRejectedValue(cause);
+    vi.stubGlobal("fetch", fetch);
+    const controller = new AbortController();
+
+    const error = await getMe({ signal: controller.signal }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(NetworkError);
+    expect((error as NetworkError).cause).toBe(cause);
+    expect((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal).toBe(
+      controller.signal,
+    );
+  });
+
+  it.each([204, 205])("treats HTTP %i as a successful empty response", async (status) => {
+    stubFetch(() => new Response(null, { status }));
+    await expect(getMe()).resolves.toBeUndefined();
+  });
+
+  it("returns undefined for a successful response with an empty body", async () => {
+    stubFetch(() => new Response("", { status: 200 }));
+    await expect(getMe()).resolves.toBeUndefined();
+  });
+
+  it("propagates malformed JSON in a successful response", async () => {
+    stubFetch(() => new Response("{", { status: 200 }));
+    await expect(getMe()).rejects.toBeInstanceOf(SyntaxError);
+  });
+
+  it("uses fallback error fields when the response body cannot be read or parsed", async () => {
+    const unreadable = {
+      ok: false,
+      status: 503,
+      statusText: "Unavailable",
+      headers: new Headers(),
+      text: vi.fn().mockRejectedValue(new Error("stream reset")),
+    } as unknown as Response;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unreadable));
+
+    const readError = await getMe().catch((caught: unknown) => caught);
+    expect(readError).toBeInstanceOf(ApiRequestError);
+    expect((readError as ApiRequestError).message).toBe("Unavailable");
+
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("null", { status: 500 }))));
+    const parsedNull = await getMe().catch((caught: unknown) => caught);
+    expect((parsedNull as ApiRequestError).code).toBe("unknown");
+  });
+
+  it("parses numeric Retry-After values and ignores HTTP dates", async () => {
+    stubFetch(respond(429, { code: "rate_limited", message: "Slow down." }, { "retry-after": "12" }));
+    const rateLimit = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
+    expect(rateLimit.retryAfterSeconds).toBe(12);
+
+    stubFetch(
+      respond(429, { code: "rate_limited", message: "Slow down." }, {
+        "retry-after": "Wed, 21 Oct 2030 07:28:00 GMT",
+      }),
+    );
+    const date = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
+    expect(date.retryAfterSeconds).toBeNull();
+  });
+});
+
+describe("endpoint wrappers", () => {
+  it("sends the correct paths, methods, bodies, and query values", async () => {
+    const fetch = stubFetch(() => new Response(null, { status: 204 }));
+    const call = async (invoke: () => Promise<unknown>) => {
+      const before = fetch.mock.calls.length;
+      await invoke();
+      return fetch.mock.calls[before] as unknown as [string, RequestInit];
+    };
+
+    expect((await call(() => getVoyageMap("v1")))[0]).toBe("/api/voyages/v1/map");
+    expect((await call(() => listVoyages({ mine: true })))[0]).toBe("/api/voyages?mine=true");
+    expect((await call(() => getDiscoverMap({ west: -1, south: -2, east: 3, north: 4, zoom: 5 })))[0])
+      .toBe("/api/map?west=-1&south=-2&east=3&north=4&zoom=5");
+    const create = await call(() => createVoyage({ title: "Trip" }));
+    expect(create[0]).toBe("/api/voyages");
+    expect(create[1].method).toBe("POST");
+    expect(JSON.parse(create[1].body as string)).toEqual({ title: "Trip" });
+
+    const attach = await call(() => attachPhotos("v1", ["p1", "p2"]));
+    expect(attach[0]).toBe("/api/voyages/v1/photos");
+    expect(JSON.parse(attach[1].body as string)).toEqual({ photo_ids: ["p1", "p2"] });
+    const reorder = await call(() => reorderPhotos("v1", ["p2", "p1"]));
+    expect(reorder[0]).toBe("/api/voyages/v1/photos/order");
+    expect(reorder[1].method).toBe("PATCH");
+
+    expect((await call(() => detachPhoto("v1", "p1")))[0]).toBe("/api/voyages/v1/photos/p1");
+    expect((await call(() => listPhotos({ before: "cursor", limit: 7 })))[0]).toBe(
+      "/api/photos?before=cursor&limit=7",
+    );
+    expect((await call(() => getPhoto("p1")))[0]).toBe("/api/photos/p1");
+    expect((await call(() => deletePhoto("p1")))[0]).toBe("/api/photos/p1");
+    expect((await call(() => signOut()))[0]).toBe("/auth/logout");
+  });
+
+  it("constructs provider sign-in URLs with an optional encoded destination", () => {
+    expect(signInUrl("google")).toBe("/auth/google/start");
+    expect(signInUrl("apple", "/voyages/a b")).toBe(
+      "/auth/apple/start?redirect_to=%2Fvoyages%2Fa+b",
+    );
+  });
+
+  it("normalizes error classes and empty field-error defaults", () => {
+    const unauthorized = errorFrom(401, { code: "unauthorized", message: "Sign in." }, null);
+    expect(unauthorized).toBeInstanceOf(UnauthorizedError);
+    expect(unauthorized.fieldError("title")).toBeUndefined();
+    const ordinary = errorFrom(400, { code: "bad_request", message: "Bad." }, null);
+    expect(ordinary.name).toBe("ApiRequestError");
+    expect(ordinary.retryAfterSeconds).toBeNull();
   });
 });

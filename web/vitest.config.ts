@@ -15,6 +15,26 @@ export default mergeConfig(
       // names, so a test that asserts on a computed style needs the real
       // stylesheet rather than an empty one.
       css: true,
+      coverage: {
+        // Measure every production module, even if no current test imports it.
+        include: ["src/**/*.{ts,tsx}"],
+        // These files support tests or TypeScript tooling; they are not
+        // frontend runtime code and do not belong in the production denominator.
+        exclude: [
+          "src/**/*.d.ts",
+          "src/**/*.{test,spec}.{ts,tsx}",
+          "src/**/__tests__/**",
+          "src/**/__fixtures__/**",
+          "src/**/__mocks__/**",
+          "src/test/**",
+        ],
+        thresholds: {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+      },
     },
   }),
 );

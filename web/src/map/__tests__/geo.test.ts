@@ -281,6 +281,18 @@ describe("clusterPins", () => {
     expect(clusters[1].members.map((member) => member.id)).toEqual(["c"]);
   });
 
+  it("skips a pin already absorbed by an earlier cluster", () => {
+    const clusters = clusterPins([
+      pin("seed", 0, 0),
+      pin("separate", 0, 0.1),
+      pin("absorbed", 0, 0.01),
+    ], 10);
+
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0].members.map(({ id }) => id)).toEqual(["seed", "absorbed"]);
+    expect(clusters[1].members.map(({ id }) => id)).toEqual(["separate"]);
+  });
+
   it("keeps every pin, in exactly one cluster", () => {
     const pins = Array.from({ length: 40 }, (_, index) =>
       pin(`p${index}`, 43 + index * 0.002, 141 + index * 0.003),

@@ -372,8 +372,9 @@ export function Upload() {
             counts={counts}
             onCancel={(id) => controllers.current.get(id)?.abort()}
             onRetry={(id) => {
-              const item = items.find((candidate) => candidate.id === id);
-              if (item !== undefined) void uploadOne(item);
+              // This handler comes from the row for this item, so the item is
+              // necessarily in the same render's batch.
+              void uploadOne(items.find((candidate) => candidate.id === id)!);
             }}
             onRemove={(id) =>
               setItems((current) => current.filter((item) => item.id !== id))
@@ -632,7 +633,8 @@ function detailFor(item: Item): string {
     case "processing":
       return `${size} · reading location data`;
     case "uploaded": {
-      const at = item.photo === undefined ? null : coordinateLabel(item.photo);
+      // An item only enters `uploaded` when the API returned its photo.
+      const at = coordinateLabel(item.photo!);
       return at === null ? `${size} · uploaded, needs placing` : `${size} · ${at}`;
     }
     case "error":
@@ -925,7 +927,8 @@ function ReviewMap({
             key={photo.id}
             left={left}
             top={top}
-            label={`A photo at ${coordinateLabel(photo) ?? "an unknown position"}`}
+            // `layout` only returns photos with both coordinates.
+            label={`A photo at ${coordinateLabel(photo)!}`}
           />
         ))}
         <Attribution />

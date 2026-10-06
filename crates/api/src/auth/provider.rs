@@ -142,6 +142,13 @@ const DISPLAY_ORDER: [ProviderKind; 4] = [
 ];
 
 impl ProviderRegistry {
+    #[cfg(test)]
+    pub(crate) fn for_test(kind: ProviderKind, provider: Box<dyn AuthProvider>) -> Self {
+        Self {
+            providers: HashMap::from([(kind, provider)]),
+        }
+    }
+
     /// Builds the registry, performing OIDC discovery once per configured
     /// provider.
     ///
@@ -154,6 +161,13 @@ impl ProviderRegistry {
     /// A provider that fails discovery at startup must not take the whole
     /// service down: log it, disable that provider, and keep serving.
     pub async fn from_config(config: &crate::config::AuthConfig) -> Result<Self, AuthError> {
+        Self::from_config_with_apple_issuer(config, super::providers::apple::APPLE_ISSUER).await
+    }
+
+    async fn from_config_with_apple_issuer(
+        config: &crate::config::AuthConfig,
+        apple_issuer: &str,
+    ) -> Result<Self, AuthError> {
         let base_url = &config.base_url;
         let configured = &config.providers;
 
@@ -183,7 +197,11 @@ impl ProviderRegistry {
             },
             async {
                 match &configured.apple {
-                    Some(cfg) => Some(AppleProvider::discover(cfg, base_url).await.map(boxed)),
+                    Some(cfg) => Some(
+                        AppleProvider::discover(cfg, base_url, apple_issuer)
+                            .await
+                            .map(boxed),
+                    ),
                     None => None,
                 }
             },
@@ -222,8 +240,9 @@ impl ProviderRegistry {
                 // `{tenantid}` placeholder), and OIDC requires that comparison
                 // to be exact. It needs a tenant-specific issuer URL.
                 Some(Err(err)) => {
+                    let provider_name = kind.as_str();
                     tracing::warn!(
-                        provider = kind.as_str(),
+                        provider = provider_name,
                         error = %err,
                         "provider disabled: it could not be initialized at startup"
                     );
@@ -278,18 +297,5 @@ fn boxed<P: AuthProvider + 'static>(provider: P) -> Box<dyn AuthProvider> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_deployment_with_no_credentials_still_has_a_registry() {
-        // The state a fresh checkout starts in, and the reason `from_config`
-        // does not return `Err` when nothing is configured.
-        let registry = ProviderRegistry::empty();
-
-        assert!(registry.configured().is_empty());
-        for kind in DISPLAY_ORDER {
-            assert!(registry.get(kind).is_none());
-        }
-    }
-}
+#[path = "provider_tests.rs"]
+mod tests;

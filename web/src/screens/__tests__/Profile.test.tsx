@@ -10,7 +10,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVoyages } from "../../api/hooks";
 import { Profile } from "../Profile";
@@ -36,6 +36,10 @@ function renderProfile(userId: string, auth = authState(null)) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("Profile", () => {
@@ -104,6 +108,13 @@ describe("Profile", () => {
     expect(screen.getByText("1 voyage · 1 draft")).toBeInTheDocument();
   });
 
+  it("uses the plural draft label when the owner has several drafts", () => {
+    mockedUseVoyages.mockReturnValue(loadedFeed([draft(), draft({ id: "second-draft" })]));
+    renderProfile(ADA.id, authState(ADA));
+
+    expect(screen.getByText("0 voyages · 2 drafts")).toBeInTheDocument();
+  });
+
   it("claims no total while more pages are outstanding", () => {
     // A count of what happens to have been fetched is wrong for exactly as
     // long as it is interesting.
@@ -112,6 +123,30 @@ describe("Profile", () => {
 
     expect(screen.queryByText(/\d+ voyages?/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Load more voyages" })).toBeInTheDocument();
+  });
+
+  it("loads the next page when requested", async () => {
+    const feed = loadedFeed([voyage()], "cursor-2");
+    mockedUseVoyages.mockReturnValue(feed);
+    renderProfile(ADA.id, authState(ADA));
+
+    await userEvent.click(screen.getByRole("button", { name: "Load more voyages" }));
+
+    expect(feed.fetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it("shows the owner's join month on desktop once the list is complete", () => {
+    const mediaQuery = {
+      matches: true,
+      media: "(min-width: 768px)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList;
+    vi.stubGlobal("matchMedia", vi.fn(() => mediaQuery));
+    mockedUseVoyages.mockReturnValue(loadedFeed([voyage()]));
+    renderProfile(ADA.id, authState(ADA));
+
+    expect(screen.getByText(/joined .*2026/)).toBeInTheDocument();
   });
 
   it("shows the empty state only once the feed is exhausted", () => {
@@ -181,5 +216,15 @@ describe("Profile", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "This creator" })).toBeInTheDocument();
+  });
+
+  it("labels an owner's avatar when the account has no name or picture", () => {
+    mockedUseVoyages.mockReturnValue(loadedFeed([]));
+    renderProfile(
+      ADA.id,
+      authState({ ...ADA, display_name: null, avatar_url: null }),
+    );
+
+    expect(screen.getByRole("img", { name: "Your account" })).toBeInTheDocument();
   });
 });

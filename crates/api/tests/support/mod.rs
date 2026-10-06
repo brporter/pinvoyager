@@ -226,6 +226,8 @@ struct MockState {
     issuer: Url,
     minted: Arc<Mutex<HashMap<String, Minted>>>,
     jwks_requests: Arc<AtomicUsize>,
+    omit_token_endpoint: Arc<std::sync::atomic::AtomicBool>,
+    omit_id_token: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// A running OIDC provider on 127.0.0.1, with an ephemeral port so that
@@ -263,6 +265,8 @@ impl MockOidcProvider {
             issuer: issuer.clone(),
             minted: Arc::new(Mutex::new(HashMap::new())),
             jwks_requests: Arc::new(AtomicUsize::new(0)),
+            omit_token_endpoint: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            omit_id_token: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         let app = Router::new()
@@ -309,6 +313,19 @@ impl MockOidcProvider {
         self.state.jwks_requests.load(Ordering::Relaxed)
     }
 
+    /// Omits the optional discovery field so exchange tests can exercise the
+    /// provider-client's missing-token-endpoint error.
+    pub fn omit_token_endpoint(&self) {
+        self.state
+            .omit_token_endpoint
+            .store(true, Ordering::Relaxed);
+    }
+
+    /// Returns a successful OAuth token response without an ID token.
+    pub fn omit_id_token(&self) {
+        self.state.omit_id_token.store(true, Ordering::Relaxed);
+    }
+
     /// Starts building an ID token. Every default is correct; a test changes
     /// exactly the one property it is about, so a failure can only mean that
     /// property was checked — or was not.
@@ -351,7 +368,7 @@ fn issuer_identifier(issuer: &Url) -> &str {
 }
 
 async fn discovery(State(state): State<MockState>) -> Json<Value> {
-    Json(json!({
+    let mut document = json!({
         // Must be byte-identical to the configured issuer, or discovery is
         // rejected before any token is ever minted.
         "issuer": issuer_identifier(&state.issuer),
@@ -367,7 +384,14 @@ async fn discovery(State(state): State<MockState>) -> Json<Value> {
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
         "claims_supported": ["iss", "aud", "sub", "iat", "exp", "nonce", "name", "picture"],
         "code_challenge_methods_supported": ["S256"],
-    }))
+    });
+    if state.omit_token_endpoint.load(Ordering::Relaxed) {
+        document
+            .as_object_mut()
+            .expect("discovery document is an object")
+            .remove("token_endpoint");
+    }
+    Json(document)
 }
 
 fn endpoint(issuer: &Url, path: &str) -> String {
@@ -410,7 +434,7 @@ async fn token(State(state): State<MockState>, body: String) -> Response {
         return oauth_error(StatusCode::BAD_REQUEST, "invalid_grant", "unknown code");
     };
 
-    Json(json!({
+    let mut response = json!({
         // Reusing the code as the access token keeps /userinfo answerable
         // without a second table. D1 forbids the *service* from storing this;
         // the provider side is allowed to remember what it issued.
@@ -418,9 +442,11 @@ async fn token(State(state): State<MockState>, body: String) -> Response {
         "token_type": "Bearer",
         "expires_in": 3600,
         "scope": "openid profile",
-        "id_token": id_token,
-    }))
-    .into_response()
+    });
+    if !state.omit_id_token.load(Ordering::Relaxed) {
+        response["id_token"] = json!(id_token);
+    }
+    Json(response).into_response()
 }
 
 /// Some implementations follow the ID token with a userinfo call. Answering it
