@@ -55,9 +55,13 @@ is unaffected and is what this phase now delivers.
    requirement, not a courtesy.
 6. Pins from the phase 5 map endpoint, with the design's pin, selected-pin, and cluster
    treatments.
-7. Clustering with count tiers, expanding on zoom.
+7. Clustering with count tiers, expanding on zoom. Under D12, clicking a Voyage
+   page cluster opens its photos in a native modal gallery; zoom controls still
+   expand groups.
 8. **Bidirectional selection** — clicking a pin highlights and scrolls to its photo; selecting
-   a photo pans the map and marks its pin. This is the interaction the whole screen exists for.
+   a photo pans the map and marks its pin. D12 also opens a modal gallery for the
+   clicked pin or cluster. See `docs/location-gallery.md` for the added behavior
+   and browser checks that remain unverified.
 9. Mobile treatment: full-bleed map with a draggable photo sheet, per the phase 1 design.
    Gestures must not fight — the sheet drag and the map pan cannot both claim a vertical swipe.
 10. Granularity is honored visually. A coarse voyage shows an area indication rather than a

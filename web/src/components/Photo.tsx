@@ -12,7 +12,7 @@
  *    including a photograph that happens to be teal.
  *  - **Unplaced** is normal, not exceptional. Screenshots, scans and anything
  *    shot with location services off carry no GPS EXIF at all, which is a large
- *    fraction of a real library. They get a dashed warning border and an
+ *    fraction of real uploads. They get a dashed warning border and an
  *    explicit badge so they are visibly accounted for rather than silently
  *    dropped from the map.
  *

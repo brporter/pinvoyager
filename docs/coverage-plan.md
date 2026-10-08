@@ -2,21 +2,22 @@
 
 ## Current baseline
 
-Measurements below come from the latest frontend and backend test runs. The
-frontend command was
-`npm run test -- --coverage --coverage.reportOnFailure --maxWorkers=1` in
-`web/`; the backend command was
-`DATABASE_URL='postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager' cargo coverage -- --test-threads=1`.
-Both suites passed on 2026-09-29. The backend coverage command exits with
-status 1 because its configured 100% thresholds remain unmet. The latest
-serial run passed 336 library unit tests, 1 main-binary test, and 59
-integration tests (all integration suites; zero ignored). It covered 3,511 of
-3,596 lines, 491 of 510 functions, and 4,854 of 5,126 regions.
+Measurements below come from the gallery-carousel frontend run on 2026-10-07
+and the regression-suite backend execution on 2026-10-06.
+The frontend command was `npm --prefix web run test -- --coverage`.
+The backend combined a normal-environment library coverage run and a workspace
+run on port 18080 so the development API could stay available on port 8080.
+The workspace run skipped the configuration fixture already tested under the
+normal environment. See `docs/upload-regression-tests.md` for exact commands,
+regression outcomes, and outstanding browser checks.
 
 | Area and scope | Statements / regions | Lines | Branches | Functions | Test result |
 |---|---:|---:|---:|---:|---|
-| Frontend production files (Vitest V8) | 100% statements | 100% | 100% | 100% | 443 passed, 39 files (2026-09-28) |
-| Backend production source (cargo-llvm-cov 0.9.1, stable) | 94.69% regions | 97.64% | Not collected | 96.27% | 336 library unit tests, 1 binary test, 59 integration tests passed; 0 ignored (2026-09-29) |
+| Frontend production files (Vitest V8) | 100% statements | 100% | 100% | 100% | 475 passed, 41 files |
+| Backend production source (cargo-llvm-cov 0.9.1, stable) | 95.05% regions (5007/5268) | 98.11% (3633/3703) | Not collected | 96.35% (501/520) | 346 library tests, 1 binary test, and 62 integration tests pass; 0 ignored |
+
+The backend threshold report exits 1 because its configured 100% line, function,
+and region thresholds remain unmet. No new instrumentation exclusions were added.
 
 Frontend tests cover the app root mount and retry callback outcomes in
 `web/src/__tests__/main.test.tsx`, all `AccountMenu` lines, functions, and

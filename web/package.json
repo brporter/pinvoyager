@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --force",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:regression": "vitest run src/screens/__tests__/Upload.test.tsx src/screens/__tests__/VoyageUploadFlow.test.tsx src/api/__tests__/hooks.test.tsx src/components/__tests__/upload.test.tsx"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",

@@ -76,6 +76,8 @@ export interface VoyageMapProps {
   precisionM: number | null;
   selection: MapSelection | null;
   onSelectPin: (photoId: string) => void;
+  /** Opens the photos represented by a marker instead of expanding its cluster. */
+  onOpenGallery?: (photoIds: string[]) => void;
   /** Names the map region. */
   label: string;
   /** Pixels to lift the attribution by, so the mobile sheet does not cover it. */
@@ -109,6 +111,7 @@ export function VoyageMap({
   precisionM,
   selection,
   onSelectPin,
+  onOpenGallery,
   label,
   attributionOffset = 0,
   style,
@@ -138,6 +141,7 @@ export function VoyageMap({
           precisionM={precisionM}
           selection={selection}
           onSelectPin={onSelectPin}
+          onOpenGallery={onOpenGallery}
         />
       )}
     </MapCanvas>
@@ -156,6 +160,8 @@ interface VoyageMarkersProps {
   precisionM: number | null;
   selection: MapSelection | null;
   onSelectPin: (photoId: string) => void;
+  /** Opens the photos represented by a marker instead of expanding its cluster. */
+  onOpenGallery?: (photoIds: string[]) => void;
 }
 
 /** How much closer a cluster click takes the camera. Two levels quarters the
@@ -163,7 +169,7 @@ interface VoyageMarkersProps {
  *  losing the surrounding context in one jump. */
 const CLUSTER_EXPAND_STEPS = 2;
 
-function VoyageMarkers({ view, pins, precisionM, selection, onSelectPin }: VoyageMarkersProps) {
+function VoyageMarkers({ view, pins, precisionM, selection, onSelectPin, onOpenGallery }: VoyageMarkersProps) {
   const selectedId = selection?.photoId ?? null;
 
   /**
@@ -207,6 +213,7 @@ function VoyageMarkers({ view, pins, precisionM, selection, onSelectPin }: Voyag
           precisionM={precisionM}
           zoom={view.zoom}
           onSelectPin={onSelectPin}
+          onOpenGallery={onOpenGallery}
           onExpand={() =>
             view.moveTo(cluster.coordinate, {
               zoom: Math.min(MAX_ZOOM, view.zoom + CLUSTER_EXPAND_STEPS),
@@ -223,7 +230,7 @@ function VoyageMarkers({ view, pins, precisionM, selection, onSelectPin }: Voyag
             left={0}
             top={0}
             selected
-            onClick={() => onSelectPin(selectedPin.id)}
+            onClick={() => { onSelectPin(selectedPin.id); onOpenGallery?.([selectedPin.id]); }}
           />
         </MapMarker>
       )}
@@ -236,6 +243,8 @@ interface ClusterMarkerProps {
   precisionM: number | null;
   zoom: number;
   onSelectPin: (photoId: string) => void;
+  /** Opens the photos represented by a marker instead of expanding its cluster. */
+  onOpenGallery?: (photoIds: string[]) => void;
   onExpand: () => void;
 }
 
@@ -243,11 +252,11 @@ interface ClusterMarkerProps {
  * One marker: a pin when it stands for a single photograph, a numbered bubble
  * when it stands for several.
  *
- * Both are buttons. The bubble's job is to zoom in far enough that it breaks
- * apart, which is how a user reaches the photographs inside it — including a
- * keyboard user, which a pointer-only affordance would exclude.
+ * Both are buttons. With a gallery callback, the bubble opens its member
+ * photos. Other map consumers expand the bubble by zooming. Both interactions
+ * remain available to keyboard users through native button activation.
  */
-function ClusterMarker({ cluster, precisionM, zoom, onSelectPin, onExpand }: ClusterMarkerProps) {
+function ClusterMarker({ cluster, precisionM, zoom, onSelectPin, onOpenGallery, onExpand }: ClusterMarkerProps) {
   const single = cluster.members.length === 1 ? cluster.members[0] : null;
 
   return (
@@ -264,10 +273,10 @@ function ClusterMarker({ cluster, precisionM, zoom, onSelectPin, onExpand }: Clu
           left={0}
           top={0}
           size={clusterTier(cluster.members.length)}
-          onClick={onExpand}
+          onClick={onOpenGallery ? () => onOpenGallery(cluster.members.map(member => member.id)) : onExpand}
         />
       ) : (
-        <Pin label={single.label} left={0} top={0} onClick={() => onSelectPin(single.id)} />
+        <Pin label={single.label} left={0} top={0} onClick={() => { onSelectPin(single.id); onOpenGallery?.([single.id]); }} />
       )}
     </MapMarker>
   );

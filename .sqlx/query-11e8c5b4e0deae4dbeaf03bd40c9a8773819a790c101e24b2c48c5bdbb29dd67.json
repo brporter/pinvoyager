@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO photos\n               (id, owner_id, content_hash, byte_size, width, height, original_format,\n                captured_at, latitude, longitude)\n           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n           RETURNING id, owner_id, content_hash, byte_size, width, height, original_format,\n                     captured_at, latitude, longitude, variant_status, created_at",
+  "query": "SELECT p.id, p.owner_id, p.content_hash, p.byte_size, p.width, p.height, p.original_format,\n                  p.captured_at, p.latitude, p.longitude, p.variant_status, p.created_at\n             FROM photos p JOIN voyage_photos vp ON vp.photo_id = p.id\n            WHERE p.owner_id = $1 AND vp.voyage_id = $2\n              AND ($3::uuid IS NULL OR p.id < $3)\n            ORDER BY p.id DESC LIMIT $4",
   "describe": {
     "columns": [
       {
@@ -140,14 +140,8 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Text",
-        "Int8",
-        "Int4",
-        "Int4",
-        "Text",
-        "Timestamptz",
-        "Numeric",
-        "Numeric"
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
@@ -165,5 +159,5 @@
       false
     ]
   },
-  "hash": "ad88f6291e94ca3c7d7ee22f5503c291324fedfe63583e7b0b70c8980278e09d"
+  "hash": "11e8c5b4e0deae4dbeaf03bd40c9a8773819a790c101e24b2c48c5bdbb29dd67"
 }

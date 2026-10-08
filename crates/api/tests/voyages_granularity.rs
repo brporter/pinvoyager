@@ -28,6 +28,9 @@
 //! contract while the request bodies are not. Reads go through HTTP, because
 //! the serialized response *is* the thing under test.
 
+#[path = "support/photo_voyage.rs"]
+mod photo_voyage;
+
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -274,6 +277,7 @@ async fn photo_at(pool: &PgPool, owner: Uuid, at: Option<(f64, f64)>) -> Uuid {
     let photo = photos::create(
         pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, owner).await,
             owner_id: owner,
             // Content-addressed and unique; nothing here reads the bytes.
             content_hash: format!("{:064x}", Uuid::now_v7().as_u128()),
@@ -312,7 +316,7 @@ async fn voyage_with(
     .expect("create voyage");
 
     if !photo_ids.is_empty() {
-        let attached = voyages::attach_photos(pool, voyage.id, owner, photo_ids)
+        let attached = voyages::move_photos(pool, voyage.id, owner, photo_ids)
             .await
             .expect("attach photos");
         assert_eq!(

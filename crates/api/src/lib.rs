@@ -26,3 +26,7 @@ pub mod voyages;
 pub use config::Config;
 pub use error::{AppError, AppResult};
 pub use state::AppState;
+
+#[cfg(test)]
+#[path = "../tests/support/photo_voyage.rs"]
+mod photo_voyage;

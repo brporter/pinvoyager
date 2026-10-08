@@ -181,7 +181,7 @@ export interface DiscoverMap {
 /** Rust: `PhotoResponse`.
  *
  *  Note the bare `latitude`/`longitude`: this endpoint is owner-only and
- *  returns EXACT coordinates. It is a user's own library, not the public
+ *  returns EXACT coordinates. It is owner-only voyage metadata, separate from the public
  *  surface. Never render these on a public page — anything a stranger can see
  *  must come from a `Coordinate` on a voyage, which has already been rounded to
  *  that voyage's precision. */

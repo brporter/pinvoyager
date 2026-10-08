@@ -10,6 +10,7 @@ fn hash_of(seed: u8) -> String {
 
 fn new_photo(owner_id: Uuid, content_hash: &str) -> NewPhoto {
     NewPhoto {
+        voyage_id: owner_id,
         owner_id,
         content_hash: content_hash.to_owned(),
         byte_size: 1_234,
@@ -23,10 +24,16 @@ fn new_photo(owner_id: Uuid, content_hash: &str) -> NewPhoto {
 }
 
 async fn a_user(pool: &PgPool) -> Uuid {
-    crate::db::repo::users::create(pool, None, None)
+    let owner = crate::db::repo::users::create(pool, None, None)
         .await
         .expect("create user")
-        .id
+        .id;
+    sqlx::query("INSERT INTO voyages (id, owner_id, title) VALUES ($1, $1, 'Photo fixture')")
+        .bind(owner)
+        .execute(pool)
+        .await
+        .expect("fixture voyage");
+    owner
 }
 
 #[sqlx::test]

@@ -403,28 +403,12 @@ export function updateVoyage(
   });
 }
 
-/** Deletes a voyage. The photographs in it survive — they return to the
- *  owner's library. */
+/** Deletes a voyage and its photo records. */
 export function deleteVoyage(id: string, options: RequestOptions = {}): Promise<void> {
   return request<void>({ method: "DELETE", path: `/api/voyages/${id}`, ...options });
 }
 
-/** Attaches photographs the caller owns. Atomic: if one is refused, none are
- *  attached. Returns the whole voyage, so no follow-up read is needed. */
-export function attachPhotos(
-  id: string,
-  photoIds: readonly string[],
-  options: RequestOptions = {},
-): Promise<Voyage> {
-  return request<Voyage>({
-    method: "POST",
-    path: `/api/voyages/${id}/photos`,
-    body: { photo_ids: photoIds },
-    ...options,
-  });
-}
-
-/** Removes one photograph from a voyage. The photograph itself is untouched. */
+/** Removes one photograph from a voyage. The photo record is deleted. */
 export function detachPhoto(
   id: string,
   photoId: string,
@@ -460,13 +444,13 @@ export interface PhotoListParams extends RequestOptions {
   limit?: number;
 }
 
-/** The caller's own library, newest first. Owner-only, and the coordinates in
+/** One voyage's owner-only photo metadata, newest first. Owner-only, and the coordinates in
  *  it are exact — never render them on a public page. */
-export function listPhotos(params: PhotoListParams = {}): Promise<PhotoList> {
+export function listPhotos(voyageId: string, params: PhotoListParams = {}): Promise<PhotoList> {
   const { before, limit, signal } = params;
   return request<PhotoList>({
     method: "GET",
-    path: "/api/photos",
+    path: `/api/voyages/${voyageId}/photos`,
     query: { before, limit },
     signal,
   });
@@ -481,6 +465,7 @@ export function deletePhoto(id: string, options: RequestOptions = {}): Promise<v
 }
 
 export interface UploadOptions extends RequestOptions {
+  voyageId: string;
   /** Fraction between 0 and 1, or null while the total is unknown. Called as
    *  the body goes out, which is the only progress a browser can report. */
   onProgress?: (fraction: number | null) => void;
@@ -502,7 +487,7 @@ export interface UploadOptions extends RequestOptions {
  */
 export function uploadPhotos(
   files: readonly File[],
-  options: UploadOptions = {},
+  options: UploadOptions,
 ): Promise<UploadResult> {
   const { onProgress, signal } = options;
 
@@ -516,7 +501,7 @@ export function uploadPhotos(
     for (const file of files) form.append("files", file, file.name);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${BASE}/api/photos`);
+    xhr.open("POST", `${BASE}/api/voyages/${options.voyageId}/photos`);
     // Same-origin requests send cookies by default here, but a deployment that
     // ever moves the API to another origin would silently lose the session
     // without this. Stated rather than assumed, for the same reason
@@ -647,7 +632,6 @@ export const api = {
   createVoyage,
   updateVoyage,
   deleteVoyage,
-  attachPhotos,
   detachPhoto,
   reorderPhotos,
   listPhotos,

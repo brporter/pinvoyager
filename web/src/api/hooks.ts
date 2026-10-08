@@ -27,7 +27,6 @@ import {
 } from "@tanstack/react-query";
 
 import {
-  attachPhotos,
   createVoyage,
   deletePhoto,
   deleteVoyage,
@@ -152,7 +151,7 @@ export function useMe(): UseQueryResult<Me | null> {
  *
  * `clear` rather than a list of invalidations: anything fetched while signed in
  * may have been visible only to that session — the caller's own drafts, their
- * library, the exact coordinates in it — and a cache that kept them would leave
+ * owner-only photos and exact coordinates — and a cache that kept them would leave
  * the previous user's data on screen for the next one.
  */
 export function useSignOut(): UseMutationResult<void, Error, void> {
@@ -212,6 +211,11 @@ export function useVoyage(id: string | undefined): UseQueryResult<Voyage> {
     queryFn: ({ signal }) => getVoyage(id as string, { signal }),
     enabled: id !== undefined,
     ...queryDefaults,
+    // Variant generation finishes after ingestion. Refresh until all photos settle.
+    refetchInterval: (query) =>
+      query.state.data?.photos?.some((photo) => photo.variant_status === "pending")
+        ? 1000
+        : false,
   });
 }
 
@@ -228,9 +232,9 @@ export function useVoyageMap(id: string | undefined): UseQueryResult<VoyageMap> 
  * The discovery map for one rectangle.
  *
  * `enabled` because the rectangle is not known until the map has laid itself
- * out and reported where it is looking — asking before then would request a
- * window nobody is looking at, and openstreetmap.org's usage policy is
- * explicit about not fetching beyond what the user can see (decision D4a).
+ * out and reported where it is looking — asking before then would request an
+ * irrelevant window from our own discovery API. These marker requests are
+ * separate from MapLibre's requests to OSM's tile server.
  *
  * `placeholderData` keeps the previous rectangle's markers on screen while the
  * next one loads. Without it every pan blanks the map and redraws it, which
@@ -297,23 +301,7 @@ export function useDeleteVoyage(): UseMutationResult<void, Error, string> {
       client.removeQueries({ queryKey: keys.voyages.detail(id) });
       client.removeQueries({ queryKey: keys.voyages.map(id) });
       void client.invalidateQueries({ queryKey: keys.voyages.lists() });
-      // The photographs survive a deleted voyage and return to the library, so
-      // their `placed` flags may have changed.
-      void client.invalidateQueries({ queryKey: keys.photos.all });
-    },
-  });
-}
-
-export function useAttachPhotos(
-  voyageId: string,
-): UseMutationResult<Voyage, Error, readonly string[]> {
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: (photoIds: readonly string[]) => attachPhotos(voyageId, photoIds),
-    onSuccess: (voyage) => {
-      voyageChanged(client, voyage);
-      // `placed` on each photo in the library has just changed.
+      // The voyage and its photo records were deleted.
       void client.invalidateQueries({ queryKey: keys.photos.all });
     },
   });
@@ -350,18 +338,19 @@ export function useReorderPhotos(
 // ---------------------------------------------------------------------------
 
 export interface PhotoFeedParams {
+  voyageId: string;
   limit?: number;
 }
 
-/** The caller's library, paged. Cursor-paginated for the same reason the
+/** One voyage's owner-only photos, paged. Cursor-paginated for the same reason the
  *  voyage feed is: an upload landing mid-scroll would shift every offset. */
 export function usePhotos(
-  params: PhotoFeedParams = {},
+  params: PhotoFeedParams,
 ): UseInfiniteQueryResult<InfiniteData<PhotoList, string | null>> {
   return useInfiniteQuery({
     queryKey: keys.photos.list(params),
     queryFn: ({ pageParam, signal }) =>
-      listPhotos({ limit: params.limit, before: pageParam ?? undefined, signal }),
+      listPhotos(params.voyageId, { limit: params.limit, before: pageParam ?? undefined, signal }),
     initialPageParam: null as string | null,
     getNextPageParam: (last: PhotoList) => last.next_before ?? undefined,
     ...queryDefaults,
@@ -388,7 +377,7 @@ export interface UploadVariables extends UploadOptions {
  * makes an upload worth retrying — a 413, a 415, a 429 — is one where sending
  * them again is either pointless or the thing being rate-limited.
  *
- * The uploaded photos land in the library with `variant_status: "pending"`, so
+ * The uploaded photos belong to their voyage with `variant_status: "pending"`, so
  * a caller that immediately renders their thumbnails will get a 409 until the
  * worker catches up. That is a state to draw, not a race to avoid.
  */
@@ -398,7 +387,10 @@ export function useUploadPhotos(): UseMutationResult<UploadResult, Error, Upload
   return useMutation({
     mutationFn: ({ files, ...options }: UploadVariables) => uploadPhotos(files, options),
     retry: false,
-    onSuccess: () => {
+    onSuccess: (_result, { voyageId }) => {
+      void client.invalidateQueries({ queryKey: keys.voyages.detail(voyageId) });
+      void client.invalidateQueries({ queryKey: keys.voyages.map(voyageId) });
+      void client.invalidateQueries({ queryKey: keys.voyages.lists() });
       void client.invalidateQueries({ queryKey: keys.photos.lists() });
     },
   });

@@ -31,6 +31,7 @@ pub struct Photo {
 /// What an upload knows before the row exists.
 #[derive(Debug, Clone)]
 pub struct NewPhoto {
+    pub voyage_id: Uuid,
     pub owner_id: Uuid,
     pub content_hash: String,
     pub byte_size: i64,
@@ -66,19 +67,32 @@ fn to_numeric(degrees: Option<f64>) -> Option<rust_decimal::Decimal> {
         .map(|value| value.round_dp(COORDINATE_SCALE))
 }
 
+/// Serialize storage writes and reference-counted deletion for identical bytes.
+pub async fn lock_content(
+    connection: &mut sqlx::PgConnection,
+    hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(hash)
+        .execute(connection)
+        .await?;
+    Ok(())
+}
+
 pub async fn create(executor: impl PgExecutor<'_>, photo: &NewPhoto) -> Result<Photo, sqlx::Error> {
     // v7 rather than v4, same reasoning as `users::create`: time-ordered ids
     // land at the right edge of the primary key index, and `photos_owner_id_idx`
     // is `(owner_id, id DESC)` precisely so that ordering by the id *is* the
-    // chronological ordering the library view wants.
+    // chronological ordering an owner metadata query wants.
     let id = Uuid::now_v7();
 
     sqlx::query_as!(
         Photo,
         r#"INSERT INTO photos
                (id, owner_id, content_hash, byte_size, width, height, original_format,
-                captured_at, latitude, longitude)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                captured_at, latitude, longitude, voyage_id, position)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                   COALESCE((SELECT max(position) FROM photos WHERE voyage_id = $11), 0) + 1)
            RETURNING id, owner_id, content_hash, byte_size, width, height, original_format,
                      captured_at, latitude, longitude, variant_status, created_at"#,
         id,
@@ -91,6 +105,7 @@ pub async fn create(executor: impl PgExecutor<'_>, photo: &NewPhoto) -> Result<P
         photo.captured_at,
         to_numeric(photo.latitude),
         to_numeric(photo.longitude),
+        photo.voyage_id,
     )
     .fetch_one(executor)
     .await
@@ -115,7 +130,7 @@ pub async fn find_by_id(
     .await
 }
 
-/// The uploader's library, newest first, cursor-paginated on the v7 id.
+/// The uploader's photos, newest first, cursor-paginated on the v7 id.
 ///
 /// Keyset pagination rather than `OFFSET`: the id is time-ordered, so `id < $2`
 /// is "older than that photo" and costs an index seek regardless of how deep the
@@ -147,6 +162,25 @@ pub async fn list_for_owner(
     .await
 }
 
+/// Owner-only metadata for one voyage, newest first.
+pub async fn list_for_voyage(
+    executor: impl PgExecutor<'_>,
+    owner_id: Uuid,
+    voyage_id: Uuid,
+    before: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<Photo>, sqlx::Error> {
+    sqlx::query_as!(Photo,
+        r#"SELECT p.id, p.owner_id, p.content_hash, p.byte_size, p.width, p.height, p.original_format,
+                  p.captured_at, p.latitude, p.longitude, p.variant_status, p.created_at
+             FROM photos p JOIN voyage_photos vp ON vp.photo_id = p.id
+            WHERE p.owner_id = $1 AND vp.voyage_id = $2
+              AND ($3::uuid IS NULL OR p.id < $3)
+            ORDER BY p.id DESC LIMIT $4"#,
+        owner_id, voyage_id, before, limit,
+    ).fetch_all(executor).await
+}
+
 pub async fn set_variant_status(
     executor: impl PgExecutor<'_>,
     id: Uuid,
@@ -173,7 +207,7 @@ pub async fn set_variant_status(
 /// Photos left `pending` by a previous run, for the worker to pick up at
 /// startup. Without this a process that died mid-batch strands them forever.
 pub async fn pending(executor: impl PgExecutor<'_>, limit: i64) -> Result<Vec<Uuid>, sqlx::Error> {
-    // Ascending, unlike the library view: this is a drain, and the oldest
+    // Ascending, unlike metadata pagination: this is a drain, and the oldest
     // stranded photo is the one whose owner has been staring at a placeholder
     // the longest. Served by `photos_variant_status_idx`, which is partial on
     // exactly this predicate.
@@ -198,23 +232,15 @@ pub async fn pending(executor: impl PgExecutor<'_>, limit: i64) -> Result<Vec<Uu
 /// the `WHERE` clause rather than in a preceding `SELECT` so there is no window
 /// between the check and the delete.
 ///
-/// **What this does and does not guarantee.** The delete and the reference
-/// check are one statement, evaluated against one snapshot, so nothing can
-/// interleave between them — that is the race the doc comment above names, and
-/// it is closed. What a single statement at READ COMMITTED cannot close is a
-/// concurrent uploader that commits a *new* row for the same hash after this
-/// statement's snapshot is taken: this reports `true`, the caller unlinks, and
-/// the new photo points at a file that is gone. Closing that one needs a lock
-/// shared with the upload path — `pg_advisory_xact_lock` keyed on the content
-/// hash, taken by the uploader around commit-plus-insert and by the deleter
-/// around this call plus the unlink. It belongs in the handler, not here,
-/// because only the handler owns the transaction the lock must live in.
+/// The statement's snapshot alone cannot protect against a new upload of the
+/// same bytes. Handlers also take `lock_content` in a transaction around the
+/// storage write and insert, or deletion and unlink, to close that race.
 pub async fn delete_returning_orphaned(
     executor: impl PgExecutor<'_>,
     id: Uuid,
     owner_id: Uuid,
 ) -> Result<Option<(String, bool)>, sqlx::Error> {
-    // `AND photos.id <> $1` is load-bearing and is the thing that looks wrong
+    // `AND photos.id <> $1` is necessary and is the thing that looks wrong
     // at a glance. A data-modifying CTE's effects are *not* visible to the rest
     // of the statement: every part reads the same snapshot, taken before the
     // statement ran, so the outer `EXISTS` still sees the row the CTE just

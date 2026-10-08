@@ -14,6 +14,40 @@ afterEach(() => {
 });
 
 describe("MapCanvas", () => {
+  it("uses browser caching and identifies OSM requests without sharing page paths or credentials", async () => {
+    render(<MapCanvas label="Test map" />);
+    const map = __maps[0];
+    const url = "https://tile.openstreetmap.org/2/1/1.png";
+    expect(map.options.style).toMatchObject({
+      sources: {
+        basemap: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          maxzoom: 19,
+          attribution: "© OpenStreetMap contributors",
+        },
+      },
+    });
+    const transform = (map.options as unknown as maplibregl.MapOptions).transformRequest!;
+    const parameters = await transform(url, "Tile" as maplibregl.ResourceType);
+
+    expect(parameters).toEqual({
+      url,
+      cache: "default",
+      credentials: "same-origin",
+      referrerPolicy: "strict-origin",
+    });
+    expect(map.options.refreshExpiredTiles).toBe(true);
+
+    // Request validates these settings through the platform API without
+    // sending traffic to OSM or downloading tiles during automated tests.
+    const request = new Request(url, parameters as RequestInit);
+    expect(request.cache).toBe("default");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.referrerPolicy).toBe("strict-origin");
+    expect([...request.headers]).toEqual([]);
+  });
+
   it("only renders map children after the initial visible bounds are known", () => {
     const windows: ({ west: number; south: number; east: number; north: number } | null)[] = [];
 

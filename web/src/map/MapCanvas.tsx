@@ -99,10 +99,9 @@ export interface MapView {
    * out and knows how big it is.
    *
    * Updated when a gesture *finishes*, not while it is happening. The
-   * discovery map turns this into a request, and a request per animation frame
-   * of a pan would be both useless and a breach of the tile server's usage
-   * policy in spirit — see decision D4a on not fetching beyond what the user is
-   * looking at.
+   * discovery map turns this into a request to our own API. Waiting for the
+   * gesture to finish avoids redundant discovery requests; these are separate
+   * from MapLibre's basemap tile requests and OSM's tile usage policy.
    */
   window: Bounds | null;
 }
@@ -153,10 +152,10 @@ const ZOOM_STEP_DURATION_MS = 250;
  * Concurrent tile requests.
  *
  * MapLibre's default is 16. Lowered because decision D4a points development at
- * openstreetmap.org's tile server, whose usage policy is explicit that heavy
- * use is not permitted, and a single pan gesture across a city can ask for
- * dozens of tiles. Six is what a browser will open to one origin anyway, so
- * this caps the burst without making an ordinary pan feel slow.
+ * openstreetmap.org's tile server, and a single pan gesture across a city can
+ * ask for dozens of tiles. Six limits bursts; OSM does not prescribe this
+ * number, and concurrency alone does not establish policy compliance. See
+ * https://operations.osmfoundation.org/policies/tiles/
  */
 const MAX_PARALLEL_TILE_REQUESTS = 6;
 
@@ -180,8 +179,10 @@ export function MapCanvas({
    * Set to the initial bounds when the map is constructed, because those are
    * applied through the constructor rather than by a call — starting at the
    * world view and then flying to the voyage would download a set of tiles the
-   * user never looks at, which is the pre-fetching that D4a records
-   * openstreetmap.org's policy as forbidding.
+   * user never looks at. This avoids unnecessary requests; OSM permits normal
+   * viewport fetching with modest, short-range look-ahead, but prohibits bulk
+   * downloading and offline/prefetch features. See decision D4a and
+   * https://operations.osmfoundation.org/policies/tiles/#4-prohibited-bulk-downloading-scraping-and-offline-use
    */
   const appliedBounds = useRef<string | null>(null);
   const boundsKey = keyOf(fitTo);
@@ -196,6 +197,16 @@ export function MapCanvas({
     const instance = new maplibregl.Map({
       container: node,
       style: basemapStyle(),
+      // Browser HTTP caching honors OSM's cache headers and validates expired
+      // entries. Send the site origin as Referer, without private page paths,
+      // and leave User-Agent to the browser. Never send credentials to OSM.
+      transformRequest: (url) => ({
+        url,
+        cache: "default",
+        credentials: "same-origin",
+        referrerPolicy: "strict-origin",
+      }),
+      refreshExpiredTiles: true,
       // The design draws its own notice (`.pv-attribution`) and this component
       // renders it below. Leaving MapLibre's control on as well would show the
       // same attribution twice.

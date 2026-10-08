@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT variant_status FROM photos WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "variant_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "photos",
+            "name": "variant_status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ddc4f4e5936ca631ac4ce79a72f423f95af8771d8c837c8eb4e87d88614b7305"
+}

@@ -14,7 +14,7 @@ graph TD
     subgraph Service["axum service"]
         MW["http::middleware<br/>request id, timeout, tracing"]
         Auth["http::auth<br/>/auth/*, /api/me"]
-        Photos["http::photos<br/>/api/photos/*"]
+        Photos["http::photos<br/>/api/voyages/{id}/photos,<br/>/api/photos/*"]
         Voyages["http::voyages<br/>/api/voyages/*, /api/map"]
         Gran["voyages::granularity<br/>Coordinate — private fields,<br/>one constructor"]
         Worker["photos::worker<br/>bounded queue + semaphore"]
@@ -132,7 +132,6 @@ graph LR
         create["useCreateVoyage"]
         update["useUpdateVoyage"]
         del["useDeleteVoyage"]
-        attach["useAttachPhotos"]
         detach["useDetachPhoto"]
         reorder["useReorderPhotos"]
         up["useUploadPhotos"]
@@ -143,10 +142,12 @@ graph LR
     create --> vall
     update --> vall
     del --> vall
-    attach --> vall
     detach --> vall
     reorder --> vall
     up --> pall
+    up --> vdet
+    up --> vmap
+    up --> vlist
     delp --> pall
     out --> me
 ```
@@ -186,8 +187,8 @@ graph LR
         S7["POST /api/voyages/{id}/photos"]
         S8["PATCH /api/voyages/{id}/photos/order"]
         S9["DELETE /api/voyages/{id}/photos/{photo}"]
-        S10["POST /api/photos — upload"]
-        S11["GET /api/photos — your library"]
+        S10["POST /api/voyages/{id}/photos — voyage upload"]
+        S11["GET /api/voyages/{id}/photos — owner metadata"]
         S12["GET and DELETE /api/photos/{id}"]
     end
 

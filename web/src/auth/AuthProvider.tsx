@@ -9,7 +9,7 @@
  *
  * Sign-out goes through `useSignOut` for a reason that is not obvious: it
  * empties the query cache afterwards. Anything fetched while signed in may have
- * been visible only to that session — the caller's drafts, their library, the
+ * been visible only to that session — the caller's drafts, their owner-only photos, the
  * exact coordinates in it — and a cache that survived sign-out would leave the
  * previous user's data on screen for the next one.
  */

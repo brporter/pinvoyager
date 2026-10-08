@@ -13,7 +13,6 @@ import {
   ApiRequestError,
   NetworkError,
   UnauthorizedError,
-  attachPhotos,
   createVoyage,
   deleteVoyage,
   deletePhoto,
@@ -290,16 +289,13 @@ describe("endpoint wrappers", () => {
     expect(create[1].method).toBe("POST");
     expect(JSON.parse(create[1].body as string)).toEqual({ title: "Trip" });
 
-    const attach = await call(() => attachPhotos("v1", ["p1", "p2"]));
-    expect(attach[0]).toBe("/api/voyages/v1/photos");
-    expect(JSON.parse(attach[1].body as string)).toEqual({ photo_ids: ["p1", "p2"] });
     const reorder = await call(() => reorderPhotos("v1", ["p2", "p1"]));
     expect(reorder[0]).toBe("/api/voyages/v1/photos/order");
     expect(reorder[1].method).toBe("PATCH");
 
     expect((await call(() => detachPhoto("v1", "p1")))[0]).toBe("/api/voyages/v1/photos/p1");
-    expect((await call(() => listPhotos({ before: "cursor", limit: 7 })))[0]).toBe(
-      "/api/photos?before=cursor&limit=7",
+    expect((await call(() => listPhotos("v1", { before: "cursor", limit: 7 })))[0]).toBe(
+      "/api/voyages/v1/photos?before=cursor&limit=7",
     );
     expect((await call(() => getPhoto("p1")))[0]).toBe("/api/photos/p1");
     expect((await call(() => deletePhoto("p1")))[0]).toBe("/api/photos/p1");

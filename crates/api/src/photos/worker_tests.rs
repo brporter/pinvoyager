@@ -1,3 +1,4 @@
+use crate::photo_voyage;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, path::Path};
@@ -207,6 +208,7 @@ async fn insert_pending_photo(pool: &PgPool) -> Uuid {
     photo_repo::create(
         pool,
         &photo_repo::NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, user.id).await,
             owner_id: user.id,
             content_hash: format!("{:064x}", Uuid::now_v7().as_u128()),
             byte_size: 1,

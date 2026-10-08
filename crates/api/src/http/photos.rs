@@ -3,8 +3,8 @@
 //! CONTRACT — `routes()` is fixed; handlers owned by the worker/serving agent.
 //!
 //! ```text
-//! POST   /api/photos                   multipart upload, streamed
-//! GET    /api/photos                   the caller's library
+//! POST   /api/voyages/{id}/photos      upload directly into an owned voyage
+//! GET    /api/voyages/{id}/photos      owner-only voyage photo metadata
 //! GET    /api/photos/{id}              metadata
 //! GET    /api/photos/{id}/{variant}    the image itself
 //! DELETE /api/photos/{id}              owner only
@@ -79,7 +79,7 @@ use crate::state::AppState;
 /// prefix would identify every iPhone photo as nothing at all.
 const SNIFF_BYTES: usize = 32;
 
-/// Default and maximum page size for the library listing.
+/// Default and maximum page size for voyage photo metadata.
 const DEFAULT_PAGE: i64 = 50;
 const MAX_PAGE: i64 = 100;
 
@@ -96,7 +96,7 @@ const IMAGE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 /// enum, never from a caller's string.
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/photos", post(upload).get(list))
+        .route("/api/voyages/{id}/photos", post(upload_to_voyage).get(list))
         .route("/api/photos/{id}", get(metadata).delete(destroy))
         .route("/api/photos/{id}/{variant}", get(image))
 }
@@ -124,12 +124,34 @@ struct UploadResponse {
 ///
 /// **A batch is not a transaction.** A file rejected part-way through fails the
 /// request with the status that names the reason, and files accepted before it
-/// stay in the library. They are photographs that passed every check, were
+/// stay in their voyage. They are photographs that passed every check, were
 /// stored and were enqueued; discarding them would make a user re-upload good
 /// files because of a bad one.
+async fn owned_voyage(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<(), Rejection> {
+    let voyage = voyages_repo::find_by_id(&state.pool, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if voyage.owner_id != user.user_id {
+        return Err(AppError::NotFound.into());
+    }
+    Ok(())
+}
+
+async fn upload_to_voyage(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(voyage_id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Body,
+) -> Result<(StatusCode, Json<UploadResponse>), Rejection> {
+    owned_voyage(&state, &user, voyage_id).await?;
+    upload(State(state), user, voyage_id, headers, body).await
+}
+
 async fn upload(
     State(state): State<AppState>,
     user: CurrentUser,
+    voyage_id: Uuid,
     headers: HeaderMap,
     body: Body,
 ) -> Result<(StatusCode, Json<UploadResponse>), Rejection> {
@@ -175,7 +197,7 @@ async fn upload(
             continue;
         }
 
-        created.push(ingest(&state, user.user_id, &mut multipart, &temp_dir).await?);
+        created.push(ingest(&state, user.user_id, voyage_id, &mut multipart, &temp_dir).await?);
     }
 
     if created.is_empty() {
@@ -196,6 +218,7 @@ async fn upload(
 async fn ingest(
     state: &AppState,
     owner_id: Uuid,
+    voyage_id: Uuid,
     multipart: &mut Multipart,
     temp_dir: &FsPath,
 ) -> Result<PhotoResponse, Rejection> {
@@ -203,7 +226,7 @@ async fn ingest(
     // filesystem — including here, where the name is a fresh uuid.
     let temp_path = temp_dir.join(format!("{}.part", Uuid::now_v7()));
 
-    let result = ingest_part(state, owner_id, multipart, &temp_path).await;
+    let result = ingest_part(state, owner_id, voyage_id, multipart, &temp_path).await;
 
     if result.is_err() {
         discard_failed_upload(&temp_path).await;
@@ -228,6 +251,7 @@ async fn discard_failed_upload(path: &FsPath) {
 async fn ingest_part(
     state: &AppState,
     owner_id: Uuid,
+    voyage_id: Uuid,
     multipart: &mut Multipart,
     temp_path: &FsPath,
 ) -> Result<PhotoResponse, Rejection> {
@@ -309,11 +333,22 @@ async fn ingest_part(
 
     // Idempotent, and the dedup path: identical bytes already stored means the
     // temporary is discarded and one file backs both rows (T3).
+    let mut tx = state.pool.begin().await?;
+    let owned: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+            .bind(voyage_id)
+            .bind(owner_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if owned.is_none() {
+        return Err(AppError::NotFound.into());
+    }
+    photos::lock_content(&mut tx, hash.as_str()).await?;
     storage::commit_original(&limits.storage_root, temp_path, &hash).await?;
-
     let photo = photos::create(
-        &state.pool,
+        &mut *tx,
         &NewPhoto {
+            voyage_id,
             owner_id,
             content_hash: hash.as_str().to_owned(),
             byte_size: i64::try_from(byte_size).unwrap_or(i64::MAX),
@@ -329,6 +364,8 @@ async fn ingest_part(
         },
     )
     .await?;
+
+    tx.commit().await?;
 
     // Off the request path (T7). This awaits when the queue is full, which is
     // backpressure surfacing as a slower upload — much better than an unbounded
@@ -429,20 +466,23 @@ struct ListResponse {
     next_before: Option<Uuid>,
 }
 
-/// The caller's library, newest first.
+/// One voyage's owner-only photos, newest first.
 ///
 /// Cursor rather than offset pagination: an upload landing between two requests
 /// shifts every offset by one, which makes a page boundary skip or repeat a
-/// photo — and on a library that is actively being uploaded to that is the
+/// photo — and on a voyage that is actively receiving uploads that is the
 /// common case rather than the rare one.
 async fn list(
     State(state): State<AppState>,
     user: CurrentUser,
+    Path(voyage_id): Path<Uuid>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<ListResponse>, Rejection> {
     let limit = query.limit.unwrap_or(DEFAULT_PAGE).clamp(1, MAX_PAGE);
 
-    let photos = photos::list_for_owner(&state.pool, user.user_id, query.before, limit).await?;
+    owned_voyage(&state, &user, voyage_id).await?;
+    let photos =
+        photos::list_for_voyage(&state.pool, user.user_id, voyage_id, query.before, limit).await?;
 
     // A full page implies there may be more; a short one is the end. Cheaper
     // than a count, and a count would be stale the moment it was taken.
@@ -472,7 +512,7 @@ async fn metadata(
 /// A photo owned by somebody else is 404 rather than 403: a 403 confirms that
 /// the id names something real, which an ownership check is not there to
 /// reveal. Phase 5 relaxes this for photos attached to a voyage, which are
-/// public by D6 — this is the pre-voyage library, and the library is the
+/// public by D6 — these are owner-only exact coordinates, and this is the
 /// uploader's.
 async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Photo, Rejection> {
     let photo = photos::find_by_id(&state.pool, id)
@@ -715,17 +755,30 @@ fn http_date(time: SystemTime) -> String {
 /// unqualified unlink here removes another user's photograph — and the count
 /// and the delete happen in one statement inside the repository, because a
 /// concurrent upload of the same bytes can otherwise slip between them.
-async fn destroy(
+pub(super) async fn destroy(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, Rejection> {
-    // Not owned and not found are the same answer, produced by the same
-    // statement: the delete is qualified by owner.
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.pool.begin().await?;
+    let row: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT voyage_id, content_hash FROM photos WHERE id=$1 AND owner_id=$2")
+            .bind(id)
+            .bind(user.user_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some((voyage_id, hash)) = row else {
+        return Err(AppError::NotFound);
+    };
+    sqlx::query("SELECT id FROM voyages WHERE id=$1 FOR UPDATE")
+        .bind(voyage_id)
+        .execute(&mut *tx)
+        .await?;
+    photos::lock_content(&mut tx, &hash).await?;
     let Some((hash, orphaned)) =
-        photos::delete_returning_orphaned(&state.pool, id, user.user_id).await?
+        photos::delete_returning_orphaned(&mut *tx, id, user.user_id).await?
     else {
-        return Err(AppError::NotFound.into());
+        return Err(AppError::NotFound);
     };
 
     if orphaned {
@@ -741,6 +794,7 @@ async fn destroy(
         }
     }
 
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -51,6 +51,9 @@
 //! the artifact — one which could, for instance, drop a key whose value is
 //! `null` and hide exactly the drift being looked for.
 
+#[path = "support/photo_voyage.rs"]
+mod photo_voyage;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -319,6 +322,7 @@ async fn photo(
     let photo = photos::create(
         pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, owner).await,
             owner_id: owner,
             content_hash: format!("{:064x}", Uuid::now_v7().as_u128()),
             byte_size: 3_145_728,
@@ -403,7 +407,6 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         pinvoyager_api::http::router(test_state(pool.clone(), &root, VariantQueue { sender }));
 
     let owner = sign_in(&app, "fixtures-owner").await;
-    let stranger = sign_in(&app, "fixtures-stranger").await;
     let cookie = Some(owner.cookie.as_str());
 
     // -- session ------------------------------------------------------------
@@ -415,7 +418,7 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
     );
     capture("me", StatusCode::OK, &me);
 
-    // -- the library --------------------------------------------------------
+    // -- voyage-owned photos --------------------------------------------------------
 
     // With coordinates, with a capture time, variants ready.
     let placed = photo(&pool, owner.user_id, Some((LAT, LON)), true, true).await;
@@ -426,6 +429,20 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
     // case, and the one that pins the `null`s in the TypeScript types.
     let unplaced = photo(&pool, owner.user_id, None, false, true).await;
 
+    let photo_voyage: Uuid = sqlx::query_scalar("SELECT voyage_id FROM photos WHERE id=$1")
+        .bind(placed)
+        .fetch_one(&pool)
+        .await
+        .expect("photo voyage");
+    pinvoyager_api::db::repo::voyages::move_photos(
+        &pool,
+        photo_voyage,
+        owner.user_id,
+        &[nearby, unplaced],
+    )
+    .await
+    .expect("fixture voyage photos");
+
     // A genuine upload, through the multipart reader, the magic-byte sniff, the
     // dimension probe and the storage commit. This is the only fixture whose
     // photo row this test did not write itself.
@@ -434,7 +451,10 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         &app,
         Request::builder()
             .method("POST")
-            .uri("/api/photos")
+            .uri(format!(
+                "/api/voyages/{}/photos",
+                photo_voyage::fixture_voyage(&pool, owner.user_id).await
+            ))
             .header("cookie", &owner.cookie)
             .header(
                 "content-type",
@@ -454,7 +474,21 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
     capture(
         "photo_list",
         StatusCode::OK,
-        &call(&app, "GET", "/api/photos?limit=50", cookie, None).await,
+        &call(
+            &app,
+            "GET",
+            &format!(
+                "/api/voyages/{}/photos?limit=50",
+                sqlx::query_scalar::<_, Uuid>("SELECT voyage_id FROM photos WHERE id=$1")
+                    .bind(placed)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("voyage")
+            ),
+            cookie,
+            None,
+        )
+        .await,
     );
 
     // -- voyages ------------------------------------------------------------
@@ -478,15 +512,23 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         .and_then(|id| Uuid::parse_str(id).ok())
         .expect("the create response names the voyage");
 
+    pinvoyager_api::db::repo::voyages::move_photos(
+        &pool,
+        voyage_id,
+        owner.user_id,
+        &[placed, nearby, unplaced],
+    )
+    .await
+    .expect("fixture photos");
     capture(
-        "voyage_attached",
+        "voyage_photos",
         StatusCode::OK,
         &call(
             &app,
-            "POST",
-            &format!("/api/voyages/{voyage_id}/photos"),
+            "GET",
+            &format!("/api/voyages/{voyage_id}"),
             cookie,
-            Some(json!({ "photo_ids": [placed, nearby, unplaced] })),
+            None,
         )
         .await,
     );
@@ -640,19 +682,16 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         &unauthorized,
     );
 
-    // 403 with a message chosen at the call site: attaching somebody else's
-    // photograph. Nothing is attached, which is what makes the status safe to
-    // give here where a 403 on a voyage would be an enumeration oracle.
-    let not_mine = photo(&pool, stranger.user_id, None, false, true).await;
+    // Uploads require multipart content; JSON attachment requests are rejected.
     capture(
-        "error_forbidden",
-        StatusCode::FORBIDDEN,
+        "error_bad_request",
+        StatusCode::BAD_REQUEST,
         &call(
             &app,
             "POST",
             &format!("/api/voyages/{voyage_id}/photos"),
             cookie,
-            Some(json!({ "photo_ids": [not_mine] })),
+            Some(json!({ "photo_ids": [placed] })),
         )
         .await,
     );
@@ -727,7 +766,7 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         "photo_list",
         "photo_upload",
         "voyage_created",
-        "voyage_attached",
+        "voyage_photos",
         "voyage_reordered",
         "voyage_updated",
         "voyage_detail",
@@ -737,7 +776,7 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         "voyage_list_mine",
         "error_not_found",
         "error_unauthorized",
-        "error_forbidden",
+        "error_bad_request",
         "error_validation",
     ] {
         let path = fixtures_dir().join(format!("{name}.json"));

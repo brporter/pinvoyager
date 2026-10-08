@@ -370,3 +370,24 @@ describe("VoyageMap — reduced motion", () => {
     expect(move?.options.duration).toBeGreaterThan(0);
   });
 });
+
+
+describe("VoyageMap — location gallery", () => {
+  it("passes every member of a clicked cluster to the gallery without zooming", async () => {
+    const onOpenGallery = vi.fn();
+    renderMap({ pins: [NEAR_A, NEAR_B, FAR], onOpenGallery });
+    const before = camera().getZoom();
+    await userEvent.click(clusters()[0]);
+    expect(onOpenGallery).toHaveBeenCalledWith(["a", "b"]);
+    expect(camera().getZoom()).toBe(before);
+  });
+
+  it("opens a one-photo gallery from an ordinary and a selected pin", async () => {
+    const onOpenGallery = vi.fn();
+    renderMap({ onOpenGallery, selection: { photoId: "a", source: "photo" } });
+    await userEvent.click(pins().find(pin => pin.getAttribute("aria-pressed") === "true")!);
+    expect(onOpenGallery).toHaveBeenLastCalledWith(["a"]);
+    await userEvent.click(pins().find(pin => pin.getAttribute("aria-pressed") !== "true")!);
+    expect(onOpenGallery).toHaveBeenLastCalledWith(["b"]);
+  });
+});

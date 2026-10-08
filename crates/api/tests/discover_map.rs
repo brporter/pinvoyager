@@ -21,6 +21,9 @@
 //! voyage there is, so a shared database would mean one test's fixtures
 //! appearing in another test's map.
 
+#[path = "support/photo_voyage.rs"]
+mod photo_voyage;
+
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -159,6 +162,7 @@ async fn photo_at(pool: &PgPool, owner: Uuid, latitude: f64, longitude: f64) -> 
     photos::create(
         pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, owner).await,
             owner_id: owner,
             content_hash: format!("{:064x}", Uuid::now_v7().as_u128()),
             byte_size: 4096,
@@ -195,7 +199,7 @@ async fn voyage_with(
     .expect("create voyage");
 
     if !photo_ids.is_empty() {
-        voyages_repo::attach_photos(pool, voyage.id, owner, photo_ids)
+        voyages_repo::move_photos(pool, voyage.id, owner, photo_ids)
             .await
             .expect("attach photos");
     }

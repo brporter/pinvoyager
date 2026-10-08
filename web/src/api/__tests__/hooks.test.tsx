@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  attachPhotos: vi.fn(),
   createVoyage: vi.fn(),
   deletePhoto: vi.fn(),
   deleteVoyage: vi.fn(),
@@ -31,7 +30,6 @@ vi.mock("../client", async (importOriginal) => {
 import {
   keys,
   retryOnlyTransient,
-  useAttachPhotos,
   useCreateVoyage,
   useDeletePhoto,
   useDeleteVoyage,
@@ -67,6 +65,81 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("voyage image processing", () => {
+  beforeEach(() => { vi.useFakeTimers(); mocks.getVoyage.mockReset(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const state = (id: string, statuses: string[]) => ({
+    ...voyage, id, photos: statuses.map((variant_status, index) => ({ id: `p${index}`, variant_status })),
+  }) as Voyage;
+  async function tick(ms = 20) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  }
+
+  it("continues through staggered completion and stops after ready or failed results", async () => {
+    const { client, wrapper } = setup();
+    mocks.getVoyage.mockResolvedValueOnce(state("v1", ["ready", "pending", "pending"]))
+      .mockResolvedValueOnce(state("v1", ["ready", "ready", "pending"]))
+      .mockResolvedValue(state("v1", ["ready", "ready", "failed"]));
+    const hook = renderHook(() => useVoyage("v1"), { wrapper });
+    await tick();
+    expect(hook.result.current.data?.photos[1].variant_status).toBe("pending");
+    await tick(1000);
+    expect(hook.result.current.data?.photos[1].variant_status).toBe("ready");
+    expect(hook.result.current.data?.photos[2].variant_status).toBe("pending");
+    await tick(1000);
+    expect(hook.result.current.data?.photos[2].variant_status).toBe("failed");
+    await tick(5000);
+    expect(mocks.getVoyage).toHaveBeenCalledTimes(3);
+    hook.unmount(); client.clear();
+  });
+
+  it("stops polling on unmount", async () => {
+    const { client, wrapper } = setup();
+    mocks.getVoyage.mockResolvedValue(state("v1", ["pending"]));
+    const hook = renderHook(() => useVoyage("v1"), { wrapper });
+    await tick();
+    hook.unmount();
+    await tick(5000);
+    expect(mocks.getVoyage).toHaveBeenCalledTimes(1);
+    client.clear();
+  });
+
+  it("recovers after a temporary polling failure", async () => {
+    const { client, wrapper } = setup();
+    mocks.getVoyage.mockResolvedValueOnce(state("v1", ["pending"]))
+      .mockRejectedValueOnce(new Error("temporary network failure"))
+      .mockResolvedValue(state("v1", ["ready"]));
+    const hook = renderHook(() => useVoyage("v1"), { wrapper });
+    await tick();
+    await tick(1000);
+    await tick(10_000);
+    expect(hook.result.current.data?.photos[0].variant_status).toBe("ready");
+    const calls = mocks.getVoyage.mock.calls.length;
+    await tick(5000);
+    expect(mocks.getVoyage).toHaveBeenCalledTimes(calls);
+    hook.unmount(); client.clear();
+  });
+
+  it("does not apply a late response to another voyage", async () => {
+    const { client, wrapper } = setup();
+    let finish!: (value: Voyage) => void;
+    mocks.getVoyage.mockImplementation((id: string) => id === "v1"
+      ? new Promise<Voyage>(resolve => { finish = resolve; })
+      : Promise.resolve(state("v2", ["ready"])));
+    const hook = renderHook(({ id }) => useVoyage(id), { wrapper, initialProps: { id: "v1" } });
+    await tick();
+    hook.rerender({ id: "v2" });
+    await tick();
+    expect(hook.result.current.data?.id).toBe("v2");
+    await act(async () => { finish(state("v1", ["pending"])); });
+    await tick(5000);
+    expect(hook.result.current.data?.id).toBe("v2");
+    expect(mocks.getVoyage).toHaveBeenCalledTimes(2);
+    hook.unmount(); client.clear();
+  });
+});
+
 describe("query keys and retry policy", () => {
   it("groups voyage and photo keys by invalidation scope", () => {
     expect(keys.me).toEqual(["me"]);
@@ -81,7 +154,7 @@ describe("query keys and retry policy", () => {
     expect(keys.voyages.map("v1")).toEqual(["voyages", "map", "v1"]);
     expect(keys.photos.all).toEqual(["photos"]);
     expect(keys.photos.lists()).toEqual(["photos", "list"]);
-    expect(keys.photos.list({ limit: 8 })).toEqual(["photos", "list", { limit: 8 }]);
+    expect(keys.photos.list({ voyageId: "v1", limit: 8 })).toEqual(["photos", "list", { voyageId: "v1", limit: 8 }]);
     expect(keys.photos.detail("p1")).toEqual(["photos", "detail", "p1"]);
     expect(keys.discoverMap({ west: 1, south: 2, east: 3, north: 4, zoom: 5 })).toEqual([
       "discover-map",
@@ -172,7 +245,7 @@ describe("read hooks", () => {
       { wrapper },
     );
     const photo = renderHook(() => usePhoto("p1"), { wrapper });
-    const photos = renderHook(() => usePhotos({ limit: 7 }), { wrapper });
+    const photos = renderHook(() => usePhotos({ voyageId: "v1", limit: 7 }), { wrapper });
 
     await waitFor(() => {
       expect(voyageMap.result.current.isSuccess).toBe(true);
@@ -195,10 +268,12 @@ describe("read hooks", () => {
 
     expect(mocks.listPhotos).toHaveBeenNthCalledWith(
       1,
+      "v1",
       expect.objectContaining({ limit: 7, before: undefined }),
     );
     expect(mocks.listPhotos).toHaveBeenNthCalledWith(
       2,
+      "v1",
       expect.objectContaining({ limit: 7, before: "photo-cursor" }),
     );
     await waitFor(() => expect(photos.result.current.hasNextPage).toBe(false));
@@ -253,7 +328,6 @@ describe("mutation cache effects", () => {
     const set = vi.spyOn(client, "setQueryData");
     mocks.createVoyage.mockResolvedValue(voyage);
     mocks.deleteVoyage.mockResolvedValue(undefined);
-    mocks.attachPhotos.mockResolvedValue(voyage);
     mocks.detachPhoto.mockResolvedValue(undefined);
     mocks.reorderPhotos.mockResolvedValue(voyage);
     mocks.uploadPhotos.mockResolvedValue({ photos: [] });
@@ -262,7 +336,6 @@ describe("mutation cache effects", () => {
 
     const create = renderHook(() => useCreateVoyage(), { wrapper });
     const removeVoyage = renderHook(() => useDeleteVoyage(), { wrapper });
-    const attach = renderHook(() => useAttachPhotos("v1"), { wrapper });
     const detach = renderHook(() => useDetachPhoto("v1"), { wrapper });
     const reorder = renderHook(() => useReorderPhotos("v1"), { wrapper });
     const upload = renderHook(() => useUploadPhotos(), { wrapper });
@@ -272,19 +345,17 @@ describe("mutation cache effects", () => {
     await act(async () => {
       await create.result.current.mutateAsync({});
       await removeVoyage.result.current.mutateAsync("v1");
-      await attach.result.current.mutateAsync(["p1"]);
       await detach.result.current.mutateAsync("p1");
       await reorder.result.current.mutateAsync(["p1"]);
-      await upload.result.current.mutateAsync({ files: [] });
+      await upload.result.current.mutateAsync({ voyageId: "v1", files: [] });
       await removePhoto.result.current.mutateAsync("p1");
       await signout.result.current.mutateAsync(undefined);
     });
 
     expect(mocks.createVoyage).toHaveBeenCalledWith({});
-    expect(mocks.attachPhotos).toHaveBeenCalledWith("v1", ["p1"]);
     expect(mocks.detachPhoto).toHaveBeenCalledWith("v1", "p1");
     expect(mocks.reorderPhotos).toHaveBeenCalledWith("v1", ["p1"]);
-    expect(mocks.uploadPhotos).toHaveBeenCalledWith([], {});
+    expect(mocks.uploadPhotos).toHaveBeenCalledWith([], { voyageId: "v1" });
     expect(mocks.deletePhoto).toHaveBeenCalledWith("p1");
     expect(remove).toHaveBeenCalledWith({ queryKey: keys.voyages.detail("v1") });
     expect(remove).toHaveBeenCalledWith({ queryKey: keys.voyages.map("v1") });
@@ -299,7 +370,7 @@ describe("mutation cache effects", () => {
     mocks.uploadPhotos.mockRejectedValue(new Error("rejected"));
     const hook = renderHook(() => useUploadPhotos(), { wrapper });
     await act(async () => {
-      await expect(hook.result.current.mutateAsync({ files: [] })).rejects.toThrow("rejected");
+      await expect(hook.result.current.mutateAsync({ voyageId: "v1", files: [] })).rejects.toThrow("rejected");
     });
     expect(mocks.uploadPhotos).toHaveBeenCalledOnce();
   });

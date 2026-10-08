@@ -93,7 +93,7 @@ impl VariantQueue {
 ///
 /// On startup the worker should also pick up any photos left `pending` by a
 /// previous run: a process that died mid-batch would otherwise leave them
-/// stranded forever, visible in the library and never becoming viewable.
+/// stranded forever, visible in its voyage and never becoming viewable.
 pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
     // `max(1)` on both: a configured zero would otherwise mean a channel that
     // cannot be created (tokio panics on capacity 0) or a semaphore that never
@@ -170,7 +170,7 @@ async fn dispatch(
 /// Requeues photos left `pending` by a previous run.
 ///
 /// Without this a process that died mid-batch strands them forever: the row
-/// exists, the library shows it, and nothing will ever generate its variants
+/// exists, the voyage shows it, and nothing will ever generate its variants
 /// because the only thing that ever enqueued it was the upload request that has
 /// long since returned.
 async fn recover(pool: PgPool, sender: mpsc::Sender<VariantJob>) {

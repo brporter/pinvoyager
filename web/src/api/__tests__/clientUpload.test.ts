@@ -40,10 +40,10 @@ describe("uploadPhotos", () => {
     installXhr();
     const onProgress = vi.fn();
     const file = new File(["image bytes"], "trip.jpg", { type: "image/jpeg" });
-    const result = uploadPhotos([file], { onProgress });
+    const result = uploadPhotos([file], { voyageId: "v1", onProgress });
     const xhr = lastXhr();
 
-    expect(xhr.open).toHaveBeenCalledWith("POST", "/api/photos");
+    expect(xhr.open).toHaveBeenCalledWith("POST", "/api/voyages/v1/photos");
     expect(xhr.withCredentials).toBe(true);
     expect(xhr.setRequestHeader).toHaveBeenCalledWith("accept", "application/json");
     expect(xhr.setRequestHeader).not.toHaveBeenCalledWith("content-type", expect.any(String));
@@ -77,7 +77,7 @@ describe("uploadPhotos", () => {
     const controller = new AbortController();
     controller.abort("user canceled");
 
-    await expect(uploadPhotos([], { signal: controller.signal })).rejects.toMatchObject({
+    await expect(uploadPhotos([], { voyageId: "v1", signal: controller.signal })).rejects.toMatchObject({
       name: "NetworkError",
       cause: "user canceled",
     });
@@ -87,7 +87,7 @@ describe("uploadPhotos", () => {
   it("aborts an in-flight request when its signal is aborted", async () => {
     installXhr();
     const controller = new AbortController();
-    const result = uploadPhotos([], { signal: controller.signal });
+    const result = uploadPhotos([], { voyageId: "v1", signal: controller.signal });
     const xhr = lastXhr();
     controller.abort("navigation");
 
@@ -100,7 +100,7 @@ describe("uploadPhotos", () => {
 
   it("reports XHR transport errors", async () => {
     installXhr();
-    const result = uploadPhotos([]);
+    const result = uploadPhotos([], { voyageId: "v1" });
     lastXhr().dispatchEvent(new Event("error"));
 
     await expect(result).rejects.toMatchObject({
@@ -112,7 +112,7 @@ describe("uploadPhotos", () => {
 
   it("reports a malformed successful response as a network error", async () => {
     installXhr();
-    const result = uploadPhotos([]);
+    const result = uploadPhotos([], { voyageId: "v1" });
     lastXhr().responseText = "{";
     lastXhr().dispatchEvent(new Event("load"));
 
@@ -124,7 +124,7 @@ describe("uploadPhotos", () => {
 
   it("preserves API error fields, request id, and retry delay", async () => {
     installXhr();
-    const result = uploadPhotos([]);
+    const result = uploadPhotos([], { voyageId: "v1" });
     const xhr = lastXhr();
     xhr.status = 429;
     xhr.statusText = "Too Many Requests";
@@ -145,7 +145,7 @@ describe("uploadPhotos", () => {
 
   it("uses the unauthorized error type for an upload 401", async () => {
     installXhr();
-    const result = uploadPhotos([]);
+    const result = uploadPhotos([], { voyageId: "v1" });
     const xhr = lastXhr();
     xhr.status = 401;
     xhr.responseText = "not json";
@@ -156,7 +156,7 @@ describe("uploadPhotos", () => {
 
   it("falls back when an upload error body is empty or has invalid field types", async () => {
     installXhr();
-    const emptyResult = uploadPhotos([]);
+    const emptyResult = uploadPhotos([], { voyageId: "v1" });
     const emptyXhr = lastXhr();
     emptyXhr.status = 400;
     emptyXhr.statusText = "Bad Request";
@@ -165,7 +165,7 @@ describe("uploadPhotos", () => {
     const emptyError = await emptyResult.catch((caught: unknown) => caught);
     expect(emptyError).toMatchObject({ code: "unknown", message: "Bad Request" });
 
-    const invalidResult = uploadPhotos([]);
+    const invalidResult = uploadPhotos([], { voyageId: "v1" });
     const invalidXhr = lastXhr();
     invalidXhr.status = 400;
     invalidXhr.responseText = JSON.stringify({ code: 9, message: null, errors: "invalid" });
@@ -174,7 +174,7 @@ describe("uploadPhotos", () => {
     expect(invalidError).toMatchObject({ code: "unknown", message: "The upload failed." });
     expect((invalidError as ApiRequestError).fieldErrors).toEqual([]);
 
-    const nullResult = uploadPhotos([]);
+    const nullResult = uploadPhotos([], { voyageId: "v1" });
     const nullXhr = lastXhr();
     nullXhr.status = 400;
     nullXhr.responseText = "null";

@@ -1,3 +1,4 @@
+use crate::photo_voyage;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -72,6 +73,7 @@ async fn create_photo_for_test(pool: &PgPool, owner_id: Uuid, suffix: u64) -> Uu
     crate::db::repo::photos::create(
         pool,
         &crate::db::repo::photos::NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, owner_id).await,
             owner_id,
             content_hash: format!("{suffix:064x}"),
             byte_size: 10,
@@ -215,44 +217,15 @@ async fn attach_reorder_and_detach_handlers_preserve_photo_ownership(pool: PgPoo
     let state = state_with_pool(pool.clone());
     let user = test_user(owner.id);
 
-    let Json(attached) = attach(
-        State(state.clone()),
-        user.clone(),
-        Path(voyage.id),
-        Json(PhotoIdsRequest {
-            photo_ids: vec![first, second, third],
-        }),
-    )
-    .await
-    .expect("owner can attach their photos");
-    assert_eq!(attached.photo_count, 3);
-
-    let Json(duplicate) = attach(
-        State(state.clone()),
-        user.clone(),
-        Path(voyage.id),
-        Json(PhotoIdsRequest {
-            photo_ids: vec![first],
-        }),
-    )
-    .await
-    .expect("re-attaching an owned photo is idempotent");
-    assert_eq!(duplicate.photo_count, 3);
-
-    assert!(matches!(
-        attach(
-            State(state.clone()),
-            user.clone(),
-            Path(voyage.id),
-            Json(PhotoIdsRequest {
-                photo_ids: vec![foreign],
-            })
-        )
-        .await,
-        Err(Rejection::Forbidden {
-            message: NOT_YOUR_PHOTO
-        })
-    ));
+    repo::move_photos(&pool, voyage.id, owner.id, &[first, second, third])
+        .await
+        .expect("move fixture photos");
+    assert_eq!(
+        repo::move_photos(&pool, voyage.id, owner.id, &[foreign])
+            .await
+            .expect("ownership enforced"),
+        0
+    );
 
     let Json(reordered) = reorder(
         State(state.clone()),
@@ -816,17 +789,6 @@ fn photo_ids_are_deduplicated_in_order_and_bounded() {
     assert!(clean_photo_ids(vec![a; MAX_PHOTO_IDS + 1]).is_err());
 }
 
-/// T3's status. A 403 here is safe where a 403 on a voyage would not be:
-/// the caller already owns the voyage, and a photograph that does not exist
-/// produces the same answer as one owned by somebody else.
-#[tokio::test]
-async fn a_foreign_photo_is_a_403_that_distinguishes_nothing() {
-    let (status, body) = rendered(Rejection::forbidden(NOT_YOUR_PHOTO)).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body["code"], "forbidden");
-    assert_eq!(body["message"], NOT_YOUR_PHOTO);
-}
-
 // -- request parsing -----------------------------------------------------
 
 /// Absent, `null` and a value are three different intentions, and a PATCH
@@ -1037,4 +999,70 @@ fn non_finite_map_bounds_fall_back_to_a_decimal_bound_or_zero() {
         to_degrees(f64::NAN, f64::NEG_INFINITY, f64::INFINITY),
         Decimal::ZERO
     );
+}
+
+#[sqlx::test]
+async fn deleting_a_voyage_deletes_photos_but_preserves_shared_storage(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage_id = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let second_voyage = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let unique = create_photo_for_test(&pool, owner.id, 101).await;
+    let shared = create_photo_for_test(&pool, owner.id, 102).await;
+    let survivor = create_photo_for_test(&pool, owner.id, 102).await;
+    repo::move_photos(&pool, voyage_id, owner.id, &[unique, shared])
+        .await
+        .expect("photos");
+    repo::move_photos(&pool, second_voyage, owner.id, &[survivor])
+        .await
+        .expect("shared record");
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("voyage-delete-content");
+    let mut state = state_with_pool(pool.clone());
+    Arc::get_mut(&mut state.config)
+        .expect("unique config")
+        .photos
+        .storage_root = scratch.path().to_path_buf();
+    let unique_path = crate::photos::storage::original_path(
+        scratch.path(),
+        &crate::photos::storage::ContentHash(format!("{:064x}", 101)),
+    );
+    let shared_path = crate::photos::storage::original_path(
+        scratch.path(),
+        &crate::photos::storage::ContentHash(format!("{:064x}", 102)),
+    );
+    for path in [&unique_path, &shared_path] {
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("content directory");
+        std::fs::write(path, b"fixture").expect("content");
+    }
+    assert_eq!(
+        destroy(State(state.clone()), test_user(owner.id), Path(voyage_id))
+            .await
+            .expect("delete"),
+        StatusCode::NO_CONTENT
+    );
+    assert!(
+        crate::db::repo::photos::find_by_id(&pool, unique)
+            .await
+            .expect("photo")
+            .is_none()
+    );
+    assert!(
+        crate::db::repo::photos::find_by_id(&pool, shared)
+            .await
+            .expect("photo")
+            .is_none()
+    );
+    assert!(
+        crate::db::repo::photos::find_by_id(&pool, survivor)
+            .await
+            .expect("photo")
+            .is_some()
+    );
+    assert!(!unique_path.exists());
+    assert!(shared_path.exists());
+    destroy(State(state), test_user(owner.id), Path(second_voyage))
+        .await
+        .expect("delete last reference");
+    assert!(!shared_path.exists());
 }

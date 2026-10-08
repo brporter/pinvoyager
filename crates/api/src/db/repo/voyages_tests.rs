@@ -1,4 +1,5 @@
 use super::*;
+use crate::photo_voyage;
 
 use sqlx::PgPool;
 
@@ -32,6 +33,7 @@ async fn a_photo_captured(
     photos::create(
         pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, owner_id).await,
             owner_id,
             content_hash: hash_of(seed),
             byte_size: 1_234,
@@ -291,17 +293,16 @@ async fn a_stranger_cannot_update_and_learns_nothing(pool: PgPool) {
     );
 }
 
-/// The migration's stated promise: the join rows cascade, the photographs
-/// do not. Someone tidying up a draft is not asking to destroy the images.
+/// D11: deleting a voyage also deletes its owned photographs.
 #[sqlx::test]
-async fn deleting_a_voyage_returns_its_photos_to_the_library(pool: PgPool) {
+async fn deleting_a_voyage_deletes_its_photo_records(pool: PgPool) {
     let owner = a_user(&pool).await;
     let voyage = a_voyage(&pool, owner).await;
     let first = a_photo(&pool, owner, 0x11).await;
     let second = a_photo(&pool, owner, 0x12).await;
 
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[first, second])
+        move_photos(&pool, voyage.id, owner, &[first, second])
             .await
             .expect("attach"),
         2
@@ -322,8 +323,8 @@ async fn deleting_a_voyage_returns_its_photos_to_the_library(pool: PgPool) {
             photos::find_by_id(&pool, photo)
                 .await
                 .expect("find photo")
-                .is_some(),
-            "the photograph itself survives"
+                .is_none(),
+            "the photograph record is deleted"
         );
     }
 }
@@ -353,7 +354,7 @@ async fn attaching_another_users_photo_attaches_nothing(pool: PgPool) {
     let theirs = a_photo(&pool, stranger, 0x21).await;
 
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[theirs])
+        move_photos(&pool, voyage.id, owner, &[theirs])
             .await
             .expect("attach"),
         0
@@ -369,7 +370,7 @@ async fn attaching_another_users_photo_attaches_nothing(pool: PgPool) {
     // dropped and the shortfall in the count is what the handler sees.
     let mine = a_photo(&pool, owner, 0x22).await;
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[mine, theirs])
+        move_photos(&pool, voyage.id, owner, &[mine, theirs])
             .await
             .expect("attach"),
         1
@@ -385,7 +386,7 @@ async fn attaching_to_someone_elses_voyage_attaches_nothing(pool: PgPool) {
     let theirs = a_photo(&pool, stranger, 0x23).await;
 
     assert_eq!(
-        attach_photos(&pool, voyage.id, stranger, &[theirs])
+        move_photos(&pool, voyage.id, stranger, &[theirs])
             .await
             .expect("attach"),
         0,
@@ -422,8 +423,8 @@ async fn the_ownership_predicate_holds_under_concurrency(pool: PgPool) {
         tasks.push(tokio::spawn(async move {
             let wanted = [mine];
             let (owners, strangers) = tokio::join!(
-                attach_photos(&a, voyage_id, owner, &wanted),
-                attach_photos(&b, voyage_id, stranger, &wanted),
+                move_photos(&a, voyage_id, owner, &wanted),
+                move_photos(&b, voyage_id, stranger, &wanted),
             );
             (owners.expect("owner attach"), strangers.expect("stranger"))
         }));
@@ -458,7 +459,7 @@ async fn a_batch_is_positioned_by_capture_time_with_undated_photos_last(pool: Pg
 
     // Deliberately shuffled relative to capture time.
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[screenshot, june, scan, april])
+        move_photos(&pool, voyage.id, owner, &[screenshot, june, scan, april])
             .await
             .expect("attach"),
         4
@@ -483,10 +484,10 @@ async fn a_later_attach_appends_after_what_is_already_there(pool: PgPool) {
     let second = a_photo_captured(&pool, owner, 0x42, Some(at("2024-06-02T00:00:00Z"))).await;
     let older = a_photo_captured(&pool, owner, 0x43, Some(at("2020-01-01T00:00:00Z"))).await;
 
-    attach_photos(&pool, voyage.id, owner, &[first, second])
+    move_photos(&pool, voyage.id, owner, &[first, second])
         .await
         .expect("attach");
-    attach_photos(&pool, voyage.id, owner, &[older])
+    move_photos(&pool, voyage.id, owner, &[older])
         .await
         .expect("attach");
 
@@ -500,13 +501,13 @@ async fn re_attaching_a_photo_already_present_adds_nothing(pool: PgPool) {
     let photo = a_photo(&pool, owner, 0x44).await;
 
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[photo])
+        move_photos(&pool, voyage.id, owner, &[photo])
             .await
             .expect("attach"),
         1
     );
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[photo])
+        move_photos(&pool, voyage.id, owner, &[photo])
             .await
             .expect("attach"),
         0
@@ -520,7 +521,7 @@ async fn attaching_nothing_is_not_an_error(pool: PgPool) {
     let voyage = a_voyage(&pool, owner).await;
 
     assert_eq!(
-        attach_photos(&pool, voyage.id, owner, &[])
+        move_photos(&pool, voyage.id, owner, &[])
             .await
             .expect("attach"),
         0
@@ -534,7 +535,7 @@ async fn detaching_is_scoped_to_the_voyages_owner(pool: PgPool) {
     let voyage = a_voyage(&pool, owner).await;
     let photo = a_photo(&pool, owner, 0x51).await;
 
-    attach_photos(&pool, voyage.id, owner, &[photo])
+    move_photos(&pool, voyage.id, owner, &[photo])
         .await
         .expect("attach");
 
@@ -563,8 +564,8 @@ async fn detaching_is_scoped_to_the_voyages_owner(pool: PgPool) {
         photos::find_by_id(&pool, photo)
             .await
             .expect("find photo")
-            .is_some(),
-        "detaching returns the photo to the library, it does not delete it"
+            .is_none(),
+        "removing a photo deletes its record"
     );
 }
 
@@ -577,7 +578,7 @@ async fn reorder_applies_the_requested_sequence(pool: PgPool) {
     for seed in 0x61..0x65 {
         photos_in.push(a_photo(&pool, owner, seed).await);
     }
-    attach_photos(&pool, voyage.id, owner, &photos_in)
+    move_photos(&pool, voyage.id, owner, &photos_in)
         .await
         .expect("attach");
 
@@ -615,7 +616,7 @@ async fn reorder_ignores_foreign_ids_and_appends_omitted_photos(pool: PgPool) {
     let a = a_photo(&pool, owner, 0x71).await;
     let b = a_photo(&pool, owner, 0x72).await;
     let c = a_photo(&pool, owner, 0x73).await;
-    attach_photos(&pool, voyage.id, owner, &[a, b, c])
+    move_photos(&pool, voyage.id, owner, &[a, b, c])
         .await
         .expect("attach");
     assert_eq!(order_of(&pool, voyage.id).await, vec![a, b, c]);
@@ -646,7 +647,7 @@ async fn a_stranger_cannot_reorder(pool: PgPool) {
 
     let a = a_photo(&pool, owner, 0x81).await;
     let b = a_photo(&pool, owner, 0x82).await;
-    attach_photos(&pool, voyage.id, owner, &[a, b])
+    move_photos(&pool, voyage.id, owner, &[a, b])
         .await
         .expect("attach");
 
@@ -674,7 +675,7 @@ async fn concurrent_reorders_never_interleave(pool: PgPool) {
     for seed in 0x91..0x97 {
         photos_in.push(a_photo(&pool, owner, seed).await);
     }
-    attach_photos(&pool, voyage.id, owner, &photos_in)
+    move_photos(&pool, voyage.id, owner, &photos_in)
         .await
         .expect("attach");
 
@@ -728,7 +729,7 @@ async fn loading_a_voyage_of_48_photos_reads_the_photos_table_once(pool: PgPool)
     for seed in 0..PHOTO_COUNT {
         photos_in.push(a_photo(&pool, owner, seed as u8).await);
     }
-    attach_photos(&pool, voyage.id, owner, &photos_in)
+    move_photos(&pool, voyage.id, owner, &photos_in)
         .await
         .expect("attach");
 
@@ -778,6 +779,7 @@ async fn photos_for_voyage_returns_exact_coordinates(pool: PgPool) {
     let placed = photos::create(
         &pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(&pool, owner).await,
             owner_id: owner,
             content_hash: hash_of(0xa1),
             byte_size: 1,
@@ -794,7 +796,7 @@ async fn photos_for_voyage_returns_exact_coordinates(pool: PgPool) {
     .id;
     let unplaced = a_photo(&pool, owner, 0xa2).await;
 
-    attach_photos(&pool, voyage.id, owner, &[placed, unplaced])
+    move_photos(&pool, voyage.id, owner, &[placed, unplaced])
         .await
         .expect("attach");
 

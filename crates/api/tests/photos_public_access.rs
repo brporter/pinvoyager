@@ -15,6 +15,9 @@
 //! They drive the real router, because the thing under test is an
 //! authorization decision made by a handler, not a predicate in isolation.
 
+#[path = "support/photo_voyage.rs"]
+mod photo_voyage;
+
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -95,6 +98,7 @@ async fn photo_with_variant(pool: &PgPool, root: &ScratchRoot, owner: Uuid) -> U
     let photo = photos::create(
         pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, owner).await,
             owner_id: owner,
             content_hash: hash.clone(),
             byte_size: 32,
@@ -138,7 +142,7 @@ async fn fetch_thumb(state: &AppState, photo_id: Uuid) -> StatusCode {
 }
 
 #[sqlx::test]
-async fn an_unattached_photo_is_not_public(pool: PgPool) {
+async fn a_photo_in_its_initial_private_voyage_is_not_public(pool: PgPool) {
     let root = ScratchRoot::new();
     let state = state(pool.clone(), &root);
 
@@ -176,7 +180,7 @@ async fn a_draft_does_not_make_its_photos_public(pool: PgPool) {
     .await
     .expect("create voyage");
 
-    voyages_repo::attach_photos(&pool, voyage.id, owner.id, &[photo])
+    voyages_repo::move_photos(&pool, voyage.id, owner.id, &[photo])
         .await
         .expect("attach");
 
@@ -211,7 +215,7 @@ async fn publishing_a_voyage_makes_its_photos_fetchable_by_anyone(pool: PgPool) 
     .await
     .expect("create voyage");
 
-    voyages_repo::attach_photos(&pool, voyage.id, owner.id, &[photo])
+    voyages_repo::move_photos(&pool, voyage.id, owner.id, &[photo])
         .await
         .expect("attach");
 
@@ -268,7 +272,7 @@ async fn unpublishing_withdraws_public_access(pool: PgPool) {
     .await
     .expect("create voyage");
 
-    voyages_repo::attach_photos(&pool, voyage.id, owner.id, &[photo])
+    voyages_repo::move_photos(&pool, voyage.id, owner.id, &[photo])
         .await
         .expect("attach");
     voyages_repo::update(

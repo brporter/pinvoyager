@@ -143,6 +143,13 @@ afterEach(() => {
 /* -- tests --------------------------------------------------------------- */
 
 describe("VoyageEdit — validation", () => {
+  it("puts a prominent draft publish action in the page header", async () => {
+    const { mutate, view } = setup();
+    const button = within(view.container.querySelector("header")!).getByRole("button", { name: "Publish voyage" });
+    expect(button).toHaveClass("pv-btn--primary");
+    await userEvent.setup().click(button);
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ published: true }), expect.any(Object));
+  });
   it("puts a field error beside the input it names, not in a banner", () => {
     setup({
       update: {
@@ -233,16 +240,15 @@ describe("VoyageEdit — precision", () => {
     ).toBeInTheDocument();
   });
 
-  it("puts the precision control immediately before the publish button", () => {
+  it("keeps precision editable alongside the prominent header publish action", () => {
     setup();
 
     const steps = screen.getByRole("group", { name: "Location precision" });
     const publish = screen.getByRole("button", { name: "Publish voyage" });
 
-    // Adjacency is the argument: the last thing seen before making a voyage
-    // public is the precision it will be published at.
+    // Publishing is now prominent in the header; precision remains editable.
     expect(
-      steps.compareDocumentPosition(publish) & Node.DOCUMENT_POSITION_FOLLOWING,
+      steps.compareDocumentPosition(publish) & Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();
   });
 

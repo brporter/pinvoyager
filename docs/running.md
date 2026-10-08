@@ -145,6 +145,14 @@ Rust branch instrumentation requires nightly, so this project does not collect
 branch percentages. Tests should cover both outcomes of each meaningful
 conditional instead.
 
+### Web upload regression checks
+
+Run `npm --prefix web run test:regression` for the upload controls, creation
+screen, polling lifecycle, and first-visit route integration. Run
+`npm --prefix web run test -- --coverage`, type checking, lint, and build for
+full frontend validation. See `docs/upload-regression-tests.md` for native HEIC
+checks, regression sensitivity, browser checks, and the execution results.
+
 ## Queries and the offline cache
 
 Queries are checked at compile time. After adding or changing one, regenerate

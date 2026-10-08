@@ -9,8 +9,7 @@
 //! GET    /api/voyages/{id}                  read; public if published
 //! PATCH  /api/voyages/{id}                  owner only
 //! DELETE /api/voyages/{id}                  owner only
-//! POST   /api/voyages/{id}/photos           attach
-//! DELETE /api/voyages/{id}/photos/{photo}   detach
+//! DELETE /api/voyages/{id}/photos/{photo}   delete photo
 //! PATCH  /api/voyages/{id}/photos/order     reorder
 //! GET    /api/voyages/{id}/map              lean payload for phase 7
 //! ```
@@ -108,8 +107,6 @@ const DESCRIPTION_TOO_LONG: &str = "That description is longer than we can store
 const UNKNOWN_GRANULARITY: &str = "That is not a location precision we recognize.";
 const NO_PHOTOS_NAMED: &str = "Name at least one photograph.";
 const TOO_MANY_PHOTOS: &str = "That is more photographs than one request can carry.";
-const NOT_YOUR_PHOTO: &str =
-    "One of those photographs is not in your library, so nothing was attached.";
 const BAD_CURSOR: &str = "That page cursor is not one we issued.";
 const MINE_REQUIRES_A_SESSION: &str = "Listing your own voyages requires signing in.";
 
@@ -123,7 +120,6 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/voyages", post(create).get(list))
         .route("/api/voyages/{id}", get(read).patch(update).delete(destroy))
-        .route("/api/voyages/{id}/photos", post(attach))
         .route("/api/voyages/{id}/photos/order", patch(reorder))
         .route("/api/voyages/{id}/photos/{photo}", delete(detach))
         .route("/api/voyages/{id}/map", get(map))
@@ -578,21 +574,50 @@ async fn update(
 
 /// Deletes a voyage, owner only.
 ///
-/// The photographs survive: the join rows cascade and the photos do not, so
-/// deleting a voyage returns its images to the owner's library. Someone tidying
-/// up a draft is not asking to destroy the photographs in it.
+/// Deletes a voyage and its photo records (D11); shared files survive.
 async fn destroy(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, Rejection> {
-    if repo::delete(&state.pool, id, user.user_id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        // Not yours and not there are one answer, from one statement. A 403
-        // here would confirm that a draft exists at this id.
-        Err(AppError::NotFound.into())
+    let mut tx = state.pool.begin().await?;
+    let owned: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+            .bind(id)
+            .bind(user.user_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if owned.is_none() {
+        return Err(AppError::NotFound.into());
     }
+    let hashes: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT content_hash FROM photos WHERE voyage_id=$1 ORDER BY content_hash",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await?;
+    for hash in &hashes {
+        photos_repo::lock_content(&mut tx, hash).await?;
+    }
+    repo::delete(&mut *tx, id, user.user_id).await?;
+    for hash in hashes {
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM photos WHERE content_hash=$1)")
+                .bind(&hash)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !exists
+            && let Err(error) = crate::photos::storage::remove_content(
+                &state.config.photos.storage_root,
+                &crate::photos::storage::ContentHash(hash),
+            )
+            .await
+        {
+            tracing::error!(%error, "could not remove unreferenced voyage photo files");
+        }
+    }
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------
@@ -604,78 +629,26 @@ struct PhotoIdsRequest {
     photo_ids: Vec<Uuid>,
 }
 
-/// Attaches photographs the caller owns (T3).
-///
-/// The ownership predicate lives inside the repository's insert, so there is no
-/// check-then-write window for a caller to race. What this handler adds is the
-/// **atomicity** the acceptance criterion asks for: "attaching another user's
-/// photo returns 403 and attaches nothing", so the insert runs inside a
-/// transaction that is rolled back the moment the row count says something was
-/// refused.
-///
-/// A short count has two causes — a photograph that is not the caller's, and
-/// one that is already in this voyage — and the insert cannot report which.
-/// They are told apart on the failure path only, which is the rare one, by
-/// re-reading the named photographs inside the same transaction. That costs a
-/// query per named photograph when a request is already failing and nothing at
-/// all when it succeeds.
-///
-/// **The 403 here is not the enumeration oracle 404 exists to avoid.** The
-/// caller already owns the voyage, so its existence is not news; and a
-/// photograph that does not exist produces the same 403 as one owned by
-/// somebody else, so the status distinguishes nothing about the id.
-async fn attach(
-    State(state): State<AppState>,
-    user: CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(body): Json<PhotoIdsRequest>,
-) -> Result<Json<VoyageResponse>, Rejection> {
-    let photo_ids = clean_photo_ids(body.photo_ids)?;
-
-    let voyage = owned(&state, &user, id).await?;
-
-    let mut tx = state.pool.begin().await?;
-
-    let added = repo::attach_photos(&mut *tx, id, user.user_id, &photo_ids).await?;
-
-    if added as usize != photo_ids.len() {
-        for photo_id in &photo_ids {
-            let mine = photos_repo::find_by_id(&mut *tx, *photo_id)
-                .await?
-                .is_some_and(|photo| photo.owner_id == user.user_id);
-
-            if !mine {
-                // Explicit rather than a drop, so the rollback has completed
-                // before the response says nothing was attached.
-                tx.rollback().await?;
-                return Err(Rejection::forbidden(NOT_YOUR_PHOTO));
-            }
-        }
-        // Every named photograph is the caller's, so the shortfall was
-        // photographs already in this voyage. Attaching a photo twice is not an
-        // error and must not become one — the edit screen cannot tell a
-        // half-finished request from an unsent one, so "it is attached" is the
-        // honest answer.
-    }
-
-    tx.commit().await?;
-
-    let photos = repo::photos_for_voyage(&state.pool, id).await?;
-
-    Ok(Json(VoyageResponse::build(voyage, photos)))
-}
-
-/// Removes one photograph from a voyage. The photograph itself is untouched.
+/// Deletes a photo belonging to this voyage; never creates a library record.
 async fn detach(
     State(state): State<AppState>,
     user: CurrentUser,
     Path((id, photo_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, Rejection> {
-    if repo::detach_photo(&state.pool, id, user.user_id, photo_id).await? {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(AppError::NotFound.into())
+    let belongs: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM photos WHERE id=$1 AND voyage_id=$2 AND owner_id=$3)",
+    )
+    .bind(photo_id)
+    .bind(id)
+    .bind(user.user_id)
+    .fetch_one(&state.pool)
+    .await?;
+    if !belongs {
+        return Err(AppError::NotFound.into());
     }
+    super::photos::destroy(State(state), user, Path(photo_id))
+        .await
+        .map_err(Rejection::App)
 }
 
 /// Sets an explicit order (T4).
@@ -1293,18 +1266,11 @@ enum Rejection {
         field: &'static str,
         message: &'static str,
     },
-    Forbidden {
-        message: &'static str,
-    },
 }
 
 impl Rejection {
     fn field(field: &'static str, message: &'static str) -> Self {
         Rejection::Field { field, message }
-    }
-
-    fn forbidden(message: &'static str) -> Self {
-        Rejection::Forbidden { message }
     }
 }
 
@@ -1339,16 +1305,6 @@ impl IntoResponse for Rejection {
                         "message": message,
                         "errors": [{ "field": field, "message": message }],
                     })),
-                )
-                    .into_response()
-            }
-
-            Rejection::Forbidden { message } => {
-                tracing::debug!("request rejected as forbidden");
-
-                (
-                    StatusCode::FORBIDDEN,
-                    Json(json!({ "code": "forbidden", "message": message })),
                 )
                     .into_response()
             }

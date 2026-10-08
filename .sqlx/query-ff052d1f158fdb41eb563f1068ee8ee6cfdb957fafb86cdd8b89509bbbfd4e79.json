@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT vp.photo_id,\n                  vp.position,\n                  p.captured_at,\n                  p.width,\n                  p.height,\n                  p.variant_status,\n                  p.latitude::float8  AS latitude,\n                  p.longitude::float8 AS longitude\n             FROM voyage_photos vp\n             JOIN photos p ON p.id = vp.photo_id\n            WHERE vp.voyage_id = $1\n            ORDER BY vp.position, vp.photo_id",
+  "query": "SELECT p.id AS \"photo_id!\",\n                  p.position,\n                  p.captured_at,\n                  p.width,\n                  p.height,\n                  p.variant_status,\n                  p.latitude::float8  AS latitude,\n                  p.longitude::float8 AS longitude\n             FROM photos p\n            WHERE p.voyage_id = $1\n            ORDER BY p.position, p.id",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "photo_id",
+        "name": "photo_id!",
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "voyage_photos",
-            "name": "photo_id"
+            "table": "photos",
+            "name": "id"
           }
         }
       },
@@ -20,7 +20,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "voyage_photos",
+            "table": "photos",
             "name": "position"
           }
         }
@@ -98,5 +98,5 @@
       null
     ]
   },
-  "hash": "3e3a6c642495c56a5cb966a5debdc94f5f35d0a8ce7e7296745e1cca1ef667be"
+  "hash": "ff052d1f158fdb41eb563f1068ee8ee6cfdb957fafb86cdd8b89509bbbfd4e79"
 }

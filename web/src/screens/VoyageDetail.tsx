@@ -48,7 +48,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { Link, useParams } from "react-router";
 
 import { isApiError } from "../api/client";
-import { useVoyage } from "../api/hooks";
+import { useUpdateVoyage, useVoyage } from "../api/hooks";
 import type { Coordinate, Voyage, VoyagePhoto } from "../api/types";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -63,8 +63,10 @@ import {
   WarningTriangleIcon,
   CloseIcon,
   ShareIcon,
+  Toast,
 } from "../components";
 import { LazyVoyageMap, type MapSelection, type VoyagePin } from "../map";
+import { LocationGallery } from "../components/LocationGallery";
 import { prefersReducedMotion } from "../shell/motion";
 import { useIsDesktop } from "../shell/useIsDesktop";
 
@@ -92,6 +94,13 @@ export function VoyageDetail() {
   const { id } = useParams<{ id: string }>();
   const query = useVoyage(id);
   const desktop = useIsDesktop();
+
+  const [galleryIds, setGalleryIds] = useState<string[] | null>(null);
+  const galleryTrigger = useRef<HTMLElement | null>(null);
+  const openGallery = useCallback((ids: string[]) => {
+    galleryTrigger.current = document.activeElement as HTMLElement;
+    setGalleryIds(ids);
+  }, []);
 
   const [selection, setSelection] = useState<Selection | null>(null);
 
@@ -148,12 +157,30 @@ export function VoyageDetail() {
     voyage: query.data,
     selection,
     onSelectPin: selectFromPin,
+    onOpenGallery: openGallery,
     onSelectPhoto: selectFromPhoto,
     onClearSelection: clearSelection,
     registerPhoto,
   };
 
-  return desktop ? <DesktopLayout {...view} /> : <MobileLayout {...view} />;
+  return <>
+    {desktop ? <DesktopLayout {...view} /> : <MobileLayout {...view} />}
+    {galleryIds !== null && <LocationGallery
+      photos={query.data.photos.filter(photo => galleryIds.includes(photo.id))}
+      precisionLabel={query.data.granularity_label}
+      onClose={() => {
+        setGalleryIds(null);
+        const trigger = galleryTrigger.current!;
+        if (trigger.isConnected) trigger.focus();
+        else {
+          // Selection can replace a single-pin button; restore its equivalent.
+          const label = trigger.getAttribute("aria-label");
+          const replacement = Array.from(document.querySelectorAll<HTMLElement>("button.pv-pin"))
+            .find(button => button.getAttribute("aria-label") === label);
+          replacement?.focus();
+        }
+      }} />}
+  </>;
 }
 
 /**
@@ -181,6 +208,7 @@ interface LayoutProps {
    *  the screen asked, so that clicking a pin does not also re-center on it. */
   selection: Selection | null;
   onSelectPin: (photoId: string) => void;
+  onOpenGallery: (photoIds: string[]) => void;
   onSelectPhoto: (photoId: string) => void;
   onClearSelection: () => void;
   registerPhoto: (photoId: string, node: HTMLElement | null) => void;
@@ -218,6 +246,7 @@ function DesktopLayout({
   voyage,
   selection,
   onSelectPin,
+  onOpenGallery,
   onSelectPhoto,
   registerPhoto,
 }: LayoutProps) {
@@ -241,6 +270,7 @@ function DesktopLayout({
           precisionM={voyage.precision_m}
           selection={selection}
           onSelectPin={onSelectPin}
+          onOpenGallery={onOpenGallery}
           style={{ position: "absolute", inset: 0 }}
         />
       </div>
@@ -328,10 +358,13 @@ function MobileLayout({
   voyage,
   selection,
   onSelectPin,
+  onOpenGallery,
   onSelectPhoto,
   onClearSelection,
   registerPhoto,
 }: LayoutProps) {
+  const { user } = useAuth();
+  const owner = user !== null && user.id === voyage.owner_id;
   const selectedPhotoId = selection?.photoId ?? null;
   const placed = placedPhotos(voyage);
   const unplaced = voyage.photos.filter((photo) => !photo.placed);
@@ -391,6 +424,7 @@ function MobileLayout({
         precisionM={voyage.precision_m}
         selection={selection}
         onSelectPin={expandAndSelect}
+        onOpenGallery={onOpenGallery}
         // Attribution is a license requirement, so it rides above the sheet
         // rather than sliding underneath it and disappearing.
         attributionOffset={height}
@@ -519,6 +553,7 @@ function MobileLayout({
             </>
           )}
         </div>
+        {owner && !voyage.published && <div style={{ paddingInline: "var(--pv-space-4)" }}><PublishVoyage voyageId={voyage.id} /></div>}
 
         <div className="pv-sheet-body">
           {voyage.photos.length === 0 ? (
@@ -633,6 +668,7 @@ function VoyageHeading({ voyage }: { voyage: Voyage }) {
       </div>
 
       <h1 className="pv-h2">{voyage.title}</h1>
+      {owner && !voyage.published && <PublishVoyage voyageId={voyage.id} />}
 
       {voyage.description !== null && voyage.description !== "" && (
         <p className="pv-sm pv-muted" style={{ margin: "var(--pv-space-2) 0 var(--pv-space-3)" }}>
@@ -646,6 +682,28 @@ function VoyageHeading({ voyage }: { voyage: Voyage }) {
         <span>{countLabel(voyage.place_count, "place")}</span>
       </div>
     </>
+  );
+}
+
+function PublishVoyage({ voyageId }: { voyageId: string }) {
+  const update = useUpdateVoyage(voyageId);
+  return (
+    <div className="pv-stack-3" style={{ marginBlock: "var(--pv-space-3)" }}>
+      <Button
+        variant="primary"
+        size="lg"
+        loading={update.isPending}
+        style={{ alignSelf: "flex-start" }}
+        onClick={() => update.mutate({ published: true })}
+      >
+        Publish voyage
+      </Button>
+      {update.error !== null && (
+        <Toast tone="error" title="The voyage could not be published">
+          {update.error.message}
+        </Toast>
+      )}
+    </div>
   );
 }
 

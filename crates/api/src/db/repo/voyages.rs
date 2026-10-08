@@ -189,8 +189,7 @@ pub async fn update(
 
 /// Owner-scoped delete. Returns whether anything was removed.
 ///
-/// The join rows cascade; the photos do not. Deleting a voyage returns its
-/// photographs to the owner's library.
+/// Deleting a voyage cascades to its photo records (D11).
 pub async fn delete(
     executor: impl PgExecutor<'_>,
     id: Uuid,
@@ -211,80 +210,26 @@ pub async fn delete(
     Ok(result.rows_affected() > 0)
 }
 
-/// Attaches photos the caller owns. Returns how many were added.
-///
-/// **Must verify ownership of every photo in the same statement**, not in a
-/// preceding SELECT: a check-then-insert lets a caller attach someone else's
-/// photograph by racing the two. An `INSERT ... SELECT ... WHERE owner_id = $x`
-/// makes the ownership predicate part of the write.
-///
-/// A photo already in the voyage is *not* counted, because it was not added.
-/// A handler enforcing T3 — "attaching another user's photo returns 403 and
-/// attaches nothing" — should call this inside a transaction and roll back when
-/// the count is below `photo_ids.len()`, which also refuses a request that
-/// re-attaches something already present. That is the safe direction: the
-/// alternative silently half-honors a request the caller believes was applied
-/// in full.
-pub async fn attach_photos(
+/// Internal reassignment of already voyage-owned records; no HTTP attachment API.
+pub async fn move_photos(
     executor: impl PgExecutor<'_>,
     voyage_id: Uuid,
     owner_id: Uuid,
     photo_ids: &[Uuid],
 ) -> Result<u64, sqlx::Error> {
-    // Three predicates, all of them part of the write rather than a check that
-    // precedes it:
-    //
-    // * `candidate.owner_id = $2` — the photo is the caller's. This is the one
-    //   the doc comment is about. A `SELECT` that verified ownership and an
-    //   `INSERT` that trusted the result are two snapshots with a window
-    //   between them; one statement has no window.
-    // * `candidate.id = ANY($3)` — and it is one of the ones asked for. An id
-    //   the caller does not own simply matches nothing, so a stranger's photo
-    //   is not attached and no error distinguishes "not yours" from "no such
-    //   photo".
-    // * `EXISTS (... voyages ...)` — the *voyage* is the caller's too.
-    //   Otherwise anyone could stock a voyage they do not own with their own
-    //   photographs.
-    //
-    // Position defaults to capture time (T4), assigned by `row_number()` over
-    // the whole batch so that attaching fifty photos at once orders them among
-    // themselves rather than by whatever order the caller's array happened to
-    // be in. `NULLS LAST` puts photos with no EXIF timestamp — screenshots,
-    // scans — after the dated ones instead of ahead of them, and the `id`
-    // tiebreak keeps that group in upload order and makes the whole ordering
-    // total, so the same batch always lands the same way.
-    //
-    // The `max(position)` subquery appends after whatever is already there. It
-    // is evaluated against the snapshot taken before the statement ran and
-    // therefore cannot see the rows this very statement is inserting — the same
-    // property that `photos::delete_returning_orphaned` has to work *around*,
-    // and here it is exactly what is wanted: one base, plus a row number.
-    //
-    // `ON CONFLICT DO NOTHING` makes re-attaching idempotent. It leaves gaps in
-    // the position sequence when it fires, since the skipped row still consumed
-    // a `row_number()`. Gaps are harmless: every reader orders by position and
-    // none of them assume it is contiguous.
     let result = sqlx::query!(
-        "INSERT INTO voyage_photos (voyage_id, photo_id, position)
-         SELECT $1,
-                candidate.id,
-                (COALESCE((SELECT max(vp.position)
-                             FROM voyage_photos vp
-                            WHERE vp.voyage_id = $1), 0)
-                 + row_number() OVER (ORDER BY candidate.captured_at ASC NULLS LAST,
-                                               candidate.id ASC))::int
-           FROM photos AS candidate
-          WHERE candidate.owner_id = $2
-            AND candidate.id = ANY($3::uuid[])
-            AND EXISTS (SELECT 1 FROM voyages v WHERE v.id = $1 AND v.owner_id = $2)
-         ON CONFLICT (voyage_id, photo_id) DO NOTHING",
+        "WITH candidates AS (
+            SELECT id, (COALESCE((SELECT max(position) FROM photos WHERE voyage_id = $1), 0)
+                + row_number() OVER (ORDER BY captured_at NULLS LAST, id))::int AS position
+            FROM photos WHERE owner_id = $2 AND id = ANY($3::uuid[]) AND voyage_id <> $1
+        ) UPDATE photos p SET voyage_id = $1, position = c.position FROM candidates c
+          WHERE p.id = c.id AND p.voyage_id <> $1 AND EXISTS (SELECT 1 FROM voyages WHERE id = $1 AND owner_id = $2)",
         voyage_id,
         owner_id,
         photo_ids,
     )
     .execute(executor)
     .await?;
-
     Ok(result.rows_affected())
 }
 
@@ -319,7 +264,7 @@ pub async fn detach_photo(
 /// **Ids not in the voyage are ignored, and photos the caller omitted keep
 /// their relative order at the end.** Both cases are ordinary rather than
 /// exceptional. The client sends the list it rendered, and between that render
-/// and this call a photo can be attached by another tab or detached by the
+/// and this call a photo can be uploaded by another tab or deleted by the
 /// same one; rejecting the whole reorder because the list is one row stale
 /// turns a routine race into a visible failure. Ignoring unknown ids also keeps
 /// this consistent with every other function here: a foreign photo id behaves
@@ -340,7 +285,7 @@ pub async fn reorder(
     // One statement, so the voyage is never observably half-reordered. Note
     // that a partial reorder would not violate a constraint even if it did
     // happen — `position` has no unique index, the primary key is
-    // `(voyage_id, photo_id)` and this statement does not touch either column —
+    // the photo id and this statement does not touch either column —
     // which is precisely why atomicity has to be arranged rather than relied on
     // to fail loudly. The failure mode of doing this row by row is a voyage
     // that reads in a nonsensical order, not an error.
@@ -406,7 +351,7 @@ pub async fn photos_for_voyage(
     // A join, served by `voyage_photos_order_idx` on `(voyage_id, position)`,
     // so the ordering is an index scan rather than a sort. The `photo_id`
     // tiebreak costs nothing and buys a total order: two photos can share a
-    // position if concurrent `attach_photos` calls computed the same base, and
+    // position if concurrent reassignment calls computed the same base, and
     // a voyage whose photos swap places between two reads for no visible reason
     // is a bug nobody would think to look for.
     //
@@ -418,18 +363,17 @@ pub async fn photos_for_voyage(
     // serialization boundary.
     sqlx::query_as!(
         VoyagePhoto,
-        r#"SELECT vp.photo_id,
-                  vp.position,
+        r#"SELECT p.id AS "photo_id!",
+                  p.position,
                   p.captured_at,
                   p.width,
                   p.height,
                   p.variant_status,
                   p.latitude::float8  AS latitude,
                   p.longitude::float8 AS longitude
-             FROM voyage_photos vp
-             JOIN photos p ON p.id = vp.photo_id
-            WHERE vp.voyage_id = $1
-            ORDER BY vp.position, vp.photo_id"#,
+             FROM photos p
+            WHERE p.voyage_id = $1
+            ORDER BY p.position, p.id"#,
         voyage_id,
     )
     .fetch_all(executor)

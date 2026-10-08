@@ -81,14 +81,37 @@ Downloading the planet archive was attempted and abandoned. The transfer average
 therefore points at `tile.openstreetmap.org` directly, and the hosting pipeline is revisited
 later.
 
-**What their usage policy requires of us.** It permits light and development use, which this
-is, subject to conditions we have to actually meet:
+**Policy clarification, 6 October 2026.** The
+[OSM raster tile usage policy](https://operations.osmfoundation.org/policies/tiles/)
+permits normal interactive viewing subject to its requirements. It does not categorically
+prohibit released or commercial applications. Our development-only use and requirement to
+self-host before release are project decisions: service is best-effort, without an SLA,
+and access may be withdrawn if usage degrades the service.
 
-- Attribution must be visible. Already handled — `.pv-attribution` is on every map instance
-  and it was already a license requirement under ODbL.
-- No bulk downloading, and no pre-fetching tiles beyond what a user is looking at.
-- A released application must not use it. This is a development-only arrangement, and
-  shipping it would be a breach rather than merely impolite.
+Requirements relevant to the current browser implementation:
+
+- Use the documented HTTPS tile URL and keep linked attribution visible on the map.
+- Send a valid HTTP Referer; do not suppress it through a restrictive Referrer-Policy.
+  Browsers use their normal User-Agent. Non-browser clients must identify their application.
+- Honor HTTP caching headers and avoid default no-cache requests. If a cache cannot read
+  those headers, retain tiles for at least seven days. Modern browsers with default settings
+  satisfy the policy's technical requirements; verify deployed headers and request behavior.
+- Do not bulk download, build archives from this server, or offer offline/prefetch features.
+  Normal viewport requests with modest, short-range look-ahead are permitted.
+
+**Request settings, 6 October 2026.** `MapCanvas` explicitly uses the browser's default
+HTTP cache, restricts credentials to same-origin requests, and uses `strict-origin` as the
+request referrer policy. OSM receives the site origin as Referer, without voyage paths or
+query strings. The browser supplies its own User-Agent and handles cache validation;
+MapLibre keeps expired-tile refresh enabled so it reads the response's expiry headers.
+The current app continues using OSM under these conditions; D4 remains the future hosting
+direction. See the rule-by-rule audit in `docs/osm-tile-policy.md`.
+
+Official references: [technical requirements](https://operations.osmfoundation.org/policies/tiles/#3-technical-requirements),
+[permitted viewing and prohibited bulk/offline use](https://operations.osmfoundation.org/policies/tiles/#4-prohibited-bulk-downloading-scraping-and-offline-use),
+[availability and enforcement](https://operations.osmfoundation.org/policies/tiles/#7-changes-and-enforcement),
+[attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines),
+and [OSMF Terms of Use](https://osmfoundation.org/wiki/Terms_of_Use).
 
 **The consequence that changes what phase 7 can deliver.** openstreetmap.org serves **raster**
 tiles — finished PNG images. The plan assumes **vector** tiles, and the difference is not
@@ -302,6 +325,57 @@ system rather than by care: `Coordinate` has private fields and one constructor,
 of several coordinates is not a thing that can be serialized. See D6.
 
 ---
+
+## D11 — Photos belong to voyages from upload onward
+
+**Decided 6 October 2026.** The first creation step requires a Voyage Name and
+Voyage Description and tells the user that photo uploads follow at the next step.
+Continuing creates a private draft with those details before showing the upload
+step. Dropping or choosing photos at that step starts uploading automatically.
+Adding photos to an existing voyage opens the upload step directly. Each accepted
+photo belongs to its voyage immediately; no photo bytes are sent without a voyage.
+There is no standalone photo library or later library-to-voyage attachment
+endpoint. Photos without GPS stay in the voyage.
+Uploads append in submission order; owners can change the order in the editor.
+
+Each photo record has exactly one voyage, enforced by a non-null foreign key with
+matching ownership. Removing a photo deletes its record; deleting a voyage deletes
+its photo records. Content-addressed image files are removed only when no remaining
+photo references their hash. Existing unattached photos migrate into owner-only
+“Recovered photos” drafts. Existing photos shared by multiple voyages become separate
+photo records referencing the same stored bytes, preserving each voyage's contents.
+
+Draft owners have prominent Publish voyage buttons on the voyage page at both
+screen widths and in the edit page header. Publishing remains a deliberate action;
+creating a voyage or uploading photos never publishes it. D6 visibility still applies.
+This supersedes the earlier library and deletion behavior in phases 4–6.
+
+## D12 — Voyage markers open a location photo gallery
+
+**Decided 6 October 2026.** On the Voyage page, activating a pin or a numbered
+cluster opens a native modal HTML dialog containing that marker's photos, in
+voyage order. “Around this location” means membership in the existing cluster
+at the current zoom (D10); it introduces no new distance threshold or exact
+coordinate lookup. A single pin shows its one photo. Cluster activation opens
+the gallery instead of zooming; zoom controls still expand groups. Discovery
+navigation is unchanged. Existing photo-list selection remains available.
+
+The gallery uses only the voyage detail payload and authorized, metadata-free
+variants (D6/D7). Pending and failed photos have explicit states; readiness
+polling updates an open gallery. Use native `dialog.showModal()`, Escape
+cancellation, and a `form method="dialog"` close action instead of recreating
+modal focus trapping or background inertness in JavaScript.
+
+**Updated 7 October 2026.** The dialog shows one photo at a time in a viewport-
+bounded frame without a gallery scrollbar. Native previous/next buttons and
+Left/Right arrow keys browse the existing order, stopping at its boundaries.
+An icon-only X closes it from the upper-right corner. `closedby="any"` enables
+native backdrop dismissal; a pointer-based fallback provides the same behavior
+where that attribute is unsupported. Starting a drag inside the dialog and
+releasing outside must not dismiss it. The active photo is retained by ID while
+readiness updates arrive; if it disappears, the gallery shows the first remaining
+photo. Native Escape and dialog close-form behavior remain.
+
 
 ## Defaults that can change
 

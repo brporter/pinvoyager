@@ -129,24 +129,31 @@ the strength of `/settings`.
 
 ## The upload wizard
 
-`/upload` is one route with three internal steps
+`/upload` is one route with four internal steps
 (`web/src/screens/Upload.tsx`). The step is component state, not a URL, so the
 back button leaves the screen rather than stepping back through it.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> choose
-    choose --> process: files dropped or picked
+    [*] --> details
+    details --> choose: name and description saved in draft
+    choose --> process: photos dropped or chosen
     process --> process: one request per file
     process --> review: every file settled
     review --> process: Back
-    review --> detail: photos attached to a voyage
-    review --> profile: photos uploaded, no voyage
+    review --> detail: View voyage
     detail: navigate to /voyages/{id}
-    profile: navigate to /u/{me.id}
     detail --> [*]
-    profile --> [*]
 ```
+
+The first step asks for required **Voyage Name** and **Voyage Description** and
+explains that photos can be uploaded at the next step. **Next: upload photos**
+creates a draft before revealing the drop target and picker. Dropping or choosing
+photos then starts uploading automatically. `/upload?voyage={id}` skips details
+and opens the upload step directly. Every accepted photo belongs to that voyage;
+there is no library choice in review. Owners see prominent publication actions on
+the draft detail and edit pages. `useVoyage` refreshes while variants are pending
+so newly processed images appear on the first visit without reloading the page.
 
 One request per file is deliberate. `uploadPhotos` accepts many, but a rejected
 file fails the request that carried it — so a single request for six files
@@ -199,3 +206,46 @@ exist here rather than a sign-in that failed.
 The doc comment at `web/src/auth/AuthCallback.tsx:32-37` says the API does not
 redirect here and that the screen is exercised only by tests. That comment is
 stale — `to_browser` builds exactly the redirect it asks for.
+
+## Spacing and style review — 6 October 2026
+
+The current routes were reviewed in source against `design/tokens.css`,
+`design/components.css`, and the corresponding files in `design/screens/`.
+The shared four-pixel spacing scale, semantic colors, system typography, and
+button variants remain the basis for the screens.
+
+| Surface | Review and changes |
+| --- | --- |
+| Upload (`web/src/screens/Upload.tsx`, `Upload` and `ChooseStep`) | The details form uses 24 px gaps (`pv-stack-6`) between guidance, name, description, and actions; the upload group is now on the second step. The existing 20 px gap between the drag target and privacy notice stays within the upload group. The upload step includes a View voyage action. Creation errors appear beside the details form action using the same shared spacing. The layout applies to both creation and adding photos. |
+| Voyage detail (`web/src/screens/VoyageDetail.tsx`, `PublishVoyage`) | Publish feedback now has a 12 px gap from the button (`pv-stack-3`). The button retains its intrinsic width and the error fills the available column. Map panels, photo groups, and mobile sheet padding already use shared tokens. |
+| Voyage editor (`web/src/screens/VoyageEdit.tsx`, `Editor`) | Header groups now have a 16 px gap when they wrap. Discard, Save draft, and Publish voyage all use the large 48 px button size; the previous 44 px inline minimum no longer overrides the publish size. Ghost, secondary, and primary variants retain the action hierarchy. Form sections and sidebar cards retain their 24 px spacing. |
+| Discover and profile (`Discover.tsx`, `Profile.tsx`) | Reviewed responsive section padding, heading scale, card gaps, covers, and primary actions. Existing differences between desktop and mobile follow their design references. |
+| Settings (`Settings.tsx`) | Reviewed section stacks, card padding, field help/error spacing, identity rows, and deletion confirmation. Existing spacing uses the shared tokens. |
+| Sign-in and callback (`web/src/auth/SignIn.tsx`, `AuthCallback.tsx`, `AuthCard.tsx`) | Reviewed card padding, provider buttons, feedback, and development sign-in fields against sign-in and auth-state references. |
+| Error pages and navigation (`NotFound.tsx`, `web/src/shell/`) | Reviewed centered empty states, action variants, navigation spacing, and account disclosure padding. Existing styles use shared tokens. |
+
+The editor's larger secondary actions and upload footer grouping deliberately
+adapt the original references to the newer name-first creation flow and
+prominent draft publication required by D11. No new colors or spacing values
+were introduced.
+
+Validation: all 447 frontend tests pass with 100% statements, branches,
+functions, and lines. Type checking, web lint (existing warnings), and the web
+build pass. These are presentation-only changes; backend checks were not rerun.
+Visual browser inspection was blocked by the user's saved access preference for
+`http://127.0.0.1:5173`; no alternate browser or automation bypass was used.
+The review therefore covers source and design consistency, not rendered pixel
+measurements across viewports.
+
+## Voyage location gallery
+
+D12 adds an internal modal state to `/voyages/{id}`; it does not introduce a
+route. `VoyageMap.onOpenGallery` passes the current marker's member photo IDs.
+`VoyageDetail` shows `LocationGallery` with those photos in voyage order, using
+the same authorized detail payload. A single pin retains its selection/scroll
+behavior and opens one photo; a cluster opens all its photos instead of zooming.
+Zoom controls continue to expand clusters. The gallery shows one photo at a time, with previous/next arrows and keyboard
+Left/Right navigation. The native dialog closes through its upper-right X
+`method="dialog"` form, browser Escape cancellation, or a backdrop click. Readiness polling updates
+an open gallery. See `docs/location-gallery.md` for native HTML semantics,
+shared-token styling, tests, and unverified browser checks.

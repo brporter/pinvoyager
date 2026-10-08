@@ -22,13 +22,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // between tests. `vi.mock` above is what makes the application receive it.
 import { __resetMaps } from "../../../__mocks__/maplibre-gl";
 import { ApiRequestError } from "../../api/client";
-import { useVoyage } from "../../api/hooks";
+import { useUpdateVoyage, useVoyage } from "../../api/hooks";
 import type { Voyage, VoyagePhoto } from "../../api/types";
 import { AuthContext } from "../../auth/context";
 import type { AuthState } from "../../auth/context";
 import { VoyageDetail } from "../VoyageDetail";
 
-vi.mock("../../api/hooks", () => ({ useVoyage: vi.fn() }));
+vi.mock("../../api/hooks", () => ({ useVoyage: vi.fn(), useUpdateVoyage: vi.fn() }));
 
 // MapLibre needs a WebGL context and jsdom has none, so the real library cannot
 // be constructed here at all. The substitute in `web/__mocks__/maplibre-gl.ts`
@@ -121,16 +121,20 @@ function stubViewport(desktop: boolean): void {
   }));
 }
 
-function renderScreen(auth: AuthState = ANONYMOUS) {
-  return render(
+function screenTree(auth: AuthState = ANONYMOUS) {
+  return (
     <AuthContext.Provider value={auth}>
       <MemoryRouter initialEntries={["/voyages/v1"]}>
         <Routes>
           <Route path="/voyages/:id" element={<VoyageDetail />} />
         </Routes>
       </MemoryRouter>
-    </AuthContext.Provider>,
+    </AuthContext.Provider>
   );
+}
+
+function renderScreen(auth: AuthState = ANONYMOUS) {
+  return render(screenTree(auth));
 }
 
 function renderWithoutVoyageId() {
@@ -173,6 +177,7 @@ function mapPins(): HTMLElement[] {
 }
 
 beforeEach(() => {
+  vi.mocked(useUpdateVoyage).mockReturnValue({ mutate: vi.fn(), isPending: false, error: null } as unknown as ReturnType<typeof useUpdateVoyage>);
   // jsdom has no layout, so no scrolling either. The screen guards the call;
   // these tests need to observe it.
   Element.prototype.scrollIntoView = vi.fn();
@@ -604,6 +609,30 @@ describe("VoyageDetail — the mobile sheet", () => {
 });
 
 describe("VoyageDetail — ownership", () => {
+  it("keeps the publish action visible and explains a failed publish", () => {
+    stubViewport(true);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ published: false }) }));
+    vi.mocked(useUpdateVoyage).mockReturnValue({ mutate: vi.fn(), isPending: false, error: new Error("A voyage name is required") } as unknown as ReturnType<typeof useUpdateVoyage>);
+    renderScreen({ ...ANONYMOUS, status: "authenticated", user: {
+      id: "u1", display_name: "Owner", avatar_url: null, created_at: "2026-01-01T00:00:00Z",
+    } });
+    expect(screen.getByText("A voyage name is required")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish voyage" })).toBeInTheDocument();
+  });
+
+  it.each([true, false])("offers a prominent publish action for an owner's draft (desktop=%s)", async (desktop) => {
+    stubViewport(desktop);
+    const mutate = vi.fn();
+    vi.mocked(useUpdateVoyage).mockReturnValue({ mutate, isPending: false, error: null } as unknown as ReturnType<typeof useUpdateVoyage>);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ published: false }) }));
+    renderScreen({ ...ANONYMOUS, status: "authenticated", user: {
+      id: "u1", display_name: "Owner", avatar_url: null, created_at: "2026-01-01T00:00:00Z",
+    } });
+    const button = await screen.findByRole("button", { name: "Publish voyage" });
+    expect(button).toHaveClass("pv-btn--primary");
+    await userEvent.setup().click(button);
+    expect(mutate).toHaveBeenCalledWith({ published: true });
+  });
   it("shows the edit action to the voyage owner", async () => {
     stubViewport(true);
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
@@ -615,4 +644,53 @@ describe("VoyageDetail — ownership", () => {
     expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/voyages/v1/edit");
     view.unmount();
   });
+});
+
+
+describe("VoyageDetail — location gallery", () => {
+  it.each([false, true])("opens only clustered photos in voyage order (desktop=%s)", async desktop => {
+    stubViewport(desktop);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({
+      photos: [PLACED_B, { ...PLACED_A, coordinate: PLACED_B.coordinate }, UNPLACED],
+    }) }));
+    renderScreen();
+    await mapReady();
+    const marker = mapRegion().querySelector<HTMLButtonElement>(".pv-cluster")!;
+    await userEvent.click(marker);
+    const dialog = screen.getByRole("dialog", { name: "Photos at this location" });
+    expect(within(dialog).getByRole("img")).toHaveAttribute("src", PLACED_B.display_url);
+    expect(within(dialog).getByText("1 of 2")).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Next photo" }));
+    expect(within(dialog).getByRole("img")).toHaveAttribute("src", PLACED_A.display_url);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(marker).toHaveFocus();
+  });
+});
+
+
+it("restores focus to the selected pin after closing its gallery", async () => {
+  vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+  renderScreen();
+  await mapReady();
+  const pin = mapPins()[1];
+  const label = pin.getAttribute("aria-label");
+  await userEvent.click(pin);
+  const dialog = screen.getByRole("dialog");
+  expect(within(dialog).getAllByRole("img")).toHaveLength(1);
+  await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
+  expect(mapPins().find(candidate => candidate.getAttribute("aria-label") === label)).toHaveFocus();
+});
+
+it("can close the gallery if a refreshed voyage no longer contains its photo", async () => {
+  vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+  const view = renderScreen();
+  await mapReady();
+  await userEvent.click(mapPins()[1]);
+  vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ photos: [], photo_count: 0 }) }));
+  view.rerender(screenTree());
+  const dialog = screen.getByRole("dialog");
+  expect(within(dialog).getByText("0 photos")).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });

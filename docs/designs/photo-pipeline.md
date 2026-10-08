@@ -15,15 +15,18 @@ Three rules govern all of it:
 
 ## Upload, one file
 
-`POST /api/photos` is multipart and may carry many files, but the Upload screen
-sends one per request so each file gets its own outcome.
+`POST /api/voyages/{id}/photos` is multipart and may carry many files, but the Upload screen
+sends one per request so each file gets its own outcome. The owner must create
+the voyage first. The API checks voyage ownership before reading bytes, then
+locks and rechecks the voyage before committing storage and the photo row.
+`photos.voyage_id` is required and references a voyage with the same owner (D11).
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant UI as Upload screen
     participant XHR as uploadPhotos (XMLHttpRequest)
-    participant H as POST /api/photos
+    participant H as POST /api/voyages/{id}/photos
     participant FS as Storage root
     participant PG as Postgres
     participant Q as VariantQueue
@@ -33,8 +36,8 @@ sequenceDiagram
     XHR->>H: multipart body, withCredentials
     XHR-->>UI: progress events → per-row bar
 
-    H->>H: gate 1 — per-user rate token
-    H->>H: gate 2 — declared Content-Length vs max_upload_bytes
+    H->>H: check 1 — per-user rate token
+    H->>H: check 2 — declared Content-Length vs max_upload_bytes
     H->>FS: create tmp/{uuid}.part under the storage root
     loop each chunk
         H->>H: running byte count vs max_upload_bytes
@@ -166,7 +169,7 @@ stateDiagram-v2
 ```
 
 Without the startup sweep a process that died mid-batch would strand photos
-forever: the row exists, the library shows it, and nothing would ever generate
+forever: the row exists, the voyage shows it, and nothing would ever generate
 its variants because the only thing that enqueued it was the request that has
 long since returned. The sweep is capped at 1,000 rows and logs when it hits the
 cap.
@@ -222,3 +225,12 @@ graph LR
 never has to walk past an original. Two shard levels of two hex characters give
 65,536 leaf directories, which keeps any one of them small well past any volume
 this service will see.
+
+## Readiness on voyage pages
+
+Ingestion can return a photo with `variant_status: pending` before the worker
+finishes its image variants. `web/src/api/hooks.ts` (`useVoyage`) polls the voyage
+once per second while any variant is pending. `VoyageDetail` and `VoyageEdit`
+therefore receive ready statuses and display images without a browser refresh.
+Polling stops after all photos are ready or failed. See the `voyage image
+processing` regression in `web/src/api/__tests__/hooks.test.tsx`.

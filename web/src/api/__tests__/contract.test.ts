@@ -37,7 +37,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
-import errorForbidden from "../__fixtures__/error_forbidden.json";
+import errorBadRequest from "../__fixtures__/error_bad_request.json";
 import errorNotFound from "../__fixtures__/error_not_found.json";
 import errorUnauthorized from "../__fixtures__/error_unauthorized.json";
 import errorValidation from "../__fixtures__/error_validation.json";
@@ -46,7 +46,7 @@ import photo from "../__fixtures__/photo.json";
 import photoList from "../__fixtures__/photo_list.json";
 import photoUpload from "../__fixtures__/photo_upload.json";
 import discoverMap from "../__fixtures__/discover_map.json";
-import voyageAttached from "../__fixtures__/voyage_attached.json";
+import voyagePhotos from "../__fixtures__/voyage_photos.json";
 import voyageCreated from "../__fixtures__/voyage_created.json";
 import voyageDetail from "../__fixtures__/voyage_detail.json";
 import voyageList from "../__fixtures__/voyage_list.json";
@@ -157,7 +157,7 @@ export const assigned: {
   photoList: FromJson<PhotoList>;
   photoUpload: FromJson<UploadResult>;
   voyageCreated: FromJson<Voyage>;
-  voyageAttached: FromJson<Voyage>;
+  voyagePhotos: FromJson<Voyage>;
   voyageReordered: FromJson<Voyage>;
   voyageUpdated: FromJson<Voyage>;
   voyageDetail: FromJson<Voyage>;
@@ -167,7 +167,7 @@ export const assigned: {
   voyageListMine: FromJson<VoyageList>;
   errorNotFound: FromJson<ApiError>;
   errorUnauthorized: FromJson<ApiError>;
-  errorForbidden: FromJson<ApiError>;
+  errorBadRequest: FromJson<ApiError>;
   // NOT `ApiError`, and the reason is a real gap rather than a convenience:
   // `types.ts` gives `ApiError.code` seven spellings — the ones `AppError`
   // produces — and no `errors` field. The two handler-local `Rejection` types
@@ -184,7 +184,7 @@ export const assigned: {
   photoList,
   photoUpload,
   voyageCreated,
-  voyageAttached,
+  voyagePhotos,
   voyageReordered,
   voyageUpdated,
   voyageDetail,
@@ -194,7 +194,7 @@ export const assigned: {
   voyageListMine,
   errorNotFound,
   errorUnauthorized,
-  errorForbidden,
+  errorBadRequest,
   errorValidation,
 };
 
@@ -213,7 +213,7 @@ export type ContractHasNoExtraFields = [
   NoExtraFields<ExtraKeys<typeof photoList, PhotoList>>,
   NoExtraFields<ExtraKeys<typeof photoUpload, UploadResult>>,
   NoExtraFields<ExtraKeys<typeof voyageCreated, Voyage>>,
-  NoExtraFields<ExtraKeys<typeof voyageAttached, Voyage>>,
+  NoExtraFields<ExtraKeys<typeof voyagePhotos, Voyage>>,
   NoExtraFields<ExtraKeys<typeof voyageReordered, Voyage>>,
   NoExtraFields<ExtraKeys<typeof voyageUpdated, Voyage>>,
   NoExtraFields<ExtraKeys<typeof voyageDetail, Voyage>>,
@@ -222,7 +222,7 @@ export type ContractHasNoExtraFields = [
   NoExtraFields<ExtraKeys<typeof voyageListMine, VoyageList>>,
   NoExtraFields<ExtraKeys<typeof errorNotFound, ApiError>>,
   NoExtraFields<ExtraKeys<typeof errorUnauthorized, ApiError>>,
-  NoExtraFields<ExtraKeys<typeof errorForbidden, ApiError>>,
+  NoExtraFields<ExtraKeys<typeof errorBadRequest, ApiError>>,
   NoExtraFields<ExtraKeys<typeof errorValidation, ApiErrorBody>>,
 ];
 
@@ -272,7 +272,7 @@ describe("the captured fixtures", () => {
 
     for (const identity of me.identities) expect(PROVIDERS).toContain(identity.provider);
 
-    for (const error of [errorNotFound, errorUnauthorized, errorForbidden]) {
+    for (const error of [errorNotFound, errorUnauthorized, errorBadRequest]) {
       expect(error.code).toMatch(/^[a-z_]+$/);
     }
   });

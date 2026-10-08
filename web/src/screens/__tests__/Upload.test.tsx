@@ -9,12 +9,12 @@
  * they can be checked without driving the whole screen.
  */
 
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiRequestError, NetworkError, attachPhotos, createVoyage } from "../../api/client";
+import { ApiRequestError, NetworkError, createVoyage } from "../../api/client";
 import type { Photo } from "../../api/types";
 import { reasonFor, tally } from "../Upload";
 import { Upload } from "../Upload";
@@ -88,6 +88,13 @@ function photo(overrides: Partial<Photo> = {}): Photo {
     created_at: "2026-08-16T09:00:00Z",
     ...overrides,
   };
+}
+
+async function enterDetails(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "Test voyage");
+  await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "A trip with photos.");
+  await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
+  await screen.findByRole("button", { name: "choose files" });
 }
 
 function CurrentPath() {
@@ -224,11 +231,116 @@ describe("tally", () => {
 });
 
 describe("Upload screen", () => {
+  it("uploads directly into an existing voyage without creating another draft", async () => {
+    const user = userEvent.setup();
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA), path: "/upload?voyage=v1" });
+    expect(screen.queryByRole("textbox", { name: /Voyage Name/ })).not.toBeInTheDocument();
+    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, new File(["image"], "added.jpg", { type: "image/jpeg" }));
+    await waitFor(() => expect(screenMocks.upload).toHaveBeenCalledWith(expect.objectContaining({ voyageId: "v1" })));
+    expect(createVoyage).not.toHaveBeenCalled();
+  });
+
+  it("shows queued files and reviews a partial batch containing only unplaced photos", async () => {
+    const user = userEvent.setup();
+    let finish!: (result: { photos: Photo[] }) => void;
+    screenMocks.upload.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockRejectedValueOnce(new NetworkError("offline", null));
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
+    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, [
+      new File(["first"], "first.jpg", { type: "image/jpeg" }),
+      new File(["second"], "second.jpg", { type: "image/jpeg" }),
+    ]);
+    expect(await screen.findByText(/waiting/)).toBeInTheDocument();
+    await act(async () => finish({ photos: [photo({ latitude: null, longitude: null, placed: false })] }));
+    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
+    expect(screen.getByText("No location")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("requires details first and explains that photo uploads come next", async () => {
+    const user = userEvent.setup();
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    expect(screen.getByRole("textbox", { name: /Voyage Name/ })).toBeRequired();
+    expect(screen.getByRole("textbox", { name: /Voyage Description/ })).toBeRequired();
+    expect(screen.getByText("You will be able to upload your photos at the next step.")).toBeInTheDocument();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
+    expect(screen.getByText("Enter a voyage name.")).toBeInTheDocument();
+    expect(screen.getByText("Enter a voyage description.")).toBeInTheDocument();
+    expect(createVoyage).not.toHaveBeenCalled();
+    await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "   ");
+    await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "   ");
+    await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
+    expect(createVoyage).not.toHaveBeenCalled();
+  });
+
+  it("creates the draft with trimmed details before allowing file selection", async () => {
+    const user = userEvent.setup();
+    let finishCreate!: (value: { id: string }) => void;
+    screenMocks.createVoyage.mockImplementationOnce(() => new Promise(resolve => { finishCreate = resolve; }));
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "  Hokkaido  ");
+    await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "  Winter trip  ");
+    await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
+    await waitFor(() => expect(createVoyage).toHaveBeenCalledWith({ title: "Hokkaido", description: "Winter trip" }));
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "Next: upload photos" })).toBeDisabled();
+    expect(screenMocks.upload).not.toHaveBeenCalled();
+    await act(async () => finishCreate({ id: "new-voyage" }));
+    await screen.findByRole("button", { name: "choose files" });
+    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, new File(["image"], "trip.jpg", { type: "image/jpeg" }));
+    expect(await screen.findByRole("heading", { name: "Uploaded 1 of 1" })).toBeInTheDocument();
+  });
+
+  it("creates only one draft when Next is double clicked while creation is pending", async () => {
+    const user = userEvent.setup();
+    let finish!: (value: { id: string }) => void;
+    screenMocks.createVoyage.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    renderScreen(<Upload />, { auth: authState(ADA) });
+    await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "Trip");
+    await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "Trip description");
+    await user.dblClick(screen.getByRole("button", { name: "Next: upload photos" }));
+    expect(createVoyage).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ id: "new-voyage" }));
+    expect(await screen.findByRole("button", { name: "choose files" })).toBeInTheDocument();
+  });
+
+  it("submits voyage details with Enter and opens the file input with choose files", async () => {
+    const user = userEvent.setup();
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "Trip description");
+    await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "Trip{Enter}");
+    await screen.findByRole("button", { name: "choose files" });
+    expect(createVoyage).toHaveBeenCalledTimes(1);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const click = vi.spyOn(input, "click");
+    await user.click(screen.getByRole("button", { name: "choose files" }));
+    expect(click).toHaveBeenCalledTimes(1);
+    const files = [new File(["one"], "one.jpg", { type: "image/jpeg" }), new File(["two"], "two.jpg", { type: "image/jpeg" })];
+    await user.upload(input, files);
+    expect(await screen.findByRole("heading", { name: "Uploaded 2 of 2" })).toBeInTheDocument();
+    expect(screenMocks.upload).toHaveBeenCalledTimes(2);
+    expect(screenMocks.upload).toHaveBeenNthCalledWith(1, expect.objectContaining({ files: [files[0]] }));
+    expect(screenMocks.upload).toHaveBeenNthCalledWith(2, expect.objectContaining({ files: [files[1]] }));
+  });
+
+  it("automatically uploads dropped photos at the second step", async () => {
+    const user = userEvent.setup();
+    const files = [new File(["image"], "dropped.heic", { type: "image/heic" })];
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
+    fireEvent.drop(container.querySelector(".pv-dropzone")!, { dataTransfer: { files } });
+    expect(await screen.findByRole("heading", { name: "Uploaded 1 of 1" })).toBeInTheDocument();
+    expect(screenMocks.upload).toHaveBeenCalledWith(expect.objectContaining({ files, voyageId: "new-voyage" }));
+  });
+
   it("uploads a chosen photo and advances from processing to review", async () => {
     const user = userEvent.setup();
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
 
-    expect(screen.getByRole("heading", { name: "Upload photos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add photos" })).toBeInTheDocument();
     const input = container.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
     await user.upload(input!, new File(["image"], "hokkaido.jpg", { type: "image/jpeg" }));
@@ -249,26 +361,18 @@ describe("Upload screen", () => {
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Where these photos landed — 1 on the map" }))
       .toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Add to voyage" })).toHaveValue(
-      `voyage:${voyage().id}`,
-    );
-    expect(screen.getByRole("button", { name: "Add 1 photo" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View voyage" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("heading", { name: "Uploaded 1 of 1" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Review 1 photo" }));
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Add to voyage" }),
-      `voyage:${voyage().id}`,
-    );
-    expect(screen.getByRole("combobox", { name: "Add to voyage" })).toHaveValue(
-      `voyage:${voyage().id}`,
-    );
+
   });
 
   it("lets a failed batch be restarted without keeping its failed rows", async () => {
     const user = userEvent.setup();
     screenMocks.upload.mockRejectedValue(new NetworkError("offline", null));
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, new File(["image"], "offline.jpg", { type: "image/jpeg" }));
 
@@ -277,7 +381,7 @@ describe("Upload screen", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Choose different files" }));
-    expect(screen.getByRole("heading", { name: "Upload photos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add photos" })).toBeInTheDocument();
     expect(screen.queryByText("offline.jpg")).not.toBeInTheDocument();
     expect(input).toHaveValue("");
   });
@@ -293,6 +397,7 @@ describe("Upload screen", () => {
       });
     });
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, new File(["image"], "progress.jpg", { type: "image/jpeg" }));
 
@@ -318,6 +423,7 @@ describe("Upload screen", () => {
       .mockResolvedValueOnce({ photos: [] })
       .mockResolvedValueOnce({ photos: [photo()] });
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, new File(["image"], "empty-response.jpg", { type: "image/jpeg" }));
 
@@ -336,6 +442,7 @@ describe("Upload screen", () => {
       signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
     }));
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, new File(["image"], "cancel-me.jpg", { type: "image/jpeg" }));
     const request = screenMocks.upload.mock.calls[0][0];
@@ -347,66 +454,34 @@ describe("Upload screen", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
-  it("creates a new voyage and attaches only placed photos when unplaced photos are excluded", async () => {
+  it("keeps photos without GPS in the same voyage and reviews distinct locations", async () => {
     const user = userEvent.setup();
-    screenMocks.upload.mockImplementation(({ files }) => Promise.resolve({
-      photos: [
-        files[0].name === "placed.jpg"
-          ? photo()
-          : photo({ id: "unplaced-id", latitude: null, longitude: null, placed: false }),
-      ],
-    }));
-    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-    await user.upload(input, [
-      new File(["image"], "placed.jpg", { type: "image/jpeg" }),
+    screenMocks.upload.mockImplementation(({ files }) => Promise.resolve({ photos: [
+      files[0].name === "unplaced.jpg" ? photo({ latitude: null, longitude: null, placed: false }) :
+      files[0].name === "second.jpg" ? photo({ id: "p2", latitude: 34.7, longitude: 135.5 }) : photo(),
+    ] }));
+    const { container } = renderScreen(<><Upload /><CurrentPath /></>, { auth: authState(ADA) });
+    await enterDetails(user);
+    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, [
+      new File(["image"], "first.jpg", { type: "image/jpeg" }),
+      new File(["image"], "second.jpg", { type: "image/jpeg" }),
       new File(["image"], "unplaced.jpg", { type: "image/jpeg" }),
     ]);
-
-    expect(await screen.findByRole("button", { name: "Review 2 photos" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Review 2 photos" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Add to voyage" }), "new");
-    await user.type(screen.getByRole("textbox", { name: "Voyage title" }), "A new trip");
-    await user.click(screen.getByRole("checkbox", { name: "Include it anyway" }));
-    expect(screen.getByRole("checkbox", { name: "Include it anyway" })).not.toBeChecked();
-
-    await user.click(screen.getByRole("button", { name: "Add 1 photo" }));
-
-    await waitFor(() => expect(createVoyage).toHaveBeenCalledWith({ title: "A new trip" }));
-    expect(attachPhotos).toHaveBeenCalledWith("new-voyage", [photo().id]);
-  });
-
-  it("creates an untitled voyage and spreads distinct locations across the review map", async () => {
-    const user = userEvent.setup();
-    const secondPhoto = photo({
-      id: "second-photo",
-      latitude: 34.7,
-      longitude: 135.5,
-      placed: true,
-    });
-    screenMocks.upload.mockImplementation(({ files }) => Promise.resolve({
-      photos: [files[0].name === "second.jpg" ? secondPhoto : photo()],
-    }));
-    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, [
-      new File(["a"], "first.jpg", { type: "image/jpeg" }),
-      new File(["b"], "second.jpg", { type: "image/jpeg" }),
-    ]);
-    await user.click(await screen.findByRole("button", { name: "Review 2 photos" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Add to voyage" }), "new");
-
-    expect(screen.getByRole("group", { name: "Where these photos landed — 2 on the map" })
-      .querySelectorAll(".pv-pin")).toHaveLength(2);
-    await user.click(screen.getByRole("button", { name: "Add 2 photos" }));
-
-    await waitFor(() => expect(createVoyage).toHaveBeenCalledWith({}));
-    expect(attachPhotos).toHaveBeenCalledWith("new-voyage", [photo().id, secondPhoto.id]);
+    await user.click(await screen.findByRole("button", { name: "Review 3 photos" }));
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/library/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Where these photos landed — 2 on the map" }).querySelectorAll(".pv-pin")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "View voyage" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/voyages/new-voyage");
+    expect(screenMocks.upload.mock.calls.every(([request]) => request.voyageId === "new-voyage")).toBe(true);
   });
 
   it("removes a permanent failure from the batch", async () => {
     const user = userEvent.setup();
     screenMocks.upload.mockRejectedValue(apiError(413, "too_large"));
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, fileOfSize(26_000_000, "oversized.jpg"));
 
@@ -417,136 +492,28 @@ describe("Upload screen", () => {
     expect(screen.getByRole("heading", { name: "Uploaded 0 of 0" })).toBeInTheDocument();
   });
 
-  it("retries loading voyages from the review step", async () => {
+  it("keeps details when draft creation fails and allows retry", async () => {
     const user = userEvent.setup();
-    const refetch = vi.fn();
-    const failedVoyages = {
-      data: undefined,
-      isPending: false,
-      isError: true,
-      refetch,
-    };
-    screenMocks.voyages.mockReturnValue(failedVoyages);
+    screenMocks.createVoyage.mockRejectedValueOnce(new Error("database unavailable"));
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "retry-voyages.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(refetch).toHaveBeenCalledOnce();
-  });
-
-  it("shows a loading placeholder while the review destination list is pending", async () => {
-    const user = userEvent.setup();
-    screenMocks.voyages.mockReturnValue({
-      data: undefined,
-      isPending: true,
-      isError: false,
-      refetch: vi.fn(),
-    });
-    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "pending-list.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-
-    expect(screen.getByText("Loading your voyages…")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Add 1 photo/ })).not.toBeInTheDocument();
-  });
-
-  it("keeps the empty destination list useful and identifies draft options", async () => {
-    const user = userEvent.setup();
-    screenMocks.voyages.mockReturnValue({
-      data: { pages: [{ voyages: [] }] },
-      isPending: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-    const { container, unmount } = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "empty-list.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-
-    expect(screen.getByText(/You have no voyages yet/)).toBeInTheDocument();
-    unmount();
-
-    screenMocks.voyages.mockReturnValue({
-      data: { pages: [{ voyages: [voyage({ published: false })] }] },
-      isPending: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-    const draftView = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(
-      draftView.container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "draft-option.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-
-    expect(screen.getByRole("option", { name: /draft/i })).toBeInTheDocument();
-  });
-
-  it("keeps photos in the library without creating or attaching a voyage", async () => {
-    const user = userEvent.setup();
-    screenMocks.upload.mockResolvedValue({
-      photos: [photo({ latitude: null, longitude: null, placed: false })],
-    });
-    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "library.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Add to voyage" }),
-      "library",
-    );
-
-    await user.click(screen.getByRole("button", { name: "Keep 1 photo in my library" }));
-
-    await waitFor(() => expect(screenMocks.upload).toHaveBeenCalledOnce());
-    expect(createVoyage).not.toHaveBeenCalled();
-    expect(attachPhotos).not.toHaveBeenCalled();
-  });
-
-  it("returns an anonymous visitor to the home page after keeping photos in the library", async () => {
-    const user = userEvent.setup();
-    screenMocks.voyages.mockReturnValue({
-      data: { pages: [{ voyages: [] }] },
-      isPending: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-    const { container } = renderScreen(<><Upload /><CurrentPath /></>, {
-      auth: authState(null),
-    });
-    await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "anonymous-library.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-    await user.click(screen.getByRole("button", { name: "Keep 1 photo in my library" }));
-
-    await waitFor(() => expect(screen.getByTestId("current-path")).toHaveTextContent("/"));
-  });
-
-  it("shows an error when adding photos to the selected voyage fails", async () => {
-    const user = userEvent.setup();
-    vi.mocked(attachPhotos).mockRejectedValueOnce(new Error("database unavailable"));
-    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
-    await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(["image"], "attach-error.jpg", { type: "image/jpeg" }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Review 1 photo" }));
-    await user.click(screen.getByRole("button", { name: "Add 1 photo" }));
-
+    await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "Retry trip");
+    await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "Retry description");
+    await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("database unavailable");
+    expect(screenMocks.upload).not.toHaveBeenCalled();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByRole("textbox", { name: /Voyage Description/ })).toHaveValue("Retry description");
+    await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
+    expect(await screen.findByRole("button", { name: "choose files" })).toBeInTheDocument();
+  });
+
+  it("can view the draft without uploading photos", async () => {
+    const user = userEvent.setup();
+    renderScreen(<><Upload /><CurrentPath /></>, { auth: authState(ADA) });
+    await enterDetails(user);
+    await user.click(screen.getByRole("button", { name: "View voyage" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/voyages/new-voyage");
+    expect(screenMocks.upload).not.toHaveBeenCalled();
   });
 
   it("aborts the pending upload and revokes its preview URL on unmount", async () => {
@@ -557,6 +524,7 @@ describe("Upload screen", () => {
       signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
     }));
     const { container, unmount } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     await user.upload(
       container.querySelector<HTMLInputElement>('input[type="file"]')!,
       new File(["image"], "cleanup.jpg", { type: "image/jpeg" }),
@@ -576,6 +544,7 @@ describe("Upload screen", () => {
       throw new Error("object URLs unavailable");
     });
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
     await user.upload(
       container.querySelector<HTMLInputElement>('input[type="file"]')!,
       new File(["image"], "no-preview.jpg", { type: "image/jpeg" }),
@@ -591,6 +560,7 @@ describe("Upload screen", () => {
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: undefined });
     try {
       const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
       await user.upload(
         container.querySelector<HTMLInputElement>('input[type="file"]')!,
         new File(["image"], "missing-preview.jpg", { type: "image/jpeg" }),
@@ -610,6 +580,7 @@ describe("Upload screen", () => {
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: undefined });
     try {
       const { container, unmount } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
       await user.upload(
         container.querySelector<HTMLInputElement>('input[type="file"]')!,
         new File(["image"], "no-revoke.jpg", { type: "image/jpeg" }),

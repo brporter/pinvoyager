@@ -86,6 +86,9 @@ export const UploadIcon = icon(
 
 export const PlusIcon = icon("0 0 24 24", <path d="M12 5v14M5 12h14" />);
 
+export const ArrowLeftIcon = icon("0 0 24 24", <path d="m14 6-6 6 6 6" />);
+export const ArrowRightIcon = icon("0 0 24 24", <path d="m10 6 6 6-6 6" />);
+
 export const CloseIcon = icon("0 0 24 24", <path d="M18 6 6 18M6 6l12 12" />);
 
 /* -- forms.html / feedback.html ----------------------------------------- */

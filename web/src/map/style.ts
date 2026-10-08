@@ -13,9 +13,12 @@
  *
  * `https://tile.openstreetmap.org/{z}/{x}/{y}.png` — raster tiles, straight
  * from openstreetmap.org, which is a development-only arrangement recorded as
- * decision D4a in `docs/decisions.md`. Their usage policy permits light and
- * development use; it does not permit a released application, so shipping this
- * URL would be a breach of it rather than merely impolite.
+ * decision D4a in `docs/decisions.md`. OSM permits normal interactive viewing
+ * subject to attribution, identification, caching, and no bulk/offline fetching:
+ * https://operations.osmfoundation.org/policies/tiles/
+ * Released and commercial applications are not categorically prohibited.
+ * Self-hosting before release is our project decision because this service has
+ * no availability guarantee and access may be withdrawn.
  *
  * The consequence that shows up visually: raster tiles arrive already drawn.
  * There is no way to recolor them, so the dark basemap in

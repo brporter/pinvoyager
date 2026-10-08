@@ -1,7 +1,7 @@
 /**
  * Upload — implements `design/screens/upload-flow.html` (T8).
  *
- * Three steps: choose, process, review.
+ * Enter voyage details, choose photos, upload directly to its draft, then review.
  *
  * ## The thing this screen exists to do
  *
@@ -33,31 +33,29 @@
  * EXIF coordinates can be wrong — a camera holding a stale GPS fix will place a
  * photograph hundreds of kilometers from where it was taken — and the review
  * map is the only chance to notice before anything is published. Photos with no
- * location get an explicit decision there rather than a silent default, and the
- * primary button counts what will actually happen: "Add 4 photos", not "Done".
+ * location are counted explicitly and stay in the voyage. All uploaded
+ * photos already belong to the draft; review opens the voyage without a later
+ * library-to-voyage assignment.
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 
-import { attachPhotos, createVoyage, isApiError, NetworkError } from "../api/client";
-import { keys, useUploadPhotos, useVoyages } from "../api/hooks";
-import type { Photo, VoyageSummary } from "../api/types";
-import { useAuth } from "../auth/useAuth";
+import { createVoyage, isApiError, NetworkError } from "../api/client";
+import { keys, useUploadPhotos } from "../api/hooks";
+import type { Photo } from "../api/types";
 import {
   Attribution,
   Badge,
   Button,
-  Checkbox,
   Dropzone,
   EmptyState,
   ImageIcon,
   Pin,
-  Select,
   ShieldCheckIcon,
-  Skeleton,
   TextField,
+  TextArea,
   Toast,
   UploadRow,
 } from "../components";
@@ -66,7 +64,7 @@ import {
 // Model
 // ---------------------------------------------------------------------------
 
-type Step = "choose" | "process" | "review";
+type Step = "details" | "choose" | "process" | "review";
 
 type ItemStatus = "queued" | "uploading" | "processing" | "uploaded" | "error";
 
@@ -90,12 +88,6 @@ interface Item {
   photo?: Photo;
   failure?: Failure;
 }
-
-/** What the review step will do when the primary button is pressed. */
-type Destination =
-  | { kind: "voyage"; voyageId: string }
-  | { kind: "new" }
-  | { kind: "library" };
 
 const MAX_SIZE_LABEL = "25 MB";
 
@@ -226,11 +218,17 @@ export function tally(items: readonly Item[]): BatchTally {
 
 export function Upload() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [search] = useSearchParams();
+  const [voyageId, setVoyageId] = useState<string | null>(search.get("voyage"));
+  const destination = useRef(voyageId);
+  const [title, setTitle] = useState("");
+  const [nameError, setNameError] = useState<string>();
+  const [description, setDescription] = useState("");
+  const [descriptionError, setDescriptionError] = useState<string>();
   const queryClient = useQueryClient();
   const upload = useUploadPhotos();
 
-  const [step, setStep] = useState<Step>("choose");
+  const [step, setStep] = useState<Step>(voyageId === null ? "details" : "choose");
   const [items, setItems] = useState<Item[]>([]);
 
   /** One controller per in-flight file, so a single row's cancel button
@@ -266,6 +264,7 @@ export function Upload() {
 
       try {
         const result = await send({
+          voyageId: destination.current!,
           files: [item.file],
           signal: controller.signal,
           onProgress: (fraction) => {
@@ -331,6 +330,16 @@ export function Upload() {
     [uploadOne],
   );
 
+  const create = useMutation({
+    mutationFn: async () => {
+      const voyage = await createVoyage({ title: title.trim(), description: description.trim() });
+      destination.current = voyage.id;
+      setVoyageId(voyage.id);
+      setStep("choose");
+    },
+    retry: false,
+  });
+
   const onFiles = useCallback(
     (files: File[]) => {
       const added = files.map((file) => {
@@ -359,12 +368,55 @@ export function Upload() {
     <div className="pv-container" style={{ paddingBlock: "var(--pv-space-6)" }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
         <h1 className="pv-h2" style={{ marginBottom: "var(--pv-space-5)" }}>
-          {headingFor(step, counts)}
+          {step === "details" ? "Create voyage" : step === "choose" ? "Add photos" : headingFor(step, counts)}
         </h1>
 
         <Steps current={step} />
 
-        {step === "choose" && <ChooseStep onFiles={onFiles} />}
+        {step === "details" && (
+          <form className="pv-stack-6" noValidate onSubmit={(event) => {
+            event.preventDefault();
+            const missingName = title.trim() === "";
+            const missingDescription = description.trim() === "";
+            setNameError(missingName ? "Enter a voyage name." : undefined);
+            setDescriptionError(missingDescription ? "Enter a voyage description." : undefined);
+            if (missingName || missingDescription) return;
+            create.mutate();
+          }}>
+            <p className="pv-sm pv-muted" style={{ margin: 0 }}>
+              You will be able to upload your photos at the next step.
+            </p>
+            <TextField label="Voyage Name" required value={title} error={nameError}
+              disabled={create.isPending} onChange={(event) => {
+                setTitle(event.target.value);
+                setNameError(undefined);
+              }} />
+            <TextArea label="Voyage Description" required value={description} error={descriptionError}
+              rows={4} disabled={create.isPending} onChange={(event) => {
+                setDescription(event.target.value);
+                setDescriptionError(undefined);
+              }} />
+            {create.isError && (
+              <Toast tone="error" title="The voyage could not be created">{create.error.message}</Toast>
+            )}
+            <div className="pv-inline-3" style={{ justifyContent: "flex-end" }}>
+              <Button type="submit" variant="primary" size="lg" loading={create.isPending} disabled={create.isPending}>
+                Next: upload photos
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {step === "choose" && (
+          <div className="pv-stack-6">
+            <ChooseStep onFiles={onFiles} disabled={false} />
+            <div className="pv-inline-3" style={{ justifyContent: "flex-end" }}>
+              <Button variant="ghost" onClick={() => void navigate(`/voyages/${voyageId}`)}>
+                View voyage
+              </Button>
+            </div>
+          </div>
+        )}
 
         {step === "process" && (
           <ProcessStep
@@ -392,16 +444,9 @@ export function Upload() {
             items={items}
             counts={counts}
             onBack={() => setStep("process")}
-            onDone={(voyageId) => {
-              void queryClient.invalidateQueries({ queryKey: keys.photos.all });
+            onDone={() => {
               void queryClient.invalidateQueries({ queryKey: keys.voyages.all });
-              void navigate(
-                voyageId === null
-                  ? user === null
-                    ? "/"
-                    : `/u/${user.id}`
-                  : `/voyages/${voyageId}`,
-              );
+              void navigate(`/voyages/${voyageId}`);
             }}
           />
         )}
@@ -410,8 +455,7 @@ export function Upload() {
   );
 }
 
-function headingFor(step: Step, counts: BatchTally): string {
-  if (step === "choose") return "Upload photos";
+function headingFor(step: Exclude<Step, "details" | "choose">, counts: BatchTally): string {
   if (step === "review") return "Review";
   return counts.pending > 0
     ? `Uploading ${String(counts.total)} ${plural(counts.total, "photo", "photos")}`
@@ -422,15 +466,16 @@ function headingFor(step: Step, counts: BatchTally): string {
 // The step indicator
 // ---------------------------------------------------------------------------
 
-const STEP_ORDER: readonly Step[] = ["choose", "process", "review"];
+const STEP_ORDER: readonly Step[] = ["details", "choose", "process", "review"];
 const STEP_LABEL: Record<Step, string> = {
-  choose: "Choose",
+  details: "Voyage details",
+  choose: "Upload photos",
   process: "Process",
   review: "Review",
 };
 
 /**
- * Choose · Process · Review.
+ * Voyage details · Upload photos · Process · Review.
  *
  * The design file styles this with rules local to that file rather than with
  * anything in `design/components.css`, so the geometry is mirrored inline here.
@@ -513,10 +558,10 @@ function Steps({ current }: { current: Step }) {
 // Step 1 — choose
 // ---------------------------------------------------------------------------
 
-function ChooseStep({ onFiles }: { onFiles: (files: File[]) => void }) {
+function ChooseStep({ onFiles, disabled }: { onFiles: (files: File[]) => void; disabled: boolean }) {
   return (
-    <>
-      <Dropzone onFiles={onFiles} maxSizeLabel={MAX_SIZE_LABEL} />
+    <div>
+      <Dropzone onFiles={onFiles} disabled={disabled} formatsLabel="JPEG, PNG, WebP, HEIC" maxSizeLabel={MAX_SIZE_LABEL} />
 
       {/* The stripping guarantee appears here as well as at the granularity
           control. This is the moment someone decides whether to trust the
@@ -533,7 +578,7 @@ function ChooseStep({ onFiles }: { onFiles: (files: File[]) => void }) {
           with all metadata removed.
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -679,217 +724,26 @@ function Summary({ counts }: { counts: BatchTally }) {
 // Step 3 — review
 // ---------------------------------------------------------------------------
 
-function ReviewStep({
-  items,
-  counts,
-  onBack,
-  onDone,
-}: {
+function ReviewStep({ items, counts, onBack, onDone }: {
   items: readonly Item[];
   counts: BatchTally;
   onBack: () => void;
-  /** `null` means the photos were left in the library. */
-  onDone: (voyageId: string | null) => void;
+  onDone: () => void;
 }) {
-  const voyages = useVoyages({ mine: true });
-
-  const uploaded = useMemo(
-    () =>
-      items
-        .map((item) => item.photo)
-        .filter((photo): photo is Photo => photo !== undefined),
-    [items],
-  );
+  const uploaded = useMemo(() => items.flatMap((item) => item.photo === undefined ? [] : [item.photo]), [items]);
   const placed = uploaded.filter((photo) => photo.latitude !== null);
   const unplaced = uploaded.filter((photo) => photo.latitude === null);
-
-  const [destination, setDestination] = useState<Destination | null>(null);
-  const [title, setTitle] = useState("");
-  const [includeUnplaced, setIncludeUnplaced] = useState(true);
-
-  const options: VoyageSummary[] = useMemo(
-    () => voyages.data?.pages.flatMap((page) => page.voyages) ?? [],
-    [voyages.data],
-  );
-
-  // Chosen once the list arrives, and only if the user has not chosen already.
-  // "Leave in my library" is the fallback rather than "create a voyage",
-  // because a default that creates something is a default that acts.
-  useEffect(() => {
-    if (destination !== null || voyages.isPending) return;
-    const first = options[0];
-    setDestination(
-      first === undefined ? { kind: "library" } : { kind: "voyage", voyageId: first.id },
-    );
-  }, [destination, options, voyages.isPending]);
-
-  const chosen: Destination = destination ?? { kind: "library" };
-  const toAttach =
-    chosen.kind === "library"
-      ? uploaded
-      : includeUnplaced
-        ? uploaded
-        : placed;
-
-  const finish = useMutation({
-    mutationFn: async (): Promise<string | null> => {
-      if (chosen.kind === "library") return null;
-
-      const voyageId =
-        chosen.kind === "new"
-          ? (await createVoyage(title.trim() === "" ? {} : { title: title.trim() })).id
-          : chosen.voyageId;
-
-      if (toAttach.length > 0) {
-        await attachPhotos(
-          voyageId,
-          toAttach.map((photo) => photo.id),
-        );
-      }
-      return voyageId;
-    },
-    retry: false,
-    onSuccess: onDone,
-  });
-
   return (
     <>
       <Summary counts={counts} />
-
       <ReviewMap photos={placed} unplacedCount={unplaced.length} />
-
-      <div style={{ marginTop: "var(--pv-space-4)" }}>
-        {voyages.isPending ? (
-          <div aria-busy="true">
-            <span className="pv-sr">Loading your voyages…</span>
-            <Skeleton height={18} width="40%" />
-            <Skeleton height={44} />
-          </div>
-        ) : voyages.isError ? (
-          <Toast tone="error" title="Your voyages could not be loaded">
-            You can still leave these photos in your library and add them later.{" "}
-            <Button variant="ghost" size="sm" onClick={() => void voyages.refetch()}>
-              Try again
-            </Button>
-          </Toast>
-        ) : (
-          <Select
-            label="Add to voyage"
-            value={valueOf(chosen)}
-            help={
-              options.length === 0
-                ? "You have no voyages yet — create one, or keep these in your library for now."
-                : undefined
-            }
-            onChange={(event) => setDestination(destinationOf(event.target.value))}
-          >
-            {options.map((voyage) => (
-              <option key={voyage.id} value={`voyage:${voyage.id}`}>
-                {voyage.title}
-                {voyage.published ? "" : " (draft)"}
-              </option>
-            ))}
-            <option value="new">Create a new voyage…</option>
-            {/* Uploading and assigning are separate acts. Forcing every upload
-                into a voyage immediately would make the library meaningless. */}
-            <option value="library">Leave in my library</option>
-          </Select>
-        )}
-      </div>
-
-      {chosen.kind === "new" && (
-        <div style={{ marginTop: "var(--pv-space-4)" }}>
-          <TextField
-            label="Voyage title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            help="You can change this later. Leave it blank and the voyage is created untitled."
-          />
-        </div>
-      )}
-
-      {chosen.kind !== "library" && unplaced.length > 0 && (
-        <div
-          className="pv-card"
-          style={{
-            padding: "var(--pv-space-3)",
-            background: "var(--pv-warning-bg)",
-            borderColor: "transparent",
-            marginTop: "var(--pv-space-4)",
-          }}
-        >
-          <div
-            className="pv-sm"
-            style={{ fontWeight: "var(--pv-weight-semibold)", marginBottom: 2 }}
-          >
-            {unplaced.length} {plural(unplaced.length, "photo has", "photos have")} no
-            location
-          </div>
-          <div className="pv-xs pv-muted">
-            {plural(unplaced.length, "It", "They")} will be part of the voyage but
-            will not appear on the map.
-          </div>
-          <div style={{ marginTop: "var(--pv-space-3)" }}>
-            <Checkbox
-              checked={includeUnplaced}
-              onChange={(event) => setIncludeUnplaced(event.target.checked)}
-            >
-              Include {plural(unplaced.length, "it", "them")} anyway
-            </Checkbox>
-          </div>
-        </div>
-      )}
-
-      {finish.isError && (
-        <div style={{ marginTop: "var(--pv-space-4)" }}>
-          <Toast tone="error" title="Those photos could not be added">
-            {finish.error.message} Your photos are safe in your library — nothing
-            was lost.
-          </Toast>
-        </div>
-      )}
-
-      <div
-        className="pv-inline-3"
-        style={{ marginTop: "var(--pv-space-5)", justifyContent: "flex-end" }}
-      >
-        <Button variant="ghost" onClick={onBack}>
-          Back
-        </Button>
-        {/* Counts what will actually happen, not "Done". Six were selected;
-            four are being added. */}
-        <Button
-          variant="primary"
-          size="lg"
-          loading={finish.isPending}
-          onClick={() => void finish.mutateAsync().catch(() => undefined)}
-        >
-          {chosen.kind === "library"
-            ? `Keep ${String(toAttach.length)} ${plural(toAttach.length, "photo", "photos")} in my library`
-            : `Add ${String(toAttach.length)} ${plural(toAttach.length, "photo", "photos")}`}
-        </Button>
+      <p className="pv-sm pv-muted">All uploaded photos are saved in this voyage. Photos without location data are included but do not appear on the map.</p>
+      <div className="pv-inline-3" style={{ marginTop: "var(--pv-space-5)", justifyContent: "flex-end" }}>
+        <Button variant="ghost" onClick={onBack}>Back</Button>
+        <Button variant="primary" size="lg" onClick={onDone}>View voyage</Button>
       </div>
     </>
   );
-}
-
-function valueOf(destination: Destination): string {
-  switch (destination.kind) {
-    case "voyage":
-      return `voyage:${destination.voyageId}`;
-    case "new":
-      return "new";
-    case "library":
-      return "library";
-  }
-}
-
-function destinationOf(value: string): Destination {
-  if (value === "new") return { kind: "new" };
-  if (value.startsWith("voyage:")) {
-    return { kind: "voyage", voyageId: value.slice("voyage:".length) };
-  }
-  return { kind: "library" };
 }
 
 /**

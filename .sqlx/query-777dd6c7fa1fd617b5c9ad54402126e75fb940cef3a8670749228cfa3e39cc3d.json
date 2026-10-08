@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH candidates AS (\n            SELECT id, (COALESCE((SELECT max(position) FROM photos WHERE voyage_id = $1), 0)\n                + row_number() OVER (ORDER BY captured_at NULLS LAST, id))::int AS position\n            FROM photos WHERE owner_id = $2 AND id = ANY($3::uuid[]) AND voyage_id <> $1\n        ) UPDATE photos p SET voyage_id = $1, position = c.position FROM candidates c\n          WHERE p.id = c.id AND p.voyage_id <> $1 AND EXISTS (SELECT 1 FROM voyages WHERE id = $1 AND owner_id = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "777dd6c7fa1fd617b5c9ad54402126e75fb940cef3a8670749228cfa3e39cc3d"
+}

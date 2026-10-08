@@ -68,7 +68,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = std::sync::Arc::new(config);
 
     // Also sweeps any photos left `pending` by a previous run, which would
-    // otherwise sit in someone's library forever, never becoming viewable.
+    // otherwise remain in a voyage forever, never becoming viewable.
     let variants = worker::spawn(pool.clone(), config.clone());
 
     let state = AppState::new(pool, config, providers, variants);

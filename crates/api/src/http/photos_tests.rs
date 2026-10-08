@@ -1,3 +1,4 @@
+use crate::photo_voyage;
 use std::sync::Arc;
 
 use axum::http::Request;
@@ -132,6 +133,10 @@ async fn create_photo_for_test(
     crate::db::repo::photos::create(
         pool,
         &crate::db::repo::photos::NewPhoto {
+            voyage_id: {
+                sqlx::query("INSERT INTO voyages (id, owner_id, title) VALUES ($1, $1, 'Photo fixture') ON CONFLICT DO NOTHING").bind(owner_id).execute(pool).await.expect("fixture voyage");
+                owner_id
+            },
             owner_id,
             content_hash: content_hash.to_owned(),
             byte_size: 123,
@@ -181,8 +186,8 @@ async fn every_metadata_route_requires_a_session() {
     // coordinates to an owner, and the granularity boundary lives in
     // `http::voyages`; opening them would route around it.
     for (method, uri) in [
-        ("GET", "/api/photos".to_owned()),
-        ("POST", "/api/photos".to_owned()),
+        ("GET", format!("/api/voyages/{id}/photos")),
+        ("POST", format!("/api/voyages/{id}/photos")),
         ("GET", format!("/api/photos/{id}")),
         ("DELETE", format!("/api/photos/{id}")),
     ] {
@@ -211,6 +216,7 @@ async fn upload_rejects_a_declared_size_over_the_limit_before_reading() {
     let error = upload(
         State(state),
         test_user(Uuid::now_v7()),
+        Uuid::now_v7(),
         headers,
         Body::empty(),
     )
@@ -239,9 +245,15 @@ async fn streaming_file_size_limit_cleans_up_the_partial_upload() {
     let mut multipart = reader("pv", body, 1 << 20);
     multipart.next_part().await.unwrap().expect("file part");
 
-    let error = ingest(&state, Uuid::now_v7(), &mut multipart, &temp_dir)
-        .await
-        .expect_err("file bytes over the per-file limit are refused");
+    let error = ingest(
+        &state,
+        Uuid::now_v7(),
+        Uuid::now_v7(),
+        &mut multipart,
+        &temp_dir,
+    )
+    .await
+    .expect_err("file bytes over the per-file limit are refused");
 
     assert_eq!(
         error.into_response().status(),
@@ -265,6 +277,7 @@ async fn an_upload_rate_of_zero_refuses_the_request() {
     let error = upload(
         State(state),
         test_user(Uuid::now_v7()),
+        Uuid::now_v7(),
         HeaderMap::new(),
         Body::empty(),
     )
@@ -284,6 +297,7 @@ async fn upload_rejects_a_non_multipart_body() {
     let error = upload(
         State(state),
         test_user(Uuid::now_v7()),
+        Uuid::now_v7(),
         HeaderMap::new(),
         Body::empty(),
     )
@@ -306,6 +320,7 @@ async fn upload_rejects_a_multipart_form_without_any_files() {
     let error = upload(
         State(state),
         test_user(Uuid::now_v7()),
+        Uuid::now_v7(),
         headers,
         Body::from(body),
     )
@@ -336,6 +351,7 @@ async fn upload_rejects_unrecognized_file_bytes_and_removes_the_temporary_file()
     let error = upload(
         State(state),
         test_user(Uuid::now_v7()),
+        Uuid::now_v7(),
         headers,
         Body::from(body),
     )
@@ -360,6 +376,17 @@ async fn upload_persists_a_valid_photo_and_queues_variant_generation(pool: PgPoo
     let user = crate::db::repo::users::create(&pool, Some("Ada"), None)
         .await
         .expect("create owner");
+    let voyage = crate::db::repo::voyages::create(
+        &pool,
+        &crate::db::repo::voyages::NewVoyage {
+            owner_id: user.id,
+            title: "Upload destination".into(),
+            description: None,
+            granularity: "exact".into(),
+        },
+    )
+    .await
+    .expect("create destination draft");
     let scratch = crate::photos::decode::testutil::ScratchDir::new("http-upload-valid");
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
     let state = test_state_with(
@@ -376,10 +403,15 @@ async fn upload_persists_a_valid_photo_and_queues_variant_generation(pool: PgPoo
         "multipart/form-data; boundary=pv".parse().unwrap(),
     );
 
-    let (status, Json(response)) =
-        upload(State(state), test_user(user.id), headers, Body::from(body))
-            .await
-            .expect("valid image upload succeeds");
+    let (status, Json(response)) = upload_to_voyage(
+        State(state),
+        test_user(user.id),
+        Path(voyage.id),
+        headers,
+        Body::from(body),
+    )
+    .await
+    .expect("valid image upload succeeds");
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(response.photos.len(), 1);
@@ -396,6 +428,25 @@ async fn upload_persists_a_valid_photo_and_queues_variant_generation(pool: PgPoo
             .await
             .expect("photo row persisted");
     assert_eq!(persisted_status, STATUS_PENDING);
+    let members = crate::db::repo::voyages::photos_for_voyage(&pool, voyage.id)
+        .await
+        .expect("read voyage");
+    assert_eq!(
+        members.len(),
+        1,
+        "an accepted upload already belongs to its voyage"
+    );
+    assert_eq!(members[0].photo_id, photo.id);
+}
+
+#[tokio::test]
+async fn unscoped_photo_library_routes_are_not_available() {
+    for method in ["GET", "POST"] {
+        assert_eq!(
+            status_of(method, "/api/photos").await,
+            StatusCode::NOT_FOUND
+        );
+    }
 }
 
 #[sqlx::test]
@@ -421,6 +472,7 @@ async fn upload_reports_a_closed_worker_after_persisting_the_pending_photo(pool:
     let error = upload(
         State(state.clone()),
         test_user(user.id),
+        photo_voyage::fixture_voyage(&pool, user.id).await,
         headers,
         Body::from(body),
     )
@@ -433,7 +485,7 @@ async fn upload_reports_a_closed_worker_after_persisting_the_pending_photo(pool:
 
     let photos = crate::db::repo::photos::list_for_owner(&pool, user.id, None, 10)
         .await
-        .expect("the committed photo remains in the library");
+        .expect("the committed photo remains in its voyage");
     assert_eq!(photos.len(), 1);
     assert_eq!(photos[0].variant_status, STATUS_PENDING);
     assert!(
@@ -446,7 +498,7 @@ async fn upload_reports_a_closed_worker_after_persisting_the_pending_photo(pool:
 }
 
 #[sqlx::test]
-async fn library_list_sets_and_omits_the_next_cursor(pool: PgPool) {
+async fn voyage_photo_list_sets_and_omits_the_next_cursor(pool: PgPool) {
     let owner = crate::db::repo::users::create(&pool, None, None)
         .await
         .expect("create owner");
@@ -461,6 +513,7 @@ async fn library_list_sets_and_omits_the_next_cursor(pool: PgPool) {
     let Json(full_page) = list(
         State(state.clone()),
         test_user(owner.id),
+        Path(owner.id),
         Query(ListQuery {
             before: None,
             limit: Some(1),
@@ -475,6 +528,7 @@ async fn library_list_sets_and_omits_the_next_cursor(pool: PgPool) {
     let Json(short_page) = list(
         State(state),
         test_user(owner.id),
+        Path(owner.id),
         Query(ListQuery {
             before: Some(newer.id),
             limit: Some(2),
@@ -562,11 +616,11 @@ async fn deleting_photos_removes_only_the_last_shared_content_file(pool: PgPool)
     );
     assert!(matches!(
         destroy(State(state.clone()), test_user(owner.id), Path(unique.id)).await,
-        Err(Rejection::App(AppError::NotFound))
+        Err(AppError::NotFound)
     ));
     assert!(matches!(
         destroy(State(state), test_user(Uuid::now_v7()), Path(shared_b.id)).await,
-        Err(Rejection::App(AppError::NotFound))
+        Err(AppError::NotFound)
     ));
 }
 
@@ -1159,4 +1213,291 @@ fn find_locates_a_needle_only_where_it_is() {
     assert_eq!(find(b"abc", b"abcd"), None);
     assert_eq!(find(b"", b"a"), None);
     assert_eq!(find(b"abc", b""), None);
+}
+
+#[sqlx::test]
+async fn upload_and_list_refuse_missing_and_foreign_voyages(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let stranger = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("stranger");
+    let voyage_id = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("voyage-upload-ownership");
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue::detached(),
+    );
+    for (user, id) in [(stranger.id, voyage_id), (owner.id, Uuid::now_v7())] {
+        let error = upload_to_voyage(
+            State(state.clone()),
+            test_user(user),
+            Path(id),
+            HeaderMap::new(),
+            Body::empty(),
+        )
+        .await
+        .expect_err("no destination access");
+        assert_eq!(error.into_response().status(), StatusCode::NOT_FOUND);
+        let error = list(
+            State(state.clone()),
+            test_user(user),
+            Path(id),
+            Query(ListQuery {
+                before: None,
+                limit: None,
+            }),
+        )
+        .await
+        .expect_err("no metadata access");
+        assert_eq!(error.into_response().status(), StatusCode::NOT_FOUND);
+    }
+    assert!(
+        !scratch.path().join("tmp").exists(),
+        "authorization happens before reading bytes"
+    );
+}
+
+#[sqlx::test]
+async fn a_voyage_deleted_before_ingest_cannot_leave_an_unattached_photo(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("deleted-voyage-upload");
+    let original = crate::photos::decode::testutil::write_jpeg(&scratch, "upload", 16, 12);
+    let bytes = std::fs::read(original).expect("JPEG");
+    let body = multipart_body("pv", &[("files", Some("upload.jpg"), &bytes)]);
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "multipart/form-data; boundary=pv".parse().expect("header"),
+    );
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue::detached(),
+    );
+    let error = upload(
+        State(state),
+        test_user(owner.id),
+        Uuid::now_v7(),
+        headers,
+        Body::from(body),
+    )
+    .await
+    .expect_err("destination disappeared");
+    assert_eq!(error.into_response().status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        std::fs::read_dir(scratch.path().join("tmp"))
+            .expect("temp directory")
+            .count(),
+        0
+    );
+    assert!(
+        crate::db::repo::photos::list_for_owner(&pool, owner.id, None, 10)
+            .await
+            .expect("photos")
+            .is_empty()
+    );
+}
+
+/// Uses a committed HEVC/HEIC file: a missing decoder must fail, never skip.
+#[sqlx::test]
+async fn heic_upload_generates_and_serves_every_variant(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, Some("HEIC owner"), None)
+        .await
+        .expect("owner");
+    let voyage_id = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("heic-upload-regression");
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue { sender },
+    );
+    let bytes = include_bytes!("../../tests/fixtures/upload-regression.heic");
+    let body = multipart_body("pv", &[("files", Some("photo.heic"), bytes)]);
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("multipart header"),
+    );
+    let (status, Json(result)) = upload_to_voyage(
+        State(state.clone()),
+        test_user(owner.id),
+        Path(voyage_id),
+        headers,
+        Body::from(body),
+    )
+    .await
+    .expect("HEIC upload succeeds");
+    assert_eq!(status, StatusCode::CREATED);
+    let photo = &result.photos[0];
+    assert_eq!(photo.original_format, "heic");
+    assert_eq!((photo.width, photo.height), (64, 48));
+    assert_eq!(photo.variant_status, STATUS_PENDING);
+    let pending = image(
+        State(state.clone()),
+        MaybeUser(Some(test_user(owner.id))),
+        Path((photo.id, "thumb".into())),
+        HeaderMap::new(),
+    )
+    .await
+    .expect_err("pending variants are not served")
+    .into_response();
+    assert_eq!(pending.status(), StatusCode::CONFLICT);
+    let job = receiver.recv().await.expect("queued job");
+    crate::photos::worker::process(&pool, &state.config, &job)
+        .await
+        .expect("HEIC variants generated");
+    let updated = photos::find_by_id(&pool, photo.id)
+        .await
+        .expect("read photo")
+        .expect("photo exists");
+    assert_eq!(updated.variant_status, STATUS_READY);
+    for kind in VariantKind::ALL {
+        let response = image(
+            State(state.clone()),
+            MaybeUser(Some(test_user(owner.id))),
+            Path((photo.id, kind.as_str().into())),
+            HeaderMap::new(),
+        )
+        .await
+        .expect("serve generated variant");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/webp");
+        let served = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("variant bytes");
+        let decoded = ::image::load_from_memory_with_format(&served, ::image::ImageFormat::WebP)
+            .expect("served variant is readable WebP");
+        assert_eq!((decoded.width(), decoded.height()), (64, 48));
+    }
+    assert_eq!(
+        crate::db::repo::voyages::photos_for_voyage(&pool, voyage_id)
+            .await
+            .expect("voyage photos")
+            .len(),
+        1
+    );
+}
+
+#[sqlx::test]
+async fn corrupt_heic_upload_is_rejected_without_a_photo_or_job(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage_id = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("corrupt-heic-regression");
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue { sender },
+    );
+    // Keep a real HEIC signature but truncate before the image payload.
+    let fixture = include_bytes!("../../tests/fixtures/upload-regression.heic");
+    let body = multipart_body("pv", &[("files", Some("corrupt.heic"), &fixture[..32])]);
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("multipart header"),
+    );
+    let error = upload_to_voyage(
+        State(state),
+        test_user(owner.id),
+        Path(voyage_id),
+        headers,
+        Body::from(body),
+    )
+    .await
+    .expect_err("corrupt HEIC rejected")
+    .into_response();
+    assert_eq!(error.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = axum::body::to_bytes(error.into_body(), usize::MAX)
+        .await
+        .expect("error body");
+    let error: serde_json::Value = serde_json::from_slice(&body).expect("JSON error");
+    assert_eq!(error["code"], "unprocessable_image");
+    assert!(
+        photos::list_for_voyage(&pool, owner.id, voyage_id, None, 10)
+            .await
+            .expect("photo list")
+            .is_empty()
+    );
+    assert!(
+        receiver.try_recv().is_err(),
+        "rejected image never queues work"
+    );
+}
+
+#[sqlx::test]
+async fn heic_conversion_failure_marks_the_photo_failed(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage_id = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("heic-worker-failure");
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue { sender },
+    );
+    let fixture = include_bytes!("../../tests/fixtures/upload-regression.heic");
+    let body = multipart_body("pv", &[("files", Some("photo.heic"), fixture)]);
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("multipart header"),
+    );
+    let (_, Json(result)) = upload_to_voyage(
+        State(state.clone()),
+        test_user(owner.id),
+        Path(voyage_id),
+        headers,
+        Body::from(body),
+    )
+    .await
+    .expect("valid upload");
+    let photo = photos::find_by_id(&pool, result.photos[0].id)
+        .await
+        .expect("photo lookup")
+        .expect("photo");
+    let original =
+        crate::photos::storage::original_path(scratch.path(), &ContentHash(photo.content_hash));
+    std::fs::write(original, &fixture[..32])
+        .expect("simulate original corruption before conversion");
+    let job = receiver.recv().await.expect("queued job");
+    assert!(
+        crate::photos::worker::process(&pool, &state.config, &job)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        photos::find_by_id(&pool, photo.id)
+            .await
+            .expect("photo lookup")
+            .expect("photo remains in voyage")
+            .variant_status,
+        STATUS_FAILED
+    );
+    let response = image(
+        State(state),
+        MaybeUser(Some(test_user(owner.id))),
+        Path((photo.id, "thumb".into())),
+        HeaderMap::new(),
+    )
+    .await
+    .expect_err("failed conversion never serves an original")
+    .into_response();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

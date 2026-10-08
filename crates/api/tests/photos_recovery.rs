@@ -8,6 +8,9 @@
 //! Found by hand-testing: a photo set back to `pending` was NOT picked up on
 //! restart. These tests isolate which layer is at fault.
 
+#[path = "support/photo_voyage.rs"]
+mod photo_voyage;
+
 use secrecy::SecretString;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -67,6 +70,7 @@ async fn a_pending_photo(pool: &PgPool) -> Uuid {
     let photo = photos::create(
         pool,
         &NewPhoto {
+            voyage_id: photo_voyage::fixture_voyage(pool, user.id).await,
             owner_id: user.id,
             content_hash: format!("{:064x}", Uuid::now_v7().as_u128()),
             byte_size: 1234,

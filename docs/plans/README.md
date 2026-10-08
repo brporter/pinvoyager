@@ -61,3 +61,7 @@ that contradicts it is a bug in the phase document.
 - **A phase is complete** when every acceptance criterion passes, not when the code is written.
 - **Design references** point at files in `design/`. If a phase implements a screen, the
   screen exists in the design system first.
+
+Photo ownership and the create flow now follow D11 in `docs/decisions.md`.
+The library, later attachment, and photo-preserving voyage deletion in older
+phase plans are superseded. See `docs/voyage-owned-photos.md` for current behavior.

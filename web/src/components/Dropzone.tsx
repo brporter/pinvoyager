@@ -152,7 +152,7 @@ export function Dropzone({
         {state === "reject" ? (
           `${nonImages} of these ${total} files are not images`
         ) : state === "dragover" ? (
-          "They will be added to your library"
+          "They will be uploaded to your voyage"
         ) : (
           (hint ?? (
             <>

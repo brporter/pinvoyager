@@ -179,7 +179,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
       <form onSubmit={onSubmit} noValidate>
         <header
           className="pv-inline-2"
-          style={{ justifyContent: "space-between", marginBottom: "var(--pv-space-6)" }}
+          style={{ justifyContent: "space-between", gap: "var(--pv-space-4)", marginBottom: "var(--pv-space-6)" }}
         >
           <div className="pv-inline-2">
             <h1 className="pv-h2">Edit voyage</h1>
@@ -193,19 +193,24 @@ function EditForm({ voyage }: { voyage: Voyage }) {
           <div className="pv-inline-2">
             <Button
               variant="ghost"
-              style={TOUCH}
+              size="lg"
               onClick={() => void navigate(`/voyages/${voyage.id}`)}
             >
               Discard
             </Button>
             <Button
               variant="secondary"
-              style={TOUCH}
+              size="lg"
               loading={update.isPending}
               onClick={() => save()}
             >
               Save draft
             </Button>
+            {!voyage.published && (
+              <Button variant="primary" size="lg" loading={update.isPending} onClick={() => save(true)}>
+                Publish voyage
+              </Button>
+            )}
           </div>
         </header>
 
@@ -241,7 +246,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                 <h2 className="pv-field-label" style={{ margin: 0 }}>
                   Photos · {voyage.photo_count}
                 </h2>
-                <Link className="pv-btn pv-btn--secondary pv-btn--sm" to="/upload" style={TOUCH}>
+                <Link className="pv-btn pv-btn--secondary pv-btn--sm" to={`/upload?voyage=${voyage.id}`} style={TOUCH}>
                   Add photos
                 </Link>
               </div>
@@ -251,7 +256,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                   icon={<ImageIcon size={40} />}
                   title="No photographs yet"
                   action={
-                    <Link className="pv-btn pv-btn--secondary" to="/upload" style={TOUCH}>
+                    <Link className="pv-btn pv-btn--secondary" to={`/upload?voyage=${voyage.id}`} style={TOUCH}>
                       Upload photos
                     </Link>
                   }
@@ -342,16 +347,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                 >
                   Unpublish voyage
                 </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  style={{ ...TOUCH, width: "100%" }}
-                  loading={update.isPending}
-                  onClick={() => save(true)}
-                >
-                  Publish voyage
-                </Button>
-              )}
+              ) : null}
             </div>
 
             <div className="pv-card" style={{ ...CARD, borderColor: "var(--pv-danger-bg)" }}>
@@ -362,7 +358,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                   sentence: the fear that deleting a voyage destroys the
                   pictures is why dead voyages are left lying around. */}
               <p className="pv-xs pv-muted" style={{ marginBottom: "var(--pv-space-3)" }}>
-                Deleting removes the voyage. Its photos return to your library.
+                Deleting removes the voyage and all of its photos.
               </p>
 
               {confirmingDelete ? (

@@ -51,3 +51,7 @@ Claude Design project for review.
   `.pmtiles` remain planned for release
 - **Auth** — OIDC/OAuth2 against Google, Microsoft, Apple, and Facebook. The app stores no
   user passwords or long-lived provider tokens.
+
+The create voyage flow collects a Voyage Name and photos together. Every photo
+belongs to one voyage; drafts have prominent publish actions on detail and edit
+pages. See [voyage-owned photos](docs/voyage-owned-photos.md).
