@@ -276,14 +276,14 @@ fn precision_m_is_half_the_cell_in_meters() {
         Granularity::Km10,
         Granularity::Km50,
     ] {
-        assert_eq!(g.apply(51.5, -0.12).precision_m(), g.display_radius_m());
+        assert_eq!(g.apply(51.5, -0.12).precision_m(), g.half_cell_m());
     }
 }
 
 #[test]
 fn precision_m_serializes_for_coarse_and_is_absent_for_exact() {
-    // Phase 7 switches between a pin and an area on the presence of this
-    // key, so its absence is load-bearing rather than cosmetic.
+    // The map switches between a pin and an area on the presence of this
+    // key, so its absence determines the rendered marker.
     let coarse = serde_json::to_value(Granularity::Km10.apply(48.858_370, 2.294_481))
         .expect("Coordinate serializes");
 

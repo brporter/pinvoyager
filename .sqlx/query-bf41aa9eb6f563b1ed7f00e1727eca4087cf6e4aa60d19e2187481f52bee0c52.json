@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT voyage_id,\n                  (array_agg(id ORDER BY position, id)\n                      FILTER (WHERE variant_status = 'ready'))[1] AS photo_id,\n                  bool_or(variant_status = 'pending') AS \"pending!\"\n             FROM photos\n            WHERE voyage_id = ANY($1::uuid[])\n            GROUP BY voyage_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "voyage_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "photos",
+            "name": "voyage_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "photo_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "pending!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "bf41aa9eb6f563b1ed7f00e1727eca4087cf6e4aa60d19e2187481f52bee0c52"
+}

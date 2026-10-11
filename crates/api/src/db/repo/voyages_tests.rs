@@ -869,7 +869,7 @@ async fn the_feed_cursor_is_stable_across_a_publication_mid_traversal(pool: PgPo
         if page.is_empty() {
             break;
         }
-        cursor = page.last().and_then(|v| v.published_at);
+        cursor = page.last().and_then(PublishedCursor::of);
         walked.extend(page.into_iter().map(|v| v.id));
 
         if !interrupted {

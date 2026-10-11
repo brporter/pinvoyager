@@ -1,14 +1,7 @@
 //! Location granularity — the privacy boundary.
 //!
-//! CONTRACT — `Granularity`, `Coordinate` and their signatures are fixed;
-//! the rounding implementation is owned by the granularity agent.
-//!
-//! # Why this module exists at all
-//!
-//! Every voyage is public (D6). Phase 4 deliberately stores **exact**
-//! coordinates so that a user can loosen or tighten precision later, which
-//! means the only thing standing between an EXIF coordinate and the world is
-//! this code.
+//! Published voyages expose rounded locations (D6). The database preserves
+//! exact coordinates for owners, so changing precision does not lose source data.
 //!
 //! Enforcing that per endpoint guarantees that the one endpoint somebody adds
 //! at six o'clock on a Friday becomes the leak. So it is enforced by the type
@@ -119,12 +112,9 @@ impl Granularity {
         }
     }
 
-    /// Radius to draw on the map, in meters, or `None` for exact.
-    ///
-    /// Phase 7 renders an **area** rather than a pin whenever this is `Some`.
-    /// A sharp pin at the center of a 10 km cell makes a precision claim the
-    /// data cannot support, and visually undoes the choice the user made.
-    pub fn display_radius_m(self) -> Option<u32> {
+    /// Per-axis half-width of the rounding cell, in meters; `None` for exact.
+    /// The frontend multiplies this by sqrt(2) for a circle enclosing the cell.
+    pub fn half_cell_m(self) -> Option<u32> {
         self.cell_km().map(|km| (km * 500.0) as u32)
     }
 
@@ -161,10 +151,8 @@ impl Granularity {
         Coordinate {
             latitude: lat,
             longitude: lon,
-            // The same number as the radius phase 7 draws, deliberately: the
-            // circle on the map is the precision claim, and two independently
-            // computed versions of one claim would eventually disagree.
-            precision_m: self.display_radius_m(),
+            // Per-axis half-width; the frontend draws the cell diagonal.
+            precision_m: self.half_cell_m(),
         }
     }
 }
@@ -173,7 +161,7 @@ impl Granularity {
 /// anchored at zero.
 ///
 /// The center rather than the lower edge: both collapse a cell to one point,
-/// which is the clustering the plan asks for, but nothing is further than half
+/// which makes grouping deterministic, but nothing is further than half
 /// a cell from the center where a point just short of the upper edge is a whole
 /// cell from the lower one.
 ///
@@ -247,12 +235,8 @@ pub struct Coordinate {
     /// Half the cell size — the maximum error on either axis. `None` when
     /// exact.
     ///
-    /// Per axis, not as the crow flies: a point in the corner of its cell is
-    /// half a *diagonal* from the center, about 1.41 × this. Publishing the
-    /// smaller figure is the conservative choice — the truth is at least this
-    /// far away and sometimes further — and it is the radius phase 7 draws,
-    /// which is then the circle inscribed in the cell rather than one bulging
-    /// out of it.
+    /// A cell corner is approximately sqrt(2) times this distance from its
+    /// center. Clients must account for both axes when drawing a circle.
     #[serde(skip_serializing_if = "Option::is_none")]
     precision_m: Option<u32>,
 }

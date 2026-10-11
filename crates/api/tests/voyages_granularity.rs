@@ -1,4 +1,4 @@
-//! Phase 5, T5/T6/T9 — the granularity boundary, from outside the process.
+//! Public granularity and bounded-query checks through the production router.
 //!
 //! The phase's central acceptance criterion is worded as an instruction:
 //!
@@ -445,7 +445,7 @@ fn object_for(value: &Value, id: Uuid) -> Option<&Map<String, Value>> {
 ///
 /// Deliberately lenient about the spelling and strict about the fact: the
 /// requirement is that a reader can *tell*, not that a particular key was
-/// chosen. Phase 4's photo responses already use `placed`.
+/// chosen. Photo responses use `placed` to distinguish missing GPS.
 fn flagged_unplaced(object: &Map<String, Value>) -> bool {
     object.get("placed") == Some(&Value::Bool(false))
         || object.get("unplaced") == Some(&Value::Bool(true))
@@ -543,12 +543,8 @@ async fn the_exact_coordinate_appears_in_no_response_at_km10(pool: PgPool) {
             format!("/api/voyages/{}", Uuid::now_v7()),
         ];
 
-        // Photo metadata, reached by anyone who is not the photograph's owner.
-        // Phase 4 made this endpoint owner-only and exact, and anticipated
-        // phase 5 relaxing it for photos in a published voyage (D6 — they are
-        // public). If that relaxation ever lands without granularity, this is
-        // the address the exact value walks out of, and it is the one nobody
-        // would think to check because it is not a voyage route.
+        // Exact photo metadata remains owner-only, including for published
+        // voyages. Public callers must use the rounded voyage responses.
         if who != "the owner" {
             sweep.push(format!("/api/photos/{photo}"));
         }

@@ -1,7 +1,5 @@
 //! Voyages repository.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the CRUD agent.
-//!
 //! Every function takes an executor, so a handler can create a voyage and
 //! attach photos in one transaction and tests can roll back.
 //!
@@ -14,7 +12,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Voyage {
     pub id: Uuid,
     pub owner_id: Uuid,
@@ -28,7 +26,7 @@ pub struct Voyage {
 }
 
 /// A photo as it appears inside a voyage. Coordinates are **exact** here.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct VoyagePhoto {
     pub photo_id: Uuid,
     pub position: i32,
@@ -380,47 +378,36 @@ pub async fn photos_for_voyage(
     .await
 }
 
-/// The discovery feed: published voyages, newest first, cursor-paginated.
+/// A stable tie-breaker prevents equal publication timestamps from losing rows.
+#[derive(Debug, Clone, Copy)]
+pub struct PublishedCursor {
+    pub at: DateTime<Utc>,
+    pub id: Uuid,
+}
+impl PublishedCursor {
+    pub fn parse(value: &str) -> Option<Self> {
+        let (at, id) = value.rsplit_once('|')?;
+        Some(Self {
+            at: DateTime::parse_from_rfc3339(at).ok()?.with_timezone(&Utc),
+            id: id.parse().ok()?,
+        })
+    }
+    pub fn of(voyage: &Voyage) -> Option<Self> {
+        voyage.published_at.map(|at| Self { at, id: voyage.id })
+    }
+    pub fn encode(self) -> String {
+        format!("{}|{}", self.at.to_rfc3339(), self.id)
+    }
+}
+
+/// Public feed ordered by publication time and ID, both descending.
 pub async fn list_published(
     executor: impl PgExecutor<'_>,
-    before: Option<DateTime<Utc>>,
+    before: Option<PublishedCursor>,
     limit: i64,
 ) -> Result<Vec<Voyage>, sqlx::Error> {
-    // Shaped for `voyages_published_idx`, which is
-    // `(published_at DESC) WHERE published`. The bare `WHERE published` is what
-    // lets the planner match the index's own predicate; writing it as
-    // `published = true` or folding it into an `OR` would leave the partial
-    // index unusable and turn the feed into a sequential scan over every draft
-    // in the table.
-    //
-    // Keyset, not `OFFSET`, and that is what satisfies T7. A voyage published
-    // during a traversal gets `published_at = now()`, which is newer than every
-    // cursor already passed, so it can only ever have belonged on a page the
-    // reader has already seen — it never shifts the remaining rows and never
-    // causes a repeat. `OFFSET` would push one row of every subsequent page
-    // past the boundary and the reader would silently miss it.
-    //
-    // `published_at IS NOT NULL` guards against a row that is published with no
-    // timestamp, which `update` cannot produce but a manual fix-up could. Under
-    // `DESC` a null sorts first, so such a row would pin itself to the top of
-    // the feed forever and be unreachable by any cursor. Excluding it is the
-    // honest outcome: a voyage with no publication time has no place in an
-    // ordering by publication time.
-    sqlx::query_as!(
-        Voyage,
-        "SELECT id, owner_id, title, description, published, granularity,
-                created_at, published_at
-           FROM voyages
-          WHERE published
-            AND published_at IS NOT NULL
-            AND ($1::timestamptz IS NULL OR published_at < $1)
-          ORDER BY published_at DESC
-          LIMIT $2",
-        before,
-        limit,
-    )
-    .fetch_all(executor)
-    .await
+    sqlx::query_as("SELECT id, owner_id, title, description, published, granularity, created_at, published_at FROM voyages WHERE published AND published_at IS NOT NULL AND ($1::timestamptz IS NULL OR (published_at,id) < ($1,$2)) ORDER BY published_at DESC, id DESC LIMIT $3")
+        .bind(before.map(|c| c.at)).bind(before.map(|c| c.id)).bind(limit).fetch_all(executor).await
 }
 
 /// A user's own voyages, drafts included.
@@ -493,11 +480,11 @@ pub async fn photo_is_publicly_visible(
 /// Coordinates are **exact**, like every other row type here, and the
 /// granularity travels with them as the stored string so that the rounding
 /// still happens once at the serialization boundary rather than in this query.
-/// A photograph that is in two published voyages appears twice, once per
-/// voyage, because it is genuinely published twice and each voyage may round it
-/// differently.
-#[derive(Debug, Clone)]
+/// Every photo belongs to one voyage; separate uploads of identical bytes
+/// remain separate photos and may use different voyage granularities.
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DiscoverPhoto {
+    pub voyage_title: String,
     pub photo_id: Uuid,
     pub voyage_id: Uuid,
     /// Stored spelling; parse with `Granularity::parse`.
@@ -506,65 +493,53 @@ pub struct DiscoverPhoto {
     pub longitude: f64,
 }
 
-/// Every placed photograph in a published voyage inside a rectangle.
-///
-/// `wraps` is for a rectangle that crosses the antimeridian, where `west` is
-/// numerically greater than `east` — panning across the Pacific is not exotic,
-/// and without it that pan returns either everything or nothing depending on
-/// which way the comparison falls.
-///
-/// `limit` is a cap, not a page size: there is no cursor here because the map
-/// asks for an area rather than for a sequence. The caller is expected to ask
-/// for one more row than it intends to use, so that hitting the cap is
-/// detectable and can be reported rather than silently changing the answer.
-/// Ordering by `photo_id` makes which rows survive the cap deterministic, so
-/// the same rectangle does not return a different sample each time it is asked
-/// for.
-pub async fn published_photos_in_bbox(
+/// Scan public candidates in bounded ID pages. Exact coordinates never decide
+/// membership or truncation: the HTTP layer applies granularity first.
+pub async fn published_photo_page(
     executor: impl PgExecutor<'_>,
-    south: rust_decimal::Decimal,
-    north: rust_decimal::Decimal,
-    west: rust_decimal::Decimal,
-    east: rust_decimal::Decimal,
-    wraps: bool,
+    after: Option<Uuid>,
     limit: i64,
 ) -> Result<Vec<DiscoverPhoto>, sqlx::Error> {
-    // The latitude range is a range scan on `photos_location_idx`; the
-    // longitude test is applied from the same index. Comparisons are against
-    // `numeric` parameters rather than casting the columns to `float8`,
-    // because casting a column is what makes an index on it unusable.
-    //
-    // `latitude!` and `longitude!` are asserted non-null. The column is
-    // nullable, but `latitude IS NOT NULL` is in the predicate and the table's
-    // own CHECK constraint makes latitude and longitude null together, so a row
-    // that reached here has both.
+    sqlx::query_as("SELECT p.id AS photo_id, v.id AS voyage_id, v.title AS voyage_title, v.granularity, p.latitude::float8 AS latitude, p.longitude::float8 AS longitude FROM photos p JOIN voyages v ON v.id=p.voyage_id WHERE v.published AND p.latitude IS NOT NULL AND ($1::uuid IS NULL OR p.id > $1) ORDER BY p.id LIMIT $2")
+        .bind(after).bind(limit).fetch_all(executor).await
+}
+
+/// Cover metadata for a page, in one query rather than one query per card.
+#[derive(Debug)]
+pub struct VoyageCover {
+    pub voyage_id: Uuid,
+    pub photo_id: Option<Uuid>,
+    pub pending: bool,
+}
+
+pub async fn covers_for_voyages(
+    executor: impl PgExecutor<'_>,
+    voyage_ids: &[Uuid],
+) -> Result<Vec<VoyageCover>, sqlx::Error> {
     sqlx::query_as!(
-        DiscoverPhoto,
-        r#"SELECT p.id             AS photo_id,
-                  v.id             AS voyage_id,
-                  v.granularity,
-                  p.latitude::float8  AS "latitude!",
-                  p.longitude::float8 AS "longitude!"
-             FROM photos p
-             JOIN voyage_photos vp ON vp.photo_id = p.id
-             JOIN voyages v        ON v.id = vp.voyage_id
-            WHERE v.published
-              AND p.latitude IS NOT NULL
-              AND p.latitude BETWEEN $1 AND $2
-              AND CASE WHEN $5 THEN (p.longitude >= $3 OR p.longitude <= $4)
-                       ELSE p.longitude BETWEEN $3 AND $4
-                  END
-            ORDER BY p.id
-            LIMIT $6"#,
-        south,
-        north,
-        west,
-        east,
-        wraps,
-        limit,
+        VoyageCover,
+        r#"SELECT voyage_id,
+                  (array_agg(id ORDER BY position, id)
+                      FILTER (WHERE variant_status = 'ready'))[1] AS photo_id,
+                  bool_or(variant_status = 'pending') AS "pending!"
+             FROM photos
+            WHERE voyage_id = ANY($1::uuid[])
+            GROUP BY voyage_id"#,
+        voyage_ids,
     )
     .fetch_all(executor)
     .await
+}
+
+/// Public profile pagination applies ownership in SQL, before the limit.
+pub async fn list_published_for_owner(
+    executor: impl PgExecutor<'_>,
+    owner_id: Uuid,
+    before: Option<PublishedCursor>,
+    limit: i64,
+) -> Result<Vec<Voyage>, sqlx::Error> {
+    sqlx::query_as("SELECT id, owner_id, title, description, published, granularity, created_at, published_at FROM voyages WHERE published AND owner_id=$1 AND published_at IS NOT NULL AND ($2::timestamptz IS NULL OR (published_at,id) < ($2,$3)) ORDER BY published_at DESC, id DESC LIMIT $4")
+        .bind(owner_id).bind(before.map(|c| c.at)).bind(before.map(|c| c.id)).bind(limit).fetch_all(executor).await
 }
 
 #[cfg(test)]

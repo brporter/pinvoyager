@@ -1,4 +1,4 @@
-//! Voyages (phase 5).
+//! Voyages.
 //!
 //! A voyage is a set of photographs on a map, owned by one user, published or
 //! draft, with one location granularity governing every coordinate it emits.

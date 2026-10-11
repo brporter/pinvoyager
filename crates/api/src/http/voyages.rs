@@ -1,8 +1,5 @@
 //! Voyage endpoints.
 //!
-//! CONTRACT — `routes()` is fixed; handlers are owned by the CRUD and read
-//! agents.
-//!
 //! ```text
 //! POST   /api/voyages                       create (draft)
 //! GET    /api/voyages                       discovery feed, public
@@ -11,7 +8,7 @@
 //! DELETE /api/voyages/{id}                  owner only
 //! DELETE /api/voyages/{id}/photos/{photo}   delete photo
 //! PATCH  /api/voyages/{id}/photos/order     reorder
-//! GET    /api/voyages/{id}/map              lean payload for phase 7
+//! GET    /api/voyages/{id}/map              rounded map payload
 //! ```
 //!
 //! # This module is the granularity boundary
@@ -62,7 +59,8 @@
 //! see [`stored_granularity`]. A build that meets a spelling a later migration
 //! added must not decide that the safe reading is `exact`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+mod discovery;
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -123,7 +121,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/voyages/{id}/photos/order", patch(reorder))
         .route("/api/voyages/{id}/photos/{photo}", delete(detach))
         .route("/api/voyages/{id}/map", get(map))
-        .route("/api/map", get(discover_map))
+        .route("/api/map", get(discovery::discover_map))
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +240,7 @@ struct VoyageResponse {
     /// What to print beside a pin, so the client does not invent its own
     /// wording for the precision it is looking at.
     granularity_label: &'static str,
-    /// Radius in meters for the area phase 7 draws instead of a pin. `null` at
+    /// Per-axis half-width in meters for the public rounding cell. `null` at
     /// exact precision, which is the only case where a sharp pin is honest.
     precision_m: Option<u32>,
     created_at: DateTime<Utc>,
@@ -287,21 +285,13 @@ struct VoyagePhotoResponse {
     placed: bool,
 }
 
-/// A discovery card.
-///
-/// **It carries no location, and that is deliberate rather than an omission.**
-/// The design's card shows a cover image, a title, an author and the
-/// granularity *label* — the label is the point: a browser scanning the grid
-/// can see that one creator publishes exact coordinates and another publishes
-/// to ~50 km before the map loads. A "center" coordinate on a card would leak
-/// at exactly the precision the detail view does, from the endpoint nobody
-/// thinks to check.
-///
-/// If a later phase does want a center here, it must be an
-/// [`Option<Coordinate>`] built through [`place`] — this struct has no `f64`
-/// field for it to be added as, which is the point of the shape.
+/// A discovery card with a cover, author, and granularity label. It contains
+/// no coordinates; map and detail responses apply `Granularity` explicitly.
 #[derive(Debug, Serialize)]
-struct VoyageSummary {
+pub(crate) struct VoyageSummary {
+    /// First ready variant in voyage order; never an original upload.
+    cover_url: Option<String>,
+    photos_pending: bool,
     id: Uuid,
     owner_id: Uuid,
     title: String,
@@ -323,7 +313,7 @@ struct ListResponse {
 
 /// What a map needs and nothing else (T9).
 ///
-/// Phase 7 fetches this for every pin on screen, so it deliberately does not
+/// The map fetches this for every pin on screen, so it deliberately does not
 /// carry the detail payload: no dimensions, no capture time, no variant status,
 /// no description. A pin is a point, an id and an image — sending the rest
 /// multiplies the cost of the most-visited endpoint by everything the map will
@@ -407,7 +397,7 @@ impl VoyageResponse {
             published: voyage.published,
             granularity: granularity.as_str(),
             granularity_label: granularity_label(granularity),
-            precision_m: granularity.display_radius_m(),
+            precision_m: granularity.half_cell_m(),
             created_at: voyage.created_at,
             published_at: voyage.published_at,
             photo_count: photos.len(),
@@ -424,6 +414,8 @@ impl From<Voyage> for VoyageSummary {
         let granularity = stored_granularity(&voyage.granularity);
 
         Self {
+            cover_url: None,
+            photos_pending: false,
             id: voyage.id,
             owner_id: voyage.owner_id,
             title: voyage.title,
@@ -431,7 +423,7 @@ impl From<Voyage> for VoyageSummary {
             published: voyage.published,
             granularity: granularity.as_str(),
             granularity_label: granularity_label(granularity),
-            precision_m: granularity.display_radius_m(),
+            precision_m: granularity.half_cell_m(),
             created_at: voyage.created_at,
             published_at: voyage.published_at,
         }
@@ -460,6 +452,7 @@ struct CreateRequest {
 /// published by default would be readable before its author had seen it. There
 /// is no `published` field on this request for that reason — publishing is a
 /// PATCH, which is a second deliberate act.
+#[tracing::instrument(name = "voyage.create", skip_all, fields(voyage.id = tracing::field::Empty), err(Debug))]
 async fn create(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -482,6 +475,8 @@ async fn create(
         },
     )
     .await?;
+
+    tracing::Span::current().record("voyage.id", voyage.id.to_string());
 
     // A new voyage has no photographs, so no second query: the empty vector is
     // the truth rather than a shortcut.
@@ -519,18 +514,30 @@ where
 
 /// Edits a voyage, owner only.
 ///
-/// The read before the write is not an authorization check — the repository's
-/// update carries the ownership predicate in its `WHERE` clause, so there is no
-/// window between the two — it is there to compute the *effective* title and
-/// published flag, since publishing without changing the title has to validate
-/// against the title already stored.
+/// Lock the owned voyage before reading its effective title/publication state.
+/// Validation and update share that lock, preventing independent patches from
+/// publishing an empty title. The SQL update also checks ownership.
 async fn update(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateRequest>,
 ) -> Result<Json<VoyageResponse>, Rejection> {
-    let current = owned(&state, &user, id).await?;
+    let mut tx = state.pool.begin().await?;
+    // Hold the voyage lock through validation and update: title and publication
+    // are one invariant even when two requests patch different fields.
+    let owned: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+            .bind(id)
+            .bind(user.user_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if owned.is_none() {
+        return Err(AppError::NotFound.into());
+    }
+    let current = repo::find_by_id(&mut *tx, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
 
     let title = match body.title.as_deref() {
         Some(title) => Some(clean_title(Some(title))?),
@@ -563,11 +570,12 @@ async fn update(
     // `Ok(None)` is "no such voyage, or not yours" and cannot be reached here,
     // since `owned` has already answered both — but a concurrent delete makes
     // it possible, and 404 is the honest answer to that race too.
-    let voyage = repo::update(&state.pool, id, user.user_id, &patch)
+    let voyage = repo::update(&mut *tx, id, user.user_id, &patch)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let photos = repo::photos_for_voyage(&state.pool, id).await?;
+    let photos = repo::photos_for_voyage(&mut *tx, id).await?;
+    tx.commit().await?;
 
     Ok(Json(VoyageResponse::build(voyage, photos)))
 }
@@ -600,23 +608,18 @@ async fn destroy(
         photos_repo::lock_content(&mut tx, hash).await?;
     }
     repo::delete(&mut *tx, id, user.user_id).await?;
-    for hash in hashes {
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM photos WHERE content_hash=$1)")
-                .bind(&hash)
-                .fetch_one(&mut *tx)
-                .await?;
-        if !exists
-            && let Err(error) = crate::photos::storage::remove_content(
-                &state.config.photos.storage_root,
-                &crate::photos::storage::ContentHash(hash),
-            )
-            .await
-        {
-            tracing::error!(%error, "could not remove unreferenced voyage photo files");
-        }
+    for hash in &hashes {
+        crate::photos::cleanup::schedule(&mut tx, hash).await?;
     }
     tx.commit().await?;
+    for hash in hashes {
+        if let Err(error) =
+            crate::photos::cleanup::clean(&state.pool, &state.config.photos.storage_root, &hash)
+                .await
+        {
+            tracing::warn!(%error, "voyage deletion committed; file cleanup will be retried");
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -681,8 +684,7 @@ async fn reorder(
 
 /// One voyage, at the precision its owner chose (T5, T6).
 ///
-/// Public when published — no session required, because every voyage is public
-/// (D6) and a shared link has to open for someone who has never signed in.
+/// Published voyages allow anonymous reads; drafts require the owner (D6).
 ///
 /// Two queries regardless of photo count (T6/T9): the voyage, then all of its
 /// photographs in one statement. A loop of `await`s over photo ids looks
@@ -702,7 +704,7 @@ async fn read(
 /// The map payload (T9).
 ///
 /// Same visibility rule and same granularity as [`read`] — this is the endpoint
-/// it would be easiest to leave out of the check, and it is the one phase 7
+/// it would be easiest to leave out of the check, and it is the one the map
 /// calls most.
 async fn map(
     State(state): State<AppState>,
@@ -738,311 +740,11 @@ async fn map(
         voyage_id: voyage.id,
         granularity: granularity.as_str(),
         granularity_label: granularity_label(granularity),
-        precision_m: granularity.display_radius_m(),
+        precision_m: granularity.half_cell_m(),
         unplaced_count: unplaced.len(),
         pins,
         unplaced,
     }))
-}
-
-// ---------------------------------------------------------------------------
-// The discovery map
-// ---------------------------------------------------------------------------
-
-/// What the discovery map asks for: a rectangle and how far in the camera is.
-#[derive(Debug, Deserialize)]
-struct DiscoverMapQuery {
-    west: f64,
-    south: f64,
-    east: f64,
-    north: f64,
-    /// Web Mercator zoom. Decides how many pixels apart two photographs are,
-    /// and therefore whether they are drawn as one marker or two.
-    zoom: f64,
-}
-
-/// A group of photographs the discovery map draws as one marker.
-#[derive(Debug, Serialize)]
-struct DiscoverCluster {
-    /// **A real photograph's published position**, not a computed center.
-    ///
-    /// That is a deliberate constraint rather than a convenience. [`Coordinate`]
-    /// has private fields and one constructor, so the only way to put a
-    /// latitude in a response is to have rounded it through a granularity —
-    /// and a centroid averaged from several photographs is not the output of
-    /// that constructor. Taking the representative's own coordinate keeps
-    /// [`place`] the single call to `Granularity::apply` in this module, and
-    /// means every position the map draws is one a voyage already publishes.
-    coordinate: Coordinate,
-    /// How many photographs the marker stands for, the representative
-    /// included.
-    count: usize,
-    /// The representative: the lowest photo id in the group, so the choice is
-    /// deterministic and the same rectangle draws the same markers twice
-    /// running.
-    photo_id: Uuid,
-    /// Which published voyage the representative belongs to, so a marker can be
-    /// followed to something.
-    voyage_id: Uuid,
-    thumbnail_url: String,
-}
-
-#[derive(Debug, Serialize)]
-struct DiscoverMapResponse {
-    clusters: Vec<DiscoverCluster>,
-    /// True when there were more photographs in the rectangle than
-    /// [`DISCOVER_MAP_LIMIT`] and some were left out.
-    ///
-    /// Stated rather than hidden. A map that silently drops half a continent
-    /// looks exactly like a map of a continent with fewer photographs in it,
-    /// and the reader has no way to tell which they are looking at.
-    truncated: bool,
-}
-
-/// The most photographs one discovery-map request will consider.
-///
-/// A cap is unavoidable: at the world view the rectangle is the whole planet,
-/// and the answer would otherwise be every published photograph in the
-/// database. Rows past the cap are dropped rather than merged, which is why
-/// exceeding it is reported.
-const DISCOVER_MAP_LIMIT: i64 = 20_000;
-
-/// How far apart, in screen pixels, two photographs must be to get their own
-/// markers.
-///
-/// The 44px touch target from `design/tokens.css`, the same figure the browser
-/// clusters a single voyage by. Two markers closer than one touch target cannot
-/// be tapped apart, so leaving them separate produces taps that appear to do
-/// nothing.
-const DISCOVER_CLUSTER_CELL_PX: f64 = 44.0;
-
-/// The widest granularity cell, in degrees of latitude — 50 km over 111.32 km
-/// per degree.
-///
-/// Used to widen the queried rectangle. Rounding moves a photograph by up to
-/// half a cell, so a photograph just outside the requested rectangle can round
-/// to a position inside it; querying only the exact rectangle would drop it and
-/// leave a visible gap at the edge of every pan.
-const MAX_CELL_DEG_LAT: f64 = 50.0 / 111.32;
-
-/// The same widening for longitude.
-///
-/// Longitude cells grow as `1 / cos(latitude)` and the granularity boundary
-/// freezes that scaling at 85°, so this is the widest a cell ever gets:
-/// about 5.2°.
-const MAX_CELL_DEG_LON: f64 = MAX_CELL_DEG_LAT / 0.087_155_742_7; // cos(85°)
-
-/// Photographs from every **published** voyage, clustered, inside a rectangle.
-///
-/// This is the endpoint the phase 7 goal means by "clustering is always
-/// server-side", and here it genuinely has to be: the rectangle at a world view
-/// covers every published photograph there is, and no client can be sent them
-/// all to group for itself. A single voyage is the opposite case — it fits in
-/// one response, and `GET /api/voyages/{id}/map` sends it whole.
-///
-/// No session is required and none is consulted. Only published voyages are
-/// considered, so the answer is the same for everyone, which is also what makes
-/// it cacheable.
-///
-/// # What is rounded, and when
-///
-/// Each photograph is rounded to **its own voyage's** granularity before
-/// anything else happens — the same [`place`] call every other endpoint here
-/// uses. Clustering then groups already-published positions. Doing it the other
-/// way round, grouping exact coordinates and rounding the group, would make the
-/// marker a function of coordinates that were never allowed out.
-async fn discover_map(
-    State(state): State<AppState>,
-    Query(query): Query<DiscoverMapQuery>,
-) -> Result<Json<DiscoverMapResponse>, Rejection> {
-    let bbox = Bbox::parse(&query)?;
-
-    let rows = repo::published_photos_in_bbox(
-        &state.pool,
-        to_degrees(bbox.south - MAX_CELL_DEG_LAT, -90.0, 90.0),
-        to_degrees(bbox.north + MAX_CELL_DEG_LAT, -90.0, 90.0),
-        to_degrees(bbox.west - MAX_CELL_DEG_LON, -180.0, 180.0),
-        to_degrees(bbox.east + MAX_CELL_DEG_LON, -180.0, 180.0),
-        bbox.wraps,
-        // One more than the cap, so that hitting it is detectable.
-        DISCOVER_MAP_LIMIT + 1,
-    )
-    .await?;
-
-    let truncated = rows.len() as i64 > DISCOVER_MAP_LIMIT;
-    let considered = &rows[..rows.len().min(DISCOVER_MAP_LIMIT as usize)];
-
-    if truncated {
-        tracing::warn!(
-            limit = DISCOVER_MAP_LIMIT,
-            zoom = bbox.zoom,
-            "discovery map hit its row cap; some photographs were left out"
-        );
-    }
-
-    Ok(Json(DiscoverMapResponse {
-        clusters: cluster_for_discovery(considered, bbox.zoom),
-        truncated,
-    }))
-}
-
-/// A validated rectangle.
-struct Bbox {
-    west: f64,
-    south: f64,
-    east: f64,
-    north: f64,
-    zoom: f64,
-    /// True when the rectangle crosses the antimeridian, so `west` is
-    /// numerically greater than `east`.
-    wraps: bool,
-}
-
-const BAD_BOUNDS: &str = "That is not a rectangle we can look in.";
-const BAD_ZOOM: &str = "That is not a zoom level we recognize.";
-
-/// The zoom levels the map can be at. Zero is the whole world in one tile; the
-/// tile source stops at 19 and the client allows one blurry level past it.
-const MAX_QUERY_ZOOM: f64 = 20.0;
-
-impl Bbox {
-    fn parse(query: &DiscoverMapQuery) -> Result<Self, Rejection> {
-        // Non-finite values first, and explicitly.
-        //
-        // The range checks below happen to catch NaN already, because
-        // `RangeInclusive::contains` compares with `PartialOrd` and every
-        // comparison against NaN is false — so `!contains(&NaN)` is true and the
-        // value is refused. That is a subtlety rather than a design. Written the
-        // other obvious way, `south < -90.0 || south > 90.0`, both halves are
-        // false for NaN and it sails through, to become a pixel coordinate with
-        // no grid cell. This loop is what makes the refusal survive that
-        // rewrite.
-        for value in [query.west, query.south, query.east, query.north] {
-            if !value.is_finite() {
-                return Err(Rejection::field("bounds", BAD_BOUNDS));
-            }
-        }
-
-        if !query.zoom.is_finite() || query.zoom < 0.0 || query.zoom > MAX_QUERY_ZOOM {
-            return Err(Rejection::field("zoom", BAD_ZOOM));
-        }
-
-        if !(-90.0..=90.0).contains(&query.south)
-            || !(-90.0..=90.0).contains(&query.north)
-            || !(-180.0..=180.0).contains(&query.west)
-            || !(-180.0..=180.0).contains(&query.east)
-            || query.south > query.north
-        {
-            return Err(Rejection::field("bounds", BAD_BOUNDS));
-        }
-
-        Ok(Bbox {
-            west: query.west,
-            south: query.south,
-            east: query.east,
-            north: query.north,
-            zoom: query.zoom,
-            // West greater than east is how a rectangle crossing the
-            // antimeridian arrives — from Fiji to Samoa the numbers run 177 to
-            // -172. It is not an error and it is not an empty rectangle.
-            wraps: query.west > query.east,
-        })
-    }
-}
-
-/// Clamps and converts to the column's type.
-///
-/// `numeric` rather than `float8` so the comparison can use
-/// `photos_location_idx`; casting the column instead would make the index
-/// unusable. A value that will not convert clamps to the bound, which is
-/// correct for a rectangle edge — the widest sensible rectangle is the whole
-/// world.
-fn to_degrees(value: f64, low: f64, high: f64) -> rust_decimal::Decimal {
-    let clamped = value.clamp(low, high);
-    rust_decimal::Decimal::from_f64_retain(clamped)
-        .map(|decimal| decimal.round_dp(6))
-        .unwrap_or_else(|| {
-            rust_decimal::Decimal::from_f64_retain(low).unwrap_or(rust_decimal::Decimal::ZERO)
-        })
-}
-
-/// Groups already-rounded positions into one marker per grid cell.
-///
-/// A fixed grid rather than the greedy nearest-neighbor grouping the browser
-/// uses for a single voyage. Both are defensible; the grid is chosen here
-/// because it is linear in the number of photographs rather than quadratic, and
-/// this endpoint's input is bounded by [`DISCOVER_MAP_LIMIT`] rather than by
-/// how many photographs one person put in one voyage. The visible cost is that
-/// two photographs either side of a cell boundary stay apart when they are
-/// close enough to overlap; zooming in separates them anyway, and at the scale
-/// this endpoint is read at the difference is not noticeable.
-///
-/// The grid is anchored at zero in world-pixel space, so it is the same grid
-/// for every request at a given zoom. A grid anchored on the rectangle would
-/// regroup the same photographs differently on every pan, and markers would
-/// visibly reshuffle as the map moved.
-fn cluster_for_discovery(rows: &[repo::DiscoverPhoto], zoom: f64) -> Vec<DiscoverCluster> {
-    // Insertion-ordered, so the output follows the input's `ORDER BY photo_id`
-    // and the response is byte-identical for an unchanged rectangle.
-    let mut cells: Vec<((i64, i64), DiscoverCluster)> = Vec::new();
-    let mut index: HashMap<(i64, i64), usize> = HashMap::new();
-
-    for row in rows {
-        let granularity = stored_granularity(&row.granularity);
-
-        // Rounded before it is grouped. The grid never sees an exact
-        // coordinate from a voyage that does not publish one.
-        // This query selects only placed photos; `DiscoverPhoto` stores both
-        // coordinates as `f64` and the database check rejects half-placed rows.
-        let coordinate = place_pair(granularity, row.latitude, row.longitude);
-
-        let (x, y) = world_pixels(coordinate.latitude(), coordinate.longitude(), zoom);
-        let key = (
-            (x / DISCOVER_CLUSTER_CELL_PX).floor() as i64,
-            (y / DISCOVER_CLUSTER_CELL_PX).floor() as i64,
-        );
-
-        match index.get(&key) {
-            Some(&at) => cells[at].1.count += 1,
-            None => {
-                index.insert(key, cells.len());
-                cells.push((
-                    key,
-                    DiscoverCluster {
-                        coordinate,
-                        count: 1,
-                        photo_id: row.photo_id,
-                        voyage_id: row.voyage_id,
-                        thumbnail_url: variant_url(row.photo_id, VariantKind::Thumb),
-                    },
-                ));
-            }
-        }
-    }
-
-    cells.into_iter().map(|(_, cluster)| cluster).collect()
-}
-
-/// Web Mercator, in world pixels at `zoom`.
-///
-/// The whole world is `256 * 2^zoom` pixels across, which is the same
-/// convention MapLibre uses, so a distance computed here is the distance the
-/// browser will draw. Written out rather than shared with the frontend because
-/// the two are separate programs; both are checked against the same published
-/// constants.
-fn world_pixels(latitude: f64, longitude: f64, zoom: f64) -> (f64, f64) {
-    /// The latitude Web Mercator stops at. Past it the projection runs to
-    /// infinity, and an infinite pixel coordinate has no grid cell.
-    const MAX_MERCATOR_LATITUDE: f64 = 85.051_129;
-
-    let scale = 256.0 * 2f64.powf(zoom);
-    let clamped = latitude.clamp(-MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE);
-    let sin = clamped.to_radians().sin();
-
-    (
-        ((longitude + 180.0) / 360.0) * scale,
-        (0.5 - ((1.0 + sin) / (1.0 - sin)).ln() / (4.0 * std::f64::consts::PI)) * scale,
-    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -1087,14 +789,11 @@ async fn list(
 
         repo::list_for_owner(&state.pool, user.user_id, before, limit).await?
     } else {
-        let before = match query.before.as_deref() {
-            Some(cursor) => Some(
-                DateTime::parse_from_rfc3339(cursor)
-                    .map_err(|_| bad_cursor())?
-                    .with_timezone(&Utc),
-            ),
-            None => None,
-        };
+        let before = query
+            .before
+            .as_deref()
+            .map(|value| repo::PublishedCursor::parse(value).ok_or_else(bad_cursor))
+            .transpose()?;
 
         repo::list_published(&state.pool, before, limit).await?
     };
@@ -1107,16 +806,42 @@ async fn list(
                 if query.mine {
                     Some(voyage.id.to_string())
                 } else {
-                    voyage.published_at.map(|at| at.to_rfc3339())
+                    repo::PublishedCursor::of(voyage).map(|cursor| cursor.encode())
                 }
             })
         })
         .flatten();
 
+    let voyages = summaries(&state.pool, voyages).await?;
     Ok(Json(ListResponse {
-        voyages: voyages.into_iter().map(VoyageSummary::from).collect(),
+        voyages,
         next_before,
     }))
+}
+
+/// Add processed covers to either the public feed, owner list, or named profile.
+pub(crate) async fn summaries(
+    pool: &sqlx::PgPool,
+    voyages: Vec<Voyage>,
+) -> Result<Vec<VoyageSummary>, sqlx::Error> {
+    let ids: Vec<_> = voyages.iter().map(|voyage| voyage.id).collect();
+    let covers: std::collections::HashMap<_, _> = repo::covers_for_voyages(pool, &ids)
+        .await?
+        .into_iter()
+        .map(|cover| (cover.voyage_id, cover))
+        .collect();
+    let voyages = voyages
+        .into_iter()
+        .map(|voyage| {
+            let mut summary = VoyageSummary::from(voyage);
+            if let Some(cover) = covers.get(&summary.id) {
+                summary.cover_url = cover.photo_id.map(|id| variant_url(id, VariantKind::Thumb));
+                summary.photos_pending = cover.pending;
+            }
+            summary
+        })
+        .collect();
+    Ok(voyages)
 }
 
 // ---------------------------------------------------------------------------
@@ -1250,7 +975,7 @@ fn bad_cursor() -> Rejection {
 
 /// A failure from one of these handlers.
 ///
-/// Two things [`AppError`] cannot express and this phase needs: a 422 carrying
+/// Response details beyond [`AppError`]: a 422 carrying
 /// the **name of the field** that failed, which is what lets the edit screen
 /// put "A title is required before publishing" beside the title input rather
 /// than in a banner; and a 403 whose message is chosen at the call site.

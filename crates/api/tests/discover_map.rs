@@ -152,7 +152,7 @@ async fn map(pool: &PgPool, query: &str) -> Reply {
 // ---------------------------------------------------------------------------
 
 async fn a_user(pool: &PgPool) -> Uuid {
-    users::create(pool, Some("Owner"), None)
+    users::create(pool, None, None)
         .await
         .expect("create user")
         .id
@@ -590,4 +590,49 @@ async fn a_rectangle_with_a_missing_edge_is_refused(pool: PgPool) {
         reply.status,
         reply.body
     );
+}
+
+#[sqlx::test]
+async fn discovery_membership_depends_only_on_public_coordinates(pool: PgPool) {
+    let owner = a_user(&pool).await;
+    let photo = photo_at(&pool, owner, 0.01, 0.01).await;
+    voyage_with(&pool, owner, Granularity::Km50, true, &[photo]).await;
+    let query = "west=-1&east=1&south=-0.4&north=-0.05&zoom=10";
+    let before = map(&pool, query).await.json();
+    sqlx::query("UPDATE photos SET latitude=0.4 WHERE id=$1")
+        .bind(photo)
+        .execute(&pool)
+        .await
+        .expect("move within the same public cell");
+    let after = map(&pool, query).await.json();
+    assert_eq!(
+        before, after,
+        "hidden movement must not change public membership"
+    );
+    assert!(after["clusters"].as_array().expect("clusters").is_empty());
+}
+
+#[sqlx::test]
+async fn discovery_pages_candidates_and_reports_truncation_with_distinct_destinations(
+    pool: PgPool,
+) {
+    let owner = a_user(&pool).await;
+    let voyage = voyage_with(&pool, owner, Granularity::Km10, true, &[]).await;
+    sqlx::query("INSERT INTO photos(id,owner_id,voyage_id,content_hash,byte_size,width,height,original_format,latitude,longitude) SELECT gen_random_uuid(),$1,$2,repeat('a',64),1,1,1,'jpeg',43.061234,141.354321 FROM generate_series(1,20001)")
+        .bind(owner).bind(voyage).execute(&pool).await.expect("bulk photos");
+    let reply = map(&pool, &format!("{AROUND_SAPPORO}&zoom=0")).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    let json = reply.json();
+    assert_eq!(json["truncated"], true);
+    let clusters = json["clusters"].as_array().expect("clusters");
+    assert_eq!(clusters.len(), 1);
+    assert_eq!(clusters[0]["count"], 20000);
+    let destinations = clusters[0]["voyages"].as_array().expect("destinations");
+    assert_eq!(
+        destinations.len(),
+        1,
+        "many photos must not duplicate voyage choices"
+    );
+    assert_eq!(destinations[0]["id"], voyage.to_string());
+    assert_eq!(destinations[0]["title"], "Hokkaido");
 }

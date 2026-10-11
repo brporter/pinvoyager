@@ -348,7 +348,12 @@ async fn voyage_list_uses_owner_ids_and_publication_times_as_cursors(pool: PgPoo
     assert_eq!(feed.voyages[0].id, newer.id);
     assert_eq!(
         feed.next_before.as_deref(),
-        Some(published.published_at.unwrap().to_rfc3339().as_str())
+        Some(
+            repo::PublishedCursor::of(&published)
+                .expect("published cursor")
+                .encode()
+                .as_str()
+        )
     );
 
     let Json(feed_older) = list(
@@ -629,12 +634,14 @@ fn a_discovery_card_carries_a_precision_label_and_no_location() {
     assert_eq!(
         keys(&json),
         vec![
+            "cover_url",
             "created_at",
             "description",
             "granularity",
             "granularity_label",
             "id",
             "owner_id",
+            "photos_pending",
             "precision_m",
             "published",
             "published_at",
@@ -648,7 +655,7 @@ fn a_discovery_card_carries_a_precision_label_and_no_location() {
     assert_eq!(json["precision_m"], 5_000);
 }
 
-/// The map payload is lean on purpose: phase 7 fetches it for every pin on
+/// The map payload is lean on purpose: the browser fetches it for every pin on
 /// screen, so anything the map will not draw is bandwidth spent per pin.
 #[test]
 fn the_map_payload_carries_only_what_a_map_draws() {
@@ -660,7 +667,7 @@ fn the_map_payload_carries_only_what_a_map_draws() {
         voyage_id: voyage.id,
         granularity: granularity.as_str(),
         granularity_label: granularity_label(granularity),
-        precision_m: granularity.display_radius_m(),
+        precision_m: granularity.half_cell_m(),
         pins: Vec::new(),
         unplaced_count: 1,
         unplaced: vec![MapUnplaced {
@@ -770,7 +777,7 @@ async fn an_unknown_precision_is_a_field_error_on_the_granularity() {
     assert_eq!(body["errors"][0]["field"], "granularity");
 }
 
-/// De-duplication is load-bearing rather than tidy: the attach path decides
+/// De-duplication matters because the attach path decides
 /// whether a photograph was refused by comparing the number of rows
 /// inserted with the number requested, and a caller who names one photo
 /// twice would otherwise be answered with a 403.
@@ -858,15 +865,7 @@ async fn rendered(rejection: Rejection) -> (StatusCode, Value) {
     )
 }
 
-// -- the central check ---------------------------------------------------
-//
-// These depend on `Granularity::apply`, which is owned by the granularity
-// agent and is `todo!()` at the time of writing. They are the phase's T5
-// criterion and are written against the fixed signature, so they start
-// passing the moment that lands.
-
-/// T5. The exact stored coordinate appears in **no** response body of any
-/// endpoint once the voyage is set coarser than exact.
+/// Public response builders must all respect a coarse voyage precision.
 #[test]
 fn no_endpoint_emits_the_exact_coordinate_for_a_coarse_voyage() {
     let latitude = 43.062096;
@@ -890,7 +889,7 @@ fn no_endpoint_emits_the_exact_coordinate_for_a_coarse_voyage() {
             voyage_id: voyage.id,
             granularity: granularity.as_str(),
             granularity_label: granularity_label(granularity),
-            precision_m: granularity.display_radius_m(),
+            precision_m: granularity.half_cell_m(),
             pins: vec![MapPin {
                 photo_id: photo.photo_id,
                 coordinate: place(granularity, photo.latitude, photo.longitude).expect("placed"),
@@ -990,17 +989,6 @@ fn places_are_counted_after_rounding() {
     assert_eq!(exact.place_count, 2);
 }
 
-#[test]
-fn non_finite_map_bounds_fall_back_to_a_decimal_bound_or_zero() {
-    use rust_decimal::Decimal;
-
-    assert_eq!(to_degrees(f64::NAN, -12.0, 12.0), Decimal::from(-12));
-    assert_eq!(
-        to_degrees(f64::NAN, f64::NEG_INFINITY, f64::INFINITY),
-        Decimal::ZERO
-    );
-}
-
 #[sqlx::test]
 async fn deleting_a_voyage_deletes_photos_but_preserves_shared_storage(pool: PgPool) {
     let owner = crate::db::repo::users::create(&pool, None, None)
@@ -1025,11 +1013,13 @@ async fn deleting_a_voyage_deletes_photos_but_preserves_shared_storage(pool: PgP
         .storage_root = scratch.path().to_path_buf();
     let unique_path = crate::photos::storage::original_path(
         scratch.path(),
-        &crate::photos::storage::ContentHash(format!("{:064x}", 101)),
+        &crate::photos::storage::ContentHash::try_from(format!("{:064x}", 101))
+            .expect("valid fixture hash"),
     );
     let shared_path = crate::photos::storage::original_path(
         scratch.path(),
-        &crate::photos::storage::ContentHash(format!("{:064x}", 102)),
+        &crate::photos::storage::ContentHash::try_from(format!("{:064x}", 102))
+            .expect("valid fixture hash"),
     );
     for path in [&unique_path, &shared_path] {
         std::fs::create_dir_all(path.parent().expect("parent")).expect("content directory");
@@ -1065,4 +1055,239 @@ async fn deleting_a_voyage_deletes_photos_but_preserves_shared_storage(pool: PgP
         .await
         .expect("delete last reference");
     assert!(!shared_path.exists());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn voyage_list_covers_select_ready_photos_in_order_and_report_pending_work(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage = repo::create(
+        &pool,
+        &NewVoyage {
+            owner_id: owner.id,
+            title: "Cover trip".into(),
+            description: None,
+            granularity: "exact".into(),
+        },
+    )
+    .await
+    .expect("voyage");
+    let first = create_photo_for_test(&pool, owner.id, 9101).await;
+    let second = create_photo_for_test(&pool, owner.id, 9102).await;
+    let third = create_photo_for_test(&pool, owner.id, 9103).await;
+    repo::move_photos(&pool, voyage.id, owner.id, &[first, second, third])
+        .await
+        .expect("move");
+    repo::reorder(&pool, voyage.id, owner.id, &[first, second, third])
+        .await
+        .expect("order");
+    crate::db::repo::photos::set_variant_status(&pool, second, "ready")
+        .await
+        .expect("ready");
+    crate::db::repo::photos::set_variant_status(&pool, third, "failed")
+        .await
+        .expect("failed");
+    let state = state_with_pool(pool.clone());
+    let query = || ListQuery {
+        mine: true,
+        before: None,
+        limit: Some(100),
+    };
+    let Json(response) = list(
+        State(state.clone()),
+        MaybeUser(Some(test_user(owner.id))),
+        Query(query()),
+    )
+    .await
+    .expect("list");
+    let json = serde_json::to_value(response).expect("json");
+    let cover = json["voyages"]
+        .as_array()
+        .expect("voyages")
+        .iter()
+        .find(|v| v["id"] == voyage.id.to_string())
+        .expect("trip");
+    assert_eq!(cover["cover_url"], variant_url(second, VariantKind::Thumb));
+    assert_eq!(cover["photos_pending"], true);
+    let empty = json["voyages"]
+        .as_array()
+        .expect("voyages")
+        .iter()
+        .find(|v| v["id"] != voyage.id.to_string())
+        .expect("empty fixture voyage");
+    assert!(empty["cover_url"].is_null());
+    assert_eq!(empty["photos_pending"], false);
+    crate::db::repo::photos::set_variant_status(&pool, first, "ready")
+        .await
+        .expect("ready");
+    let Json(response) = list(
+        State(state.clone()),
+        MaybeUser(Some(test_user(owner.id))),
+        Query(query()),
+    )
+    .await
+    .expect("list");
+    let json = serde_json::to_value(response).expect("json");
+    let cover = json["voyages"]
+        .as_array()
+        .expect("voyages")
+        .iter()
+        .find(|v| v["id"] == voyage.id.to_string())
+        .expect("trip");
+    assert_eq!(cover["cover_url"], variant_url(first, VariantKind::Thumb));
+    assert_eq!(cover["photos_pending"], false);
+    repo::update(
+        &pool,
+        voyage.id,
+        owner.id,
+        &VoyagePatch {
+            published: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("publish");
+    let Json(response) = list(
+        State(state),
+        MaybeUser(None),
+        Query(ListQuery {
+            mine: false,
+            before: None,
+            limit: Some(100),
+        }),
+    )
+    .await
+    .expect("public list");
+    assert_eq!(response.voyages.len(), 1);
+    let json = serde_json::to_value(response).expect("json");
+    assert_eq!(
+        json["voyages"][0]["cover_url"],
+        variant_url(first, VariantKind::Thumb)
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn voyage_list_does_not_offer_pending_or_failed_photos_as_covers(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let id = create_photo_for_test(&pool, owner.id, 9201).await;
+    let state = state_with_pool(pool.clone());
+    for (status, pending) in [("pending", true), ("failed", false)] {
+        crate::db::repo::photos::set_variant_status(&pool, id, status)
+            .await
+            .expect("status");
+        let Json(response) = list(
+            State(state.clone()),
+            MaybeUser(Some(test_user(owner.id))),
+            Query(ListQuery {
+                mine: true,
+                before: None,
+                limit: Some(100),
+            }),
+        )
+        .await
+        .expect("list");
+        let json = serde_json::to_value(response).expect("json");
+        assert!(json["voyages"][0]["cover_url"].is_null());
+        assert_eq!(json["voyages"][0]["photos_pending"], pending);
+    }
+}
+
+#[sqlx::test]
+async fn public_feed_visits_every_voyage_with_a_tied_timestamp(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    for _ in 0..5 {
+        sqlx::query("INSERT INTO voyages (id, owner_id, title, published, published_at) VALUES ($1,$2,'Trip',true,'2026-01-01T00:00:00Z')")
+            .bind(Uuid::now_v7()).bind(owner.id).execute(&pool).await.expect("voyage");
+    }
+    let state = state_with_pool(pool);
+    let mut cursor = None;
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        let Json(page) = list(
+            State(state.clone()),
+            MaybeUser(None),
+            Query(ListQuery {
+                mine: false,
+                before: cursor,
+                limit: Some(2),
+            }),
+        )
+        .await
+        .expect("page");
+        for voyage in page.voyages {
+            assert!(seen.insert(voyage.id));
+        }
+        cursor = page.next_before;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(seen.len(), 5);
+}
+
+#[sqlx::test]
+async fn publication_checks_the_title_after_waiting_for_concurrent_edits(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage = repo::create(
+        &pool,
+        &NewVoyage {
+            owner_id: owner.id,
+            title: "Before concurrent edit".to_owned(),
+            description: None,
+            granularity: "exact".to_owned(),
+        },
+    )
+    .await
+    .expect("voyage");
+    // Hold an uncommitted title edit. A publisher must wait, then validate the
+    // committed title; reading first would validate stale data and publish blank.
+    let mut editing = pool.begin().await.expect("editing transaction");
+    sqlx::query("UPDATE voyages SET title='' WHERE id=$1")
+        .bind(voyage.id)
+        .execute(&mut *editing)
+        .await
+        .expect("clear title");
+    let state = state_with_pool(pool.clone());
+    let publisher = tokio::spawn(async move {
+        update(
+            State(state),
+            test_user(owner.id),
+            Path(voyage.id),
+            Json(UpdateRequest {
+                published: Some(true),
+                ..UpdateRequest::default()
+            }),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%voyages%')")
+                .fetch_one(&pool).await.expect("publication waiting for lock");
+            if waiting { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("publisher reached the locked row");
+    editing.commit().await.expect("commit concurrent edit");
+    let error = publisher
+        .await
+        .expect("publisher task")
+        .expect_err("blank title cannot be published");
+    assert_eq!(
+        error.into_response().status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let saved = repo::find_by_id(&pool, voyage.id)
+        .await
+        .expect("read")
+        .expect("voyage remains");
+    assert!(saved.title.is_empty());
+    assert!(!saved.published);
 }
