@@ -26,6 +26,7 @@ import type {
   DiscoverMap,
   Granularity,
   Me,
+  PublicProfilePage,
   Photo,
   PhotoList,
   UploadResult,
@@ -147,7 +148,15 @@ const BASE = "";
 
 const REQUEST_ID_HEADER = "x-request-id";
 
+/** Owned by one creation/upload workflow. Each JSON response replaces the
+ * parent so later uploads join that workflow trace. Never share it across
+ * independent workflows or persist it beyond the screen lifetime. */
+export interface TraceContext {
+  traceparent?: string;
+}
+
 export interface RequestOptions {
+  traceContext?: TraceContext;
   signal?: AbortSignal;
 }
 
@@ -257,6 +266,7 @@ async function request<T>(call: Call): Promise<T> {
   const headers = new Headers({ accept: "application/json" });
   const hasBody = call.body !== undefined;
   if (hasBody) headers.set("content-type", "application/json");
+  if (call.traceContext?.traceparent) headers.set("traceparent", call.traceContext.traceparent);
 
   let response: Response;
   try {
@@ -274,6 +284,10 @@ async function request<T>(call: Call): Promise<T> {
     throw new NetworkError("The request could not be sent.", cause);
   }
 
+  if (call.traceContext) {
+    const parent = response.headers.get("traceparent");
+    if (parent) call.traceContext.traceparent = parent;
+  }
   if (!response.ok) {
     throw errorFrom(
       response.status,
@@ -465,6 +479,8 @@ export function deletePhoto(id: string, options: RequestOptions = {}): Promise<v
 }
 
 export interface UploadOptions extends RequestOptions {
+  /** Reuse for retries of the same files in the same order. */
+  idempotencyKey?: string;
   voyageId: string;
   /** Fraction between 0 and 1, or null while the total is unknown. Called as
    *  the body goes out, which is the only progress a browser can report. */
@@ -508,6 +524,9 @@ export function uploadPhotos(
     // `credentials` is stated above.
     xhr.withCredentials = true;
     xhr.setRequestHeader("accept", "application/json");
+    if (options.idempotencyKey) xhr.setRequestHeader("idempotency-key", options.idempotencyKey);
+    if (options.traceContext?.traceparent)
+      xhr.setRequestHeader("traceparent", options.traceContext.traceparent);
     // Nothing sets `content-type`: the browser must write the multipart
     // boundary into it, and setting it by hand produces a header with no
     // boundary, which the server rejects as malformed.
@@ -599,6 +618,24 @@ export function getMe(options: RequestOptions = {}): Promise<Me> {
   return request<Me>({ method: "GET", path: "/api/me", ...options });
 }
 
+/** Claim or rename the unique public display name. */
+export function updateDisplayName(displayName: string): Promise<void> {
+  return request<void>({ method: "PATCH", path: "/api/me", body: { display_name: displayName } });
+}
+
+export function getPublicProfile(
+  name: string,
+  options: RequestOptions & { before?: string; limit?: number } = {},
+): Promise<PublicProfilePage> {
+  const { before, limit, signal } = options;
+  return request<PublicProfilePage>({
+    method: "GET",
+    path: `/api/profiles/${encodeURIComponent(name)}`,
+    query: { before, limit },
+    signal,
+  });
+}
+
 /**
  * Signs out.
  *
@@ -639,6 +676,8 @@ export const api = {
   uploadPhotos,
   deletePhoto,
   getMe,
+  updateDisplayName,
+  getPublicProfile,
   signOut,
   signInUrl,
 } as const;

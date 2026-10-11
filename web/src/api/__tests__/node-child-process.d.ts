@@ -15,7 +15,6 @@ declare module "node:child_process" {
     timeout?: number;
   }
 
-
   /** Throws on a non-zero exit. The thrown value carries `stdout`, which for
    *  `tsc` is where the diagnostics are. */
   export function execFileSync(

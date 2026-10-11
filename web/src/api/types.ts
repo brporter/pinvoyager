@@ -94,6 +94,10 @@ export interface Voyage {
 
 /** Rust: `VoyageSummary`. Carries no location of any kind. */
 export interface VoyageSummary {
+  /** First ready photo in voyage order, served as a metadata-stripped WebP. */
+  cover_url: string | null;
+  /** Refresh the list until background conversion has settled. */
+  photos_pending: boolean;
   id: string;
   owner_id: string;
   title: string;
@@ -150,6 +154,7 @@ export interface VoyageMap {
  *  useful consequence here: every position this endpoint returns is one some
  *  voyage already publishes. */
 export interface MapCluster {
+  voyages: { id: string; title: string }[];
   coordinate: Coordinate;
   /** How many photographs the marker stands for, the named one included. */
   count: number;
@@ -279,4 +284,9 @@ export interface ApiError {
 export interface FieldError {
   field: string;
   message: string;
+}
+
+/** Public profile by ID or name: public identity plus this owner's published page. */
+export interface PublicProfilePage extends VoyageList {
+  user: CurrentUser;
 }

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   detachPhoto: vi.fn(),
   getDiscoverMap: vi.fn(),
   getMe: vi.fn(),
+  getPublicProfile: vi.fn(),
   getPhoto: vi.fn(),
   getVoyage: vi.fn(),
   getVoyageMap: vi.fn(),
@@ -36,6 +37,7 @@ import {
   useDetachPhoto,
   useDiscoverMap,
   useMe,
+  usePublicProfile,
   usePhoto,
   usePhotos,
   useReorderPhotos,
@@ -66,19 +68,30 @@ afterEach(() => {
 });
 
 describe("voyage image processing", () => {
-  beforeEach(() => { vi.useFakeTimers(); mocks.getVoyage.mockReset(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mocks.getVoyage.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-  const state = (id: string, statuses: string[]) => ({
-    ...voyage, id, photos: statuses.map((variant_status, index) => ({ id: `p${index}`, variant_status })),
-  }) as Voyage;
+  const state = (id: string, statuses: string[]) =>
+    ({
+      ...voyage,
+      id,
+      photos: statuses.map((variant_status, index) => ({ id: `p${index}`, variant_status })),
+    }) as Voyage;
   async function tick(ms = 20) {
-    await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
   }
 
   it("continues through staggered completion and stops after ready or failed results", async () => {
     const { client, wrapper } = setup();
-    mocks.getVoyage.mockResolvedValueOnce(state("v1", ["ready", "pending", "pending"]))
+    mocks.getVoyage
+      .mockResolvedValueOnce(state("v1", ["ready", "pending", "pending"]))
       .mockResolvedValueOnce(state("v1", ["ready", "ready", "pending"]))
       .mockResolvedValue(state("v1", ["ready", "ready", "failed"]));
     const hook = renderHook(() => useVoyage("v1"), { wrapper });
@@ -91,7 +104,68 @@ describe("voyage image processing", () => {
     expect(hook.result.current.data?.photos[2].variant_status).toBe("failed");
     await tick(5000);
     expect(mocks.getVoyage).toHaveBeenCalledTimes(3);
-    hook.unmount(); client.clear();
+    hook.unmount();
+    client.clear();
+  });
+
+  it("refreshes voyage covers while photos process and stops when they settle", async () => {
+    const { client, wrapper } = setup();
+    mocks.listVoyages
+      .mockReset()
+      .mockResolvedValueOnce({
+        voyages: [{ id: "v1", cover_url: null, photos_pending: true }],
+        next_before: null,
+      })
+      .mockResolvedValue({
+        voyages: [{ id: "v1", cover_url: "/api/photos/p1/thumb", photos_pending: false }],
+        next_before: null,
+      });
+    const hook = renderHook(() => useVoyages({ mine: true }), { wrapper });
+    await tick();
+    await tick(1000);
+    expect(hook.result.current.data?.pages[0].voyages[0].cover_url).toBe("/api/photos/p1/thumb");
+    await tick(5000);
+    expect(mocks.listVoyages).toHaveBeenCalledTimes(2);
+    hook.unmount();
+    client.clear();
+  });
+
+  it("waits for a profile name, refreshes processing covers, and pages within that profile", async () => {
+    const { client, wrapper } = setup();
+    const page = (pending: boolean, next_before: string | null) => ({
+      user: { display_name: "betaporter" },
+      voyages: [{ photos_pending: pending }],
+      next_before,
+    });
+    mocks.getPublicProfile
+      .mockReset()
+      .mockResolvedValueOnce(page(true, "cursor-2"))
+      .mockResolvedValueOnce(page(false, "cursor-2"))
+      .mockResolvedValue(page(false, null));
+    const hook = renderHook(({ name }: { name: string | undefined }) => usePublicProfile(name), {
+      wrapper,
+      initialProps: { name: undefined as string | undefined },
+    });
+    await tick();
+    expect(mocks.getPublicProfile).not.toHaveBeenCalled();
+    hook.rerender({ name: "betaporter" });
+    await tick();
+    expect(hook.result.current.hasNextPage).toBe(true);
+    await tick(1000);
+    expect(mocks.getPublicProfile).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await hook.result.current.fetchNextPage();
+    });
+    expect(mocks.getPublicProfile).toHaveBeenLastCalledWith(
+      "betaporter",
+      expect.objectContaining({ before: "cursor-2" }),
+    );
+    await tick();
+    expect(hook.result.current.hasNextPage).toBe(false);
+    await tick(5000);
+    expect(mocks.getPublicProfile).toHaveBeenCalledTimes(3);
+    hook.unmount();
+    client.clear();
   });
 
   it("stops polling on unmount", async () => {
@@ -107,7 +181,8 @@ describe("voyage image processing", () => {
 
   it("recovers after a temporary polling failure", async () => {
     const { client, wrapper } = setup();
-    mocks.getVoyage.mockResolvedValueOnce(state("v1", ["pending"]))
+    mocks.getVoyage
+      .mockResolvedValueOnce(state("v1", ["pending"]))
       .mockRejectedValueOnce(new Error("temporary network failure"))
       .mockResolvedValue(state("v1", ["ready"]));
     const hook = renderHook(() => useVoyage("v1"), { wrapper });
@@ -118,25 +193,33 @@ describe("voyage image processing", () => {
     const calls = mocks.getVoyage.mock.calls.length;
     await tick(5000);
     expect(mocks.getVoyage).toHaveBeenCalledTimes(calls);
-    hook.unmount(); client.clear();
+    hook.unmount();
+    client.clear();
   });
 
   it("does not apply a late response to another voyage", async () => {
     const { client, wrapper } = setup();
     let finish!: (value: Voyage) => void;
-    mocks.getVoyage.mockImplementation((id: string) => id === "v1"
-      ? new Promise<Voyage>(resolve => { finish = resolve; })
-      : Promise.resolve(state("v2", ["ready"])));
+    mocks.getVoyage.mockImplementation((id: string) =>
+      id === "v1"
+        ? new Promise<Voyage>((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve(state("v2", ["ready"])),
+    );
     const hook = renderHook(({ id }) => useVoyage(id), { wrapper, initialProps: { id: "v1" } });
     await tick();
     hook.rerender({ id: "v2" });
     await tick();
     expect(hook.result.current.data?.id).toBe("v2");
-    await act(async () => { finish(state("v1", ["pending"])); });
+    await act(async () => {
+      finish(state("v1", ["pending"]));
+    });
     await tick(5000);
     expect(hook.result.current.data?.id).toBe("v2");
     expect(mocks.getVoyage).toHaveBeenCalledTimes(2);
-    hook.unmount(); client.clear();
+    hook.unmount();
+    client.clear();
   });
 });
 
@@ -154,7 +237,11 @@ describe("query keys and retry policy", () => {
     expect(keys.voyages.map("v1")).toEqual(["voyages", "map", "v1"]);
     expect(keys.photos.all).toEqual(["photos"]);
     expect(keys.photos.lists()).toEqual(["photos", "list"]);
-    expect(keys.photos.list({ voyageId: "v1", limit: 8 })).toEqual(["photos", "list", { voyageId: "v1", limit: 8 }]);
+    expect(keys.photos.list({ voyageId: "v1", limit: 8 })).toEqual([
+      "photos",
+      "list",
+      { voyageId: "v1", limit: 8 },
+    ]);
     expect(keys.photos.detail("p1")).toEqual(["photos", "detail", "p1"]);
     expect(keys.discoverMap({ west: 1, south: 2, east: 3, north: 4, zoom: 5 })).toEqual([
       "discover-map",
@@ -178,12 +265,17 @@ describe("query keys and retry policy", () => {
     });
 
     expect(retryOnlyTransient(0, notFound)).toBe(false);
-    expect(retryOnlyTransient(0, new UnauthorizedError({
-      status: 401,
-      code: "unauthorized",
-      message: "Sign in",
-      requestId: null,
-    }))).toBe(false);
+    expect(
+      retryOnlyTransient(
+        0,
+        new UnauthorizedError({
+          status: 401,
+          code: "unauthorized",
+          message: "Sign in",
+          requestId: null,
+        }),
+      ),
+    ).toBe(false);
     expect(retryOnlyTransient(0, serverError)).toBe(true);
     expect(retryOnlyTransient(1, new Error("offline"))).toBe(true);
     expect(retryOnlyTransient(2, new Error("offline"))).toBe(false);
@@ -194,12 +286,14 @@ describe("read hooks", () => {
   it("returns null for an unauthorized current-user read and preserves other errors", async () => {
     const { client, wrapper } = setup();
     mocks.isUnauthorized.mockImplementation((error) => error instanceof UnauthorizedError);
-    mocks.getMe.mockRejectedValueOnce(new UnauthorizedError({
-      status: 401,
-      code: "unauthorized",
-      message: "Sign in",
-      requestId: null,
-    }));
+    mocks.getMe.mockRejectedValueOnce(
+      new UnauthorizedError({
+        status: 401,
+        code: "unauthorized",
+        message: "Sign in",
+        requestId: null,
+      }),
+    );
     const signedOut = renderHook(() => useMe(), { wrapper });
     await waitFor(() => expect(signedOut.result.current.isSuccess).toBe(true));
     expect(signedOut.result.current.data).toBeNull();
@@ -227,7 +321,10 @@ describe("read hooks", () => {
     mocks.getVoyage.mockResolvedValue(voyage);
     const enabled = renderHook(() => useVoyage("v1"), { wrapper });
     await waitFor(() => expect(enabled.result.current.data).toBe(voyage));
-    expect(mocks.getVoyage).toHaveBeenCalledWith("v1", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(mocks.getVoyage).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("runs enabled map and photo queries and paginates the photo feed", async () => {
@@ -370,7 +467,9 @@ describe("mutation cache effects", () => {
     mocks.uploadPhotos.mockRejectedValue(new Error("rejected"));
     const hook = renderHook(() => useUploadPhotos(), { wrapper });
     await act(async () => {
-      await expect(hook.result.current.mutateAsync({ voyageId: "v1", files: [] })).rejects.toThrow("rejected");
+      await expect(hook.result.current.mutateAsync({ voyageId: "v1", files: [] })).rejects.toThrow(
+        "rejected",
+      );
     });
     expect(mocks.uploadPhotos).toHaveBeenCalledOnce();
   });

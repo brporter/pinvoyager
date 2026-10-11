@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiRequestError, UnauthorizedError, uploadPhotos } from "../client";
+import { ApiRequestError, UnauthorizedError, createVoyage, uploadPhotos } from "../client";
 
 class MockXhr extends EventTarget {
   static instances: MockXhr[] = [];
@@ -77,7 +77,9 @@ describe("uploadPhotos", () => {
     const controller = new AbortController();
     controller.abort("user canceled");
 
-    await expect(uploadPhotos([], { voyageId: "v1", signal: controller.signal })).rejects.toMatchObject({
+    await expect(
+      uploadPhotos([], { voyageId: "v1", signal: controller.signal }),
+    ).rejects.toMatchObject({
       name: "NetworkError",
       cause: "user canceled",
     });
@@ -139,7 +141,12 @@ describe("uploadPhotos", () => {
 
     const error = await result.catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiRequestError);
-    expect(error).toMatchObject({ status: 429, code: "rate_limited", requestId: "request-123", retryAfterSeconds: 30 });
+    expect(error).toMatchObject({
+      status: 429,
+      code: "rate_limited",
+      requestId: "request-123",
+      retryAfterSeconds: 30,
+    });
     expect((error as ApiRequestError).fieldError("files")).toBe("Too many files.");
   });
 
@@ -182,4 +189,46 @@ describe("uploadPhotos", () => {
     const nullError = await nullResult.catch((caught: unknown) => caught);
     expect(nullError).toMatchObject({ code: "unknown", message: "The upload failed." });
   });
+});
+
+const creationParent = "00-11111111111111111111111111111111-2222222222222222-01";
+
+it("carries the creation trace into uploads without changing their bodies", async () => {
+  installXhr();
+  const traceContext = {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "v1" }), {
+        status: 201,
+        headers: { traceparent: creationParent },
+      }),
+    ),
+  );
+  await createVoyage({ title: "Trip" }, { traceContext });
+  const result = uploadPhotos([new File(["image"], "a.jpg")], { voyageId: "v1", traceContext });
+  const xhr = lastXhr();
+  const sentParent = xhr.setRequestHeader.mock.calls.find(([name]) => name === "traceparent");
+  xhr.responseText = JSON.stringify({ photos: [] });
+  xhr.dispatchEvent(new Event("load"));
+  await result;
+  expect(sentParent).toEqual(["traceparent", creationParent]);
+});
+
+it("propagates a supplied parent through fetch and tolerates absent response context", async () => {
+  const traceContext = { traceparent: creationParent };
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "v1" })));
+  vi.stubGlobal("fetch", fetchMock);
+  await createVoyage({ title: "Trip" }, { traceContext });
+  expect((fetchMock.mock.calls[0][1].headers as Headers).get("traceparent")).toBe(creationParent);
+  expect(traceContext.traceparent).toBe(creationParent);
+});
+
+it("sends a stable retry key with an upload", async () => {
+  installXhr();
+  const pending = uploadPhotos([], { voyageId: "v1", idempotencyKey: "stable-key" });
+  const xhr = lastXhr();
+  expect(xhr.setRequestHeader).toHaveBeenCalledWith("idempotency-key", "stable-key");
+  xhr.dispatchEvent(new Event("load"));
+  await pending;
 });

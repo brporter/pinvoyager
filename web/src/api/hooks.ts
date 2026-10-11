@@ -32,6 +32,7 @@ import {
   deleteVoyage,
   detachPhoto,
   getMe,
+  getPublicProfile,
   getPhoto,
   getVoyage,
   getVoyageMap,
@@ -52,6 +53,7 @@ import {
 import type {
   DiscoverMap,
   Me,
+  PublicProfilePage,
   Photo,
   PhotoList,
   UploadResult,
@@ -202,6 +204,29 @@ export function useVoyages(
     // "no more pages", so the null has to be mapped rather than passed on.
     getNextPageParam: (last: VoyageList) => last.next_before ?? undefined,
     ...queryDefaults,
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) => page.voyages.some((voyage) => voyage.photos_pending))
+        ? 1000
+        : false,
+  });
+}
+
+/** Every page is filtered to this creator by ID or name on the server. */
+export function usePublicProfile(
+  name: string | undefined,
+): UseInfiniteQueryResult<InfiniteData<PublicProfilePage, string | null>> {
+  return useInfiniteQuery({
+    queryKey: ["public-profile", name ?? ""],
+    queryFn: ({ pageParam, signal }) =>
+      getPublicProfile(name as string, { before: pageParam ?? undefined, signal }),
+    enabled: name !== undefined,
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: PublicProfilePage) => last.next_before ?? undefined,
+    ...queryDefaults,
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) => page.voyages.some((voyage) => voyage.photos_pending))
+        ? 1000
+        : false,
   });
 }
 
@@ -213,9 +238,7 @@ export function useVoyage(id: string | undefined): UseQueryResult<Voyage> {
     ...queryDefaults,
     // Variant generation finishes after ingestion. Refresh until all photos settle.
     refetchInterval: (query) =>
-      query.state.data?.photos?.some((photo) => photo.variant_status === "pending")
-        ? 1000
-        : false,
+      query.state.data?.photos?.some((photo) => photo.variant_status === "pending") ? 1000 : false,
   });
 }
 
@@ -240,9 +263,7 @@ export function useVoyageMap(id: string | undefined): UseQueryResult<VoyageMap> 
  * next one loads. Without it every pan blanks the map and redraws it, which
  * reads as the pins flickering rather than as data arriving.
  */
-export function useDiscoverMap(
-  window: MapWindow | null,
-): UseQueryResult<DiscoverMap> {
+export function useDiscoverMap(window: MapWindow | null): UseQueryResult<DiscoverMap> {
   return useQuery({
     queryKey: keys.discoverMap(window ?? EMPTY_WINDOW),
     queryFn: ({ signal }) => getDiscoverMap(window as MapWindow, { signal }),
@@ -266,24 +287,33 @@ const EMPTY_WINDOW: MapWindow = { west: 0, south: 0, east: 0, north: 0, zoom: 0 
  * pin) or the published flag (whether it is in the feed at all), and guessing
  * which is how a stale list survives an edit.
  */
+/** Public maps and profile pages can change after any voyage/photo mutation. */
+function invalidatePublicViews(client: QueryClient): void {
+  void client.invalidateQueries({ queryKey: ["discover-map"] });
+  void client.invalidateQueries({ queryKey: ["public-profile"] });
+  void client.invalidateQueries({ queryKey: keys.voyages.lists() });
+}
+
 function voyageChanged(client: QueryClient, voyage: Voyage): void {
+  invalidatePublicViews(client);
   client.setQueryData(keys.voyages.detail(voyage.id), voyage);
   void client.invalidateQueries({ queryKey: keys.voyages.lists() });
   void client.invalidateQueries({ queryKey: keys.voyages.map(voyage.id) });
 }
 
-export function useCreateVoyage(): UseMutationResult<Voyage, Error, CreateVoyageInput> {
+export function useCreateVoyage(
+  options?: import("./client").RequestOptions,
+): UseMutationResult<Voyage, Error, CreateVoyageInput> {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CreateVoyageInput) => createVoyage(input),
+    mutationFn: (input: CreateVoyageInput) =>
+      options === undefined ? createVoyage(input) : createVoyage(input, options),
     onSuccess: (voyage) => voyageChanged(client, voyage),
   });
 }
 
-export function useUpdateVoyage(
-  id: string,
-): UseMutationResult<Voyage, Error, UpdateVoyageInput> {
+export function useUpdateVoyage(id: string): UseMutationResult<Voyage, Error, UpdateVoyageInput> {
   const client = useQueryClient();
 
   return useMutation({
@@ -298,6 +328,7 @@ export function useDeleteVoyage(): UseMutationResult<void, Error, string> {
   return useMutation({
     mutationFn: (id: string) => deleteVoyage(id),
     onSuccess: (_result, id) => {
+      invalidatePublicViews(client);
       client.removeQueries({ queryKey: keys.voyages.detail(id) });
       client.removeQueries({ queryKey: keys.voyages.map(id) });
       void client.invalidateQueries({ queryKey: keys.voyages.lists() });
@@ -313,6 +344,7 @@ export function useDetachPhoto(voyageId: string): UseMutationResult<void, Error,
   return useMutation({
     mutationFn: (photoId: string) => detachPhoto(voyageId, photoId),
     onSuccess: () => {
+      invalidatePublicViews(client);
       // 204, so there is no voyage to seed with — the detail read has to be
       // refetched rather than patched.
       void client.invalidateQueries({ queryKey: keys.voyages.detail(voyageId) });
@@ -388,6 +420,7 @@ export function useUploadPhotos(): UseMutationResult<UploadResult, Error, Upload
     mutationFn: ({ files, ...options }: UploadVariables) => uploadPhotos(files, options),
     retry: false,
     onSuccess: (_result, { voyageId }) => {
+      invalidatePublicViews(client);
       void client.invalidateQueries({ queryKey: keys.voyages.detail(voyageId) });
       void client.invalidateQueries({ queryKey: keys.voyages.map(voyageId) });
       void client.invalidateQueries({ queryKey: keys.voyages.lists() });
@@ -402,6 +435,7 @@ export function useDeletePhoto(): UseMutationResult<void, Error, string> {
   return useMutation({
     mutationFn: (id: string) => deletePhoto(id),
     onSuccess: (_result, id) => {
+      invalidatePublicViews(client);
       client.removeQueries({ queryKey: keys.photos.detail(id) });
       void client.invalidateQueries({ queryKey: keys.photos.lists() });
       // A deleted photograph disappears from every voyage it was in, so no

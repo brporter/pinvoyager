@@ -1,55 +1,7 @@
-//! Captures the wire format of every JSON endpoint into `web/src/api/__fixtures__/`.
-//!
-//! # What this is for
-//!
-//! `web/src/api/types.ts` is written by hand. Nothing in the compiler, on
-//! either side, stops it from disagreeing with the `Serialize` structs it
-//! claims to mirror — and a TypeScript type that has quietly stopped matching
-//! the server is worse than no type at all, because it is confidently wrong at
-//! every call site.
-//!
-//! The defense is two tests, and **this is the half that makes the other half
-//! mean something**:
-//!
-//!  1. This file drives the real router against a real database and writes each
-//!     response body, byte for byte, into `web/src/api/__fixtures__/`.
-//!  2. `web/src/api/__tests__/contract.test.ts` imports those files and assigns
-//!     each to the matching type. A field the server added, removed or renamed
-//!     fails that assignment at compile time.
-//!
-//! Step 2 on its own proves nothing whatsoever: hand-written fixtures checked
-//! against hand-written types only demonstrate that one author was internally
-//! consistent. The fixtures have to come from the running service, which is why
-//! this is an integration test with a database behind it rather than a
-//! `serde_json::to_value` of a struct literal.
-//!
-//! # Regenerating
-//!
-//! ```text
-//! DATABASE_URL=postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager \
-//!   cargo test --test api_fixtures
-//! ```
-//!
-//! It rewrites every file under `web/src/api/__fixtures__/` on each run. Ids and
-//! timestamps are freshly generated, so the diff is never empty; what matters in
-//! review is whether any **key** moved. Then, from `web/`, run `npm run test` —
-//! `src/api/__tests__/contract.test.ts` shells out to
-//! `tsc -p src/api/tsconfig.contract.json`, and if a shape drifted that is where
-//! it says so, naming the field.
-//!
-//! Note the profile: the fixture run needs `debug_assertions`, because
-//! `/auth/dev/login` is the only way to obtain a session without credentials for
-//! four OAuth providers, and it is compiled out of release builds. `cargo test`
-//! without `--release` is a debug build, so this is the default and not
-//! something to configure.
-//!
-//! # Why the bodies are written verbatim
-//!
-//! Not re-serialized, not pretty-printed, not key-sorted. The claim the
-//! TypeScript side rests on is "this is what the service sent", and any
-//! reformatting step is a second serializer standing between the service and
-//! the artifact — one which could, for instance, drop a key whose value is
-//! `null` and hide exactly the drift being looked for.
+//! Compare real router responses with committed frontend fixtures, normalizing
+//! generated IDs and timestamps. Ordinary test runs never rewrite files.
+//! Regenerate intentionally with PINVOYAGER_UPDATE_FIXTURES=1, then review the
+//! JSON changes and run the frontend contract test.
 
 #[path = "support/photo_voyage.rs"]
 mod photo_voyage;
@@ -121,8 +73,53 @@ fn write_fixture(name: &str, body: &str) {
         .unwrap_or_else(|err| panic!("the body captured for {name} is not JSON ({err}): {body}"));
 
     let path = dir.join(format!("{name}.json"));
-    std::fs::write(&path, format!("{body}\n"))
-        .unwrap_or_else(|err| panic!("could not write {}: {err}", path.display()));
+    if std::env::var_os("PINVOYAGER_UPDATE_FIXTURES").is_some() {
+        std::fs::write(&path, format!("{body}\n")).expect("write requested fixture update");
+    } else {
+        let committed = std::fs::read_to_string(&path).expect("committed fixture");
+        let actual: Value = serde_json::from_str(body).expect("response JSON");
+        let expected: Value = serde_json::from_str(&committed).expect("fixture JSON");
+        assert_eq!(
+            normalized(actual),
+            normalized(expected),
+            "fixture {name} changed; review and regenerate explicitly"
+        );
+    }
+}
+
+// Normalize only generated identities and instants; shape and functional values
+// must still agree. URL paths and compound pagination cursors contain both.
+fn normalized(value: Value) -> Value {
+    match value {
+        Value::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(key, value)| (key, normalized(value)))
+                .collect(),
+        ),
+        Value::Array(values) => Value::Array(values.into_iter().map(normalized).collect()),
+        Value::String(text) => Value::String(
+            text.split('|')
+                .map(|part| {
+                    if chrono::DateTime::parse_from_rfc3339(part).is_ok() {
+                        return "2000-01-01T00:00:00Z".to_owned();
+                    }
+                    part.split('/')
+                        .map(|segment| {
+                            if Uuid::parse_str(segment).is_ok() {
+                                "00000000-0000-0000-0000-000000000001"
+                            } else {
+                                segment
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
+                .collect::<Vec<_>>()
+                .join("|"),
+        ),
+        other => other,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +391,7 @@ fn multipart(boundary: &str, filename: &str, content: &[u8]) -> Vec<u8> {
 /// so a dozen tests would produce a dozen unrelated worlds and a set of
 /// fixtures that never existed together.
 #[sqlx::test]
-async fn every_endpoint_writes_its_fixture(pool: PgPool) {
+async fn every_endpoint_matches_its_fixture(pool: PgPool) {
     let root = ScratchRoot::new();
 
     // A real queue with a live receiver. `VariantQueue::detached()` fails on
@@ -403,11 +400,23 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
     // Nothing consumes the jobs; the rows stay `pending`, which is the state
     // an upload response reports anyway.
     let (sender, _variant_jobs) = mpsc::channel::<VariantJob>(16);
-    let app =
-        pinvoyager_api::http::router(test_state(pool.clone(), &root, VariantQueue { sender }));
+    let app = pinvoyager_api::http::router(test_state(
+        pool.clone(),
+        &root,
+        VariantQueue::from_sender(sender),
+    ));
 
     let owner = sign_in(&app, "fixtures-owner").await;
     let cookie = Some(owner.cookie.as_str());
+    let saved = call(
+        &app,
+        "PATCH",
+        "/api/me",
+        cookie,
+        Some(json!({"display_name":"fixture-owner"})),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::NO_CONTENT);
 
     // -- session ------------------------------------------------------------
 
@@ -645,6 +654,9 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
     );
     let mine = call(&app, "GET", "/api/voyages?mine=true", cookie, None).await;
     capture("voyage_list_mine", StatusCode::OK, &mine);
+    let profile = call(&app, "GET", "/api/profiles/fixture-owner", None, None).await;
+    capture("public_profile", StatusCode::OK, &profile);
+
     assert!(
         mine.body.contains(&draft_id.to_string()),
         "the owner's own listing should include the draft: {}",
@@ -774,6 +786,7 @@ async fn every_endpoint_writes_its_fixture(pool: PgPool) {
         "discover_map",
         "voyage_list",
         "voyage_list_mine",
+        "public_profile",
         "error_not_found",
         "error_unauthorized",
         "error_bad_request",

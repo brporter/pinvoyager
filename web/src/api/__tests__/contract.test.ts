@@ -41,6 +41,7 @@ import errorBadRequest from "../__fixtures__/error_bad_request.json";
 import errorNotFound from "../__fixtures__/error_not_found.json";
 import errorUnauthorized from "../__fixtures__/error_unauthorized.json";
 import errorValidation from "../__fixtures__/error_validation.json";
+import publicProfile from "../__fixtures__/public_profile.json";
 import me from "../__fixtures__/me.json";
 import photo from "../__fixtures__/photo.json";
 import photoList from "../__fixtures__/photo_list.json";
@@ -62,6 +63,7 @@ import type {
   Granularity,
   LinkedProvider,
   Me,
+  PublicProfilePage,
   Photo,
   PhotoList,
   UploadResult,
@@ -153,6 +155,7 @@ type Assert<T extends true> = T;
  */
 export const assigned: {
   me: FromJson<Me>;
+  publicProfile: FromJson<PublicProfilePage>;
   photo: FromJson<Photo>;
   photoList: FromJson<PhotoList>;
   photoUpload: FromJson<UploadResult>;
@@ -180,6 +183,7 @@ export const assigned: {
   errorValidation: ApiErrorBody;
 } = {
   me,
+  publicProfile,
   photo,
   photoList,
   photoUpload,
@@ -209,6 +213,7 @@ export const assigned: {
  */
 export type ContractHasNoExtraFields = [
   NoExtraFields<ExtraKeys<typeof me, Me>>,
+  NoExtraFields<ExtraKeys<typeof publicProfile, PublicProfilePage>>,
   NoExtraFields<ExtraKeys<typeof photo, Photo>>,
   NoExtraFields<ExtraKeys<typeof photoList, PhotoList>>,
   NoExtraFields<ExtraKeys<typeof photoUpload, UploadResult>>,

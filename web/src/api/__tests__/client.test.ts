@@ -20,6 +20,8 @@ import {
   errorFrom,
   getDiscoverMap,
   getMe,
+  getPublicProfile,
+  updateDisplayName,
   getPhoto,
   getVoyage,
   getVoyageMap,
@@ -55,6 +57,28 @@ describe("the fetch wrapper", () => {
    * every authenticated call 401s and the application looks permanently signed
    * out — a failure that is easy to misdiagnose as broken sign-in.
    */
+  it("saves names through authenticated PATCH and encodes public profile paths and pagination", async () => {
+    const save = stubFetch(respond(204, undefined));
+    await updateDisplayName("betaporter");
+    expect(save).toHaveBeenCalledWith(
+      "/api/me",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "same-origin",
+        body: JSON.stringify({ display_name: "betaporter" }),
+      }),
+    );
+    const fetch = stubFetch(respond(200, { user: {}, voyages: [], next_before: null }));
+    await getPublicProfile("betaporter");
+    expect(fetch).toHaveBeenLastCalledWith("/api/profiles/betaporter", expect.anything());
+    const controller = new AbortController();
+    await getPublicProfile("a/b", { before: "cursor", limit: 2, signal: controller.signal });
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/profiles/a%2Fb?before=cursor&limit=2",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
+
   it("always sends cookies", async () => {
     const fetch = stubFetch(respond(200, { voyages: [], next_before: null }));
 
@@ -97,7 +121,9 @@ describe("the fetch wrapper", () => {
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(isUnauthorized(error)).toBe(true);
 
-    stubFetch(respond(404, { code: "not_found", message: "The requested resource was not found." }));
+    stubFetch(
+      respond(404, { code: "not_found", message: "The requested resource was not found." }),
+    );
     const missing = await getVoyage("some-id").catch((err: unknown) => err);
     expect(missing).toBeInstanceOf(ApiRequestError);
     expect(isUnauthorized(missing)).toBe(false);
@@ -185,13 +211,14 @@ describe("the fetch wrapper", () => {
   });
 
   it("uses generic fields for an empty or structurally invalid error body", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 503 }))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response(null, { status: 503 }))),
+    );
     const empty = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
     expect(empty.message).toBe("The request failed.");
 
-    stubFetch(
-      respond(400, { code: 12, message: false, errors: "not an array" }),
-    );
+    stubFetch(respond(400, { code: 12, message: false, errors: "not an array" }));
     const invalid = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
     expect(invalid.code).toBe("unknown");
     expect(invalid.message).toBe("The request failed.");
@@ -251,20 +278,29 @@ describe("the fetch wrapper", () => {
     expect(readError).toBeInstanceOf(ApiRequestError);
     expect((readError as ApiRequestError).message).toBe("Unavailable");
 
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("null", { status: 500 }))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("null", { status: 500 }))),
+    );
     const parsedNull = await getMe().catch((caught: unknown) => caught);
     expect((parsedNull as ApiRequestError).code).toBe("unknown");
   });
 
   it("parses numeric Retry-After values and ignores HTTP dates", async () => {
-    stubFetch(respond(429, { code: "rate_limited", message: "Slow down." }, { "retry-after": "12" }));
+    stubFetch(
+      respond(429, { code: "rate_limited", message: "Slow down." }, { "retry-after": "12" }),
+    );
     const rateLimit = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
     expect(rateLimit.retryAfterSeconds).toBe(12);
 
     stubFetch(
-      respond(429, { code: "rate_limited", message: "Slow down." }, {
-        "retry-after": "Wed, 21 Oct 2030 07:28:00 GMT",
-      }),
+      respond(
+        429,
+        { code: "rate_limited", message: "Slow down." },
+        {
+          "retry-after": "Wed, 21 Oct 2030 07:28:00 GMT",
+        },
+      ),
     );
     const date = (await getMe().catch((caught: unknown) => caught)) as ApiRequestError;
     expect(date.retryAfterSeconds).toBeNull();
@@ -282,8 +318,9 @@ describe("endpoint wrappers", () => {
 
     expect((await call(() => getVoyageMap("v1")))[0]).toBe("/api/voyages/v1/map");
     expect((await call(() => listVoyages({ mine: true })))[0]).toBe("/api/voyages?mine=true");
-    expect((await call(() => getDiscoverMap({ west: -1, south: -2, east: 3, north: 4, zoom: 5 })))[0])
-      .toBe("/api/map?west=-1&south=-2&east=3&north=4&zoom=5");
+    expect(
+      (await call(() => getDiscoverMap({ west: -1, south: -2, east: 3, north: 4, zoom: 5 })))[0],
+    ).toBe("/api/map?west=-1&south=-2&east=3&north=4&zoom=5");
     const create = await call(() => createVoyage({ title: "Trip" }));
     expect(create[0]).toBe("/api/voyages");
     expect(create[1].method).toBe("POST");
