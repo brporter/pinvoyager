@@ -38,6 +38,10 @@ tower-http = { version = "0.7.0", features = [
     "timeout",
     "limit",
 ] }
+opentelemetry = { version = "0.31", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client"] }
+tracing-opentelemetry = { version = "0.32", default-features = false }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
 uuid = { version = "1.24.1", features = ["v7", "serde"] }
@@ -70,7 +74,7 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 async-trait = "0.1.92"
 cookie = "0.18"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "rayon"] }
-libheif-rs = "2.7.0"
+libheif-rs = { version = "2.7.0", default-features = false, features = ["v1_17"] }
 webp = "0.3.1"
 kamadak-exif = "0.6.1"
 hex = "0.4.3"
@@ -78,6 +82,7 @@ rust_decimal = { version = "1.42.1", features = ["db-postgres"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 
 [dev-dependencies]
+opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "testing"] }
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",

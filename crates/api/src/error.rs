@@ -1,9 +1,5 @@
 //! The single application error type.
 //!
-//! CONTRACT — variants are fixed; handlers across phases 3–5 return
-//! `AppResult<T>`. The `IntoResponse` implementation is owned by the config /
-//! error agent.
-//!
 //! The rule this type exists to enforce: **the client learns the status code
 //! and a generic message; the log learns everything.** Internal error text
 //! never reaches a response body. A caller who needs to report a problem

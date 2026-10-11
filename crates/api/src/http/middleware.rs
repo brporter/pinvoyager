@@ -17,8 +17,10 @@ use tower_http::request_id::{
     MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
 };
 use tower_http::timeout::TimeoutLayer;
+use tower_http::trace::OnResponse;
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse, TraceLayer};
 use tracing::Level;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::config::ServerConfig;
@@ -26,7 +28,7 @@ use crate::config::ServerConfig;
 /// Outermost ceiling on a request body, in bytes.
 ///
 /// This is a hard cap, not a default: the layer wraps the whole router, and an
-/// outer limit can only ever be *tightened* by an inner one. Phase 4 uploads
+/// outer limit can only ever be *tightened* by an inner one. Photo uploads
 /// therefore have to fit under it — D8 talks about 25 MB JPEGs, so 32 MiB
 /// leaves headroom for multipart framing while still refusing a body that
 /// could only be an attack or a mistake. Routes that want less (every JSON
@@ -70,9 +72,28 @@ pub fn apply(router: Router, config: &ServerConfig) -> Router {
                 .make_span_with(make_request_span)
                 // INFO, not the DEBUG default: this is the access log, and it
                 // is the line that carries the request id, latency and status.
-                .on_response(DefaultOnResponse::new().level(Level::INFO))
+                .on_response(
+                    |response: &axum::http::Response<tower_http::limit::ResponseBody<Body>>,
+                     latency: Duration,
+                     span: &tracing::Span| {
+                        DefaultOnResponse::new()
+                            .level(Level::INFO)
+                            .on_response(response, latency, span);
+                        span.record("http.response.status_code", response.status().as_u16());
+                        if response.status().is_server_error() {
+                            span.record("otel.status_code", "ERROR");
+                        }
+                    },
+                )
                 .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
         )
+        .map_response(|mut response: axum::http::Response<_>| {
+            crate::telemetry::inject_context(
+                &tracing::Span::current().context(),
+                response.headers_mut(),
+            );
+            response
+        })
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(config.request_timeout_secs),
@@ -103,16 +124,27 @@ fn make_request_span(request: &Request<Body>) -> tracing::Span {
         .unwrap_or("unknown");
 
     // Fields are flat and low-cardinality-first so JSON output stays greppable.
-    // The query string is deliberately excluded: it is user-controlled and, in
-    // phase 3, will carry OAuth `code` and `state` values that must not be
-    // written to a log.
-    tracing::info_span!(
+    // Exclude query strings: authentication callbacks carry OAuth `code` and
+    // `state` values that must not appear in logs.
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map_or("unknown", |path| path.as_str());
+    let span = tracing::info_span!(parent: None,
         "http_request",
+        otel.name = %format!("{} {}", request.method(), route),
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+        http.request.method = %request.method(),
+        http.route = %route,
+        http.response.status_code = tracing::field::Empty,
         request_id = %request_id,
         method = %request.method(),
         path = %request.uri().path(),
         version = ?request.version(),
-    )
+    );
+    let _ = span.set_parent(crate::telemetry::extract_context(request.headers()));
+    span
 }
 
 /// A [`MakeRequestId`] producing UUIDv7s.

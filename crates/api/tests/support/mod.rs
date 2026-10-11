@@ -1,6 +1,6 @@
 //! A local OIDC provider that will lie on request.
 //!
-//! Phase 3's T3 criterion is "a token signed by the wrong key, with the wrong
+//! The verification contract rejects a token signed by the wrong key, with the wrong
 //! `aud`, expired, or with a mismatched `nonce` is rejected in each case — test
 //! with crafted tokens, not only live ones". No real provider will issue any of
 //! those, so the only way to assert the rejection paths is to own the provider.

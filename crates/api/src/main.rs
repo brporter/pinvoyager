@@ -1,9 +1,6 @@
-//! Service entrypoint.
-//!
-//! Startup order is load-bearing: telemetry first so that configuration
-//! failures are logged rather than silently swallowed, then configuration
-//! (which fails loudly on anything missing), then the database, then the
-//! listener.
+//! Load configuration, initialize telemetry, connect and migrate PostgreSQL,
+//! initialize providers, then start workers and HTTP. Shutdown drains HTTP and
+//! workers before flushing telemetry. Early failures are written to stderr.
 
 use std::process::ExitCode;
 
@@ -30,8 +27,13 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Config::load()?;
-    telemetry::init(&config.telemetry)?;
+    let provider = telemetry::init(&config.telemetry)?;
+    let result = run_service(config).await;
+    telemetry::shutdown(provider).await;
+    result
+}
 
+async fn run_service(config: Config) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!(
         bind = %config.server.bind,
         "starting pinvoyager-api"
@@ -55,7 +57,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::warn!("════════════════════════════════════════════════════════════════");
     }
 
-    let providers = ProviderRegistry::from_config(&config.auth).await?;
+    let providers = ProviderRegistry::from_config(&config.auth).await;
     let configured_providers = providers.configured();
     tracing::info!(
         providers = ?configured_providers,
@@ -71,8 +73,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // otherwise remain in a voyage forever, never becoming viewable.
     let variants = worker::spawn(pool.clone(), config.clone());
 
-    let state = AppState::new(pool, config, providers, variants);
-    http::serve(state).await?;
+    let deadline = std::time::Duration::from_secs(config.server.shutdown_timeout_secs);
+    let state = AppState::new(pool, config, providers, variants.clone());
+    let result = http::serve(state).await;
+    variants.shutdown(deadline).await;
+    result?;
 
     Ok(())
 }

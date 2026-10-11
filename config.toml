@@ -9,7 +9,7 @@
 #
 # Every value here is a development value. Nothing in this file is a secret and
 # nothing in it should become one — the file is committed. Real secrets (the
-# OIDC client secrets phase 3 introduces, a production database URL) belong in
+# OIDC client secrets and a production database URL) belong in
 # the environment, which is why the environment outranks the file.
 
 [server]
@@ -19,8 +19,7 @@ bind = "127.0.0.1:8080"
 # before the process stops waiting for them.
 shutdown_timeout_secs = 30
 
-# Per-request ceiling. Phase 4 gives uploads their own, larger limit; this one
-# is sized for ordinary API calls, where anything approaching 30s is a bug.
+# Per-request ceiling, including upload requests and queue backpressure.
 request_timeout_secs = 30
 
 [database]
@@ -48,6 +47,10 @@ log_level = "info,pinvoyager_api=debug,tower_http=debug"
 # Pretty output locally; deployments set `PINVOYAGER__TELEMETRY__JSON=true` so
 # lines are machine-parseable.
 json = false
+# Development Collector; trace export is disabled by default without this file.
+# Remove this key to disable export. See docs/tracing.md.
+otlp_endpoint = "http://127.0.0.1:4318/v1/traces"
+service_name = "pinvoyager-api"
 
 [photos]
 # Originals and derived variants live under here, in content-addressed

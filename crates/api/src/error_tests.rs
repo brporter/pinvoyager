@@ -12,8 +12,13 @@ async fn response(error: AppError) -> (StatusCode, Value) {
         .finish();
     let response = tracing::subscriber::with_default(subscriber, || error.into_response());
     let status = response.status();
-    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap())
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("valid test fixture");
+    (
+        status,
+        serde_json::from_slice(&body).expect("valid test fixture"),
+    )
 }
 
 #[tokio::test]

@@ -1,12 +1,11 @@
 //! HTTP layer.
 //!
-//! CONTRACT — `router` and `serve` signatures are fixed; implementations and
-//! everything under `health` / `middleware` are owned by the http agent.
 
 pub mod auth;
 pub mod health;
 pub mod middleware;
 pub mod photos;
+pub mod profiles;
 pub mod voyages;
 
 use std::time::Duration;
@@ -33,6 +32,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ready", get(health::ready))
         .merge(auth::routes())
         .merge(photos::routes())
+        .merge(profiles::routes())
         .merge(voyages::routes())
         .with_state(state);
 
@@ -66,11 +66,25 @@ where
     // 0" is useless.
     tracing::info!(addr = %listener.local_addr()?, "listening");
 
+    serve_router(listener, router(state), shutdown, drain_deadline).await
+}
+
+/// Listener and router injection lets drain tests own a deliberately pending
+/// request without timing races or changes to the production route surface.
+async fn serve_router<F>(
+    listener: TcpListener,
+    routes: Router,
+    shutdown: F,
+    drain_deadline: Duration,
+) -> Result<(), io::Error>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
     // `shutdown_started` fires the moment a signal arrives, which is *before*
     // draining finishes. It is what starts the drain clock below.
     let (shutdown_started, drain_clock) = tokio::sync::oneshot::channel::<()>();
 
-    let server = axum::serve(listener, router(state)).with_graceful_shutdown(async move {
+    let server = axum::serve(listener, routes).with_graceful_shutdown(async move {
         shutdown.await;
         // The receiver is only dropped if the server already stopped, in which
         // case nobody is waiting on the deadline.

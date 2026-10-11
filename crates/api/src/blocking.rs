@@ -1,57 +1,9 @@
-//! Blocking-work discipline (D8).
+//! CPU-heavy image work and blocking filesystem operations run on Tokio's
+//! blocking pool. The conversion queue bounds CPU concurrency independently.
 //!
-//! An async runtime multiplexes many tasks onto few OS threads. A task that
-//! occupies a thread without yielding stalls every other task scheduled on it.
-//! In a service that mostly awaits Postgres this is invisible — until phase 4
-//! starts decoding photographs, at which point a fifty-file batch will make
-//! unrelated requests time out.
-//!
-//! Every CPU-bound or blocking operation goes through this module, so that
-//! call sites are uniform and grep-able. If you find yourself decoding an
-//! image, hashing a large buffer, or touching `std::fs` outside here, that is
-//! the bug.
-//!
-//! # What belongs here
-//!
-//! Concretely, from D8's hazard list:
-//!
-//! * image decode, resize and encode — the single biggest risk, because the
-//!   work is proportional to *pixels*, not to bytes on the wire: one 25 MB
-//!   JPEG is tens of milliseconds of pure CPU, and fifty of them arriving as a
-//!   batch is seconds of a worker thread that unrelated requests are queued
-//!   behind;
-//! * content hashing of upload-sized buffers;
-//! * any sequence of `std::fs` calls. `tokio::fs` is itself `spawn_blocking`
-//!   underneath, so one explicit `run_blocking` around a whole sequence of
-//!   file operations is cheaper than many implicit ones.
-//!
-//! # What does not belong here
-//!
-//! Anything touching the database. `sqlx` is async-native and a pool
-//! connection must never be held across this call — the closure runs on a
-//! different thread for an unbounded time, and holding a connection for its
-//! duration drains the pool (D8). Acquire late, release early: do the query,
-//! `await` it, *then* hand the resulting bytes to `run_blocking`.
-//!
-//! # Why this is not just `spawn_blocking`
-//!
-//! Two reasons the wrapper earns its keep. It converts a panic into an
-//! [`AppError::Internal`] — a bare `spawn_blocking` handle yields a
-//! `JoinError` that is easy to `unwrap`, and a panic in a decoder on
-//! attacker-supplied bytes should be a 500, not a process abort. And it gives
-//! the convention a single grep-able name, so "is anything CPU-bound running
-//! on a worker thread?" is answerable by reading call sites rather than by
-//! reading every handler.
-//!
-//! # Bounding the pool
-//!
-//! `spawn_blocking` has its own thread pool (512 threads by default) and its
-//! queue is unbounded. That is fine for the current call volume, but it is not
-//! a concurrency limit: fifty simultaneous decodes will happily run fifty
-//! threads and thrash the CPU. When phase 4 lands, the parallelism wants
-//! shaping — a semaphore around these calls, or a Rayon pool sized to the core
-//! count. Noted here rather than built now, because the right bound is a
-//! measurement, not a guess.
+//! Database queries stay async. Decode and encode hold no database connection.
+//! Final file writes and removals own their transaction while blocking so
+//! cancellation cannot release a content lock before the filesystem stops.
 
 use crate::error::{AppError, AppResult};
 
@@ -93,7 +45,13 @@ where
     // panicked (a blocking task cannot be canceled, so `JoinError` is always
     // a panic in practice). Flatten it into the caller's error type so a panic
     // is a 500 with the real cause on the `#[source]` chain, not a lost thread.
-    match tokio::task::spawn_blocking(f).await {
+    let span = tracing::Span::current();
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    match tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&dispatch, || span.in_scope(f))
+    })
+    .await
+    {
         Ok(result) => result,
         Err(join_err) => Err(AppError::from_join(join_err)),
     }
@@ -105,7 +63,7 @@ where
 /// "this cannot fail" without an awkward turbofish — a closure ending in
 /// `Ok(hash)` leaves the error type unconstrained, so every hashing call site
 /// would have to write `Ok::<_, AppError>(hash)`. Content hashing and resizing
-/// an already-decoded image are the phase 4 cases.
+/// an already-decoded image are common uses.
 ///
 /// The returned `AppResult` is still fallible: a panic in `f` is the only way
 /// this returns `Err`.
@@ -114,9 +72,13 @@ where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
-        .await
-        .map_err(AppError::from_join)
+    let span = tracing::Span::current();
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&dispatch, || span.in_scope(f))
+    })
+    .await
+    .map_err(AppError::from_join)
 }
 
 impl AppError {

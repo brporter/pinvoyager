@@ -26,6 +26,7 @@ fn test_config() -> Config {
             telemetry: TelemetryConfig {
                 log_level: "info".to_owned(),
                 json: false,
+                ..TelemetryConfig::default()
             },
             auth: crate::config::AuthConfig {
                 base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
@@ -134,7 +135,7 @@ async fn ready_is_200_when_the_database_answers(pool: PgPool) {
         .await
         .expect("response body is small");
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["status"],
+        serde_json::from_slice::<serde_json::Value>(&body).expect("valid test fixture")["status"],
         "ready"
     );
 }
@@ -229,47 +230,58 @@ async fn signal_setup_failures_remain_pending_for_each_supported_signal() {
     }
 }
 
-/// Real SIGTERM, real listener — the signal a container runtime actually
-/// sends. The coverage command runs the suite serially so this process-wide
-/// signal cannot interrupt another test.
-#[tokio::test(flavor = "multi_thread")]
-async fn sigterm_stops_the_server() {
-    let server = tokio::spawn(serve(test_state()));
-    // Give the listener and the signal handler time to be installed; if
-    // the handler is missing, the default disposition kills this process,
-    // which is a loud enough failure.
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let status = std::process::Command::new("kill")
-        .args(["-TERM", &std::process::id().to_string()])
-        .status()
-        .expect("kill(1) runs");
-    assert!(status.success());
-
-    tokio::time::timeout(Duration::from_secs(5), server)
-        .await
-        .expect("server returns after SIGTERM")
-        .expect("server task did not panic")
-        .expect("server returned cleanly");
+/// Actual signals run in a child process; readiness follows handler registration.
+#[test]
+fn operating_system_signals_stop_a_child_server() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    for signal in ["-TERM", "-INT"] {
+        let mut child = Command::new(std::env::current_exe().expect("test executable"))
+            .args(["--exact", "http::tests::signal_child", "--nocapture"])
+            .env("PINVOYAGER_SIGNAL_CHILD", "1")
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("child server");
+        let stdout = child.stdout.take().expect("child stdout");
+        let mut output = BufReader::new(stdout);
+        let ready = (&mut output)
+            .lines()
+            .map(|line| line.expect("read readiness"))
+            .any(|line| line == "SIGNALS_READY");
+        assert!(
+            ready,
+            "child must install handlers before receiving a signal"
+        );
+        assert!(
+            Command::new("kill")
+                .args([signal, &child.id().to_string()])
+                .status()
+                .expect("send signal")
+                .success()
+        );
+        assert!(child.wait().expect("wait for child").success());
+    }
 }
 
-/// SIGINT exercises the other shutdown signal used for local terminal runs.
-#[tokio::test(flavor = "multi_thread")]
-async fn sigint_stops_the_server() {
-    let server = tokio::spawn(serve(test_state()));
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let status = std::process::Command::new("kill")
-        .args(["-INT", &std::process::id().to_string()])
-        .status()
-        .expect("kill(1) runs");
-    assert!(status.success());
-
-    tokio::time::timeout(Duration::from_secs(5), server)
-        .await
-        .expect("server returns after SIGINT")
-        .expect("server task did not panic")
-        .expect("server returned cleanly");
+#[tokio::test]
+async fn signal_child() {
+    if std::env::var_os("PINVOYAGER_SIGNAL_CHILD").is_none() {
+        return;
+    }
+    let mut shutdown = Box::pin(shutdown_signal());
+    tokio::select! {
+        biased;
+        () = &mut shutdown => panic!("unexpected signal before readiness"),
+        () = tokio::task::yield_now() => {}
+    }
+    println!("SIGNALS_READY");
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        serve_with_shutdown(test_state(), shutdown),
+    )
+    .await
+    .expect("child shutdown deadline")
+    .expect("server drains");
 }
 
 /// A route that does not exist still gets an id, because the id layer is
@@ -322,7 +334,7 @@ async fn server_drops_a_stalled_request_when_the_drain_deadline_expires(pool: Pg
         .expect("create request owner");
     let mut config = test_config();
     let reservation = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve a port");
-    config.server.bind = reservation.local_addr().unwrap();
+    config.server.bind = reservation.local_addr().expect("valid test fixture");
     config.server.shutdown_timeout_secs = 0;
     drop(reservation);
     let bind = config.server.bind;
@@ -359,4 +371,43 @@ async fn server_drops_a_stalled_request_when_the_drain_deadline_expires(pool: Pg
         .expect("drain deadline releases the stalled request")
         .expect("server task did not panic")
         .expect("server stops cleanly after dropping the request");
+}
+
+#[tokio::test]
+async fn an_inflight_request_cannot_hold_shutdown_past_its_deadline() {
+    let started = std::sync::Arc::new(tokio::sync::Notify::new());
+    let route_started = started.clone();
+    let routes = Router::new().route(
+        "/blocked",
+        axum::routing::get(move || {
+            let started = route_started.clone();
+            async move {
+                started.notify_one();
+                std::future::pending::<String>().await
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(serve_router(
+        listener,
+        routes,
+        async {
+            stopped.await.expect("shutdown signal");
+        },
+        Duration::from_millis(5),
+    ));
+    let request =
+        tokio::spawn(async move { reqwest::get(format!("http://{address}/blocked")).await });
+    tokio::time::timeout(Duration::from_secs(5), started.notified())
+        .await
+        .expect("handler entered");
+    stop.send(()).expect("signal listener");
+    tokio::time::timeout(Duration::from_secs(1), server)
+        .await
+        .expect("drain is bounded")
+        .expect("server task")
+        .expect("server result");
+    request.abort();
 }

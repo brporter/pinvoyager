@@ -1,8 +1,8 @@
 # Local development dependencies.
 #
-#   docker compose up -d              PostgreSQL only — the normal case, with
+#   docker compose up -d              PostgreSQL + Collector + Jaeger, with
 #                                     the service itself run via `cargo run`
-#   docker compose --profile api up   PostgreSQL + the containerised service
+#   docker compose --profile api up   Dependencies + the containerized service
 #
 # Values interpolate from .env if present (Compose reads it automatically);
 # see .env.example for the full set and the defaults below for what you get
@@ -40,7 +40,7 @@ services:
       start_period: 10s
 
   api:
-    # Opt-in. `docker compose up` with no profile gives you the database alone,
+    # Opt-in. `docker compose up` with no profile gives you development dependencies,
     # which is what you want while iterating with `cargo run`.
     profiles: ["api"]
     build:
@@ -48,10 +48,12 @@ services:
       dockerfile: Dockerfile
     depends_on:
       db:
-        # Not `service_started`. Without the health gate the service wins the
+        # Not `service_started`. Without the health check the service wins the
         # race often enough to look flaky and fails its first migration
         # against a database that is still doing initdb.
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       # The image ships no config.toml — that file points at a localhost
       # database and would be a fallback that hides a missing URL — so
@@ -60,6 +62,8 @@ services:
       # Host is `db`, the Compose service name, not localhost: inside this
       # container localhost is the container itself.
       PINVOYAGER__DATABASE__URL: postgres://${POSTGRES_USER:-pinvoyager}:${POSTGRES_PASSWORD:-pinvoyager}@db:5432/${POSTGRES_DB:-pinvoyager}
+      # Public callback origin is required even when providers are disabled.
+      PINVOYAGER__AUTH__BASE_URL: ${PINVOYAGER__AUTH__BASE_URL:-http://localhost:8080}
       PINVOYAGER__DATABASE__MAX_CONNECTIONS: "10"
       PINVOYAGER__DATABASE__MIN_CONNECTIONS: "1"
       # D8: always set. Unset means pool exhaustion hangs requests forever
@@ -69,6 +73,8 @@ services:
       PINVOYAGER__SERVER__REQUEST_TIMEOUT_SECS: "30"
       PINVOYAGER__TELEMETRY__LOG_LEVEL: "info,pinvoyager_api=debug"
       PINVOYAGER__TELEMETRY__JSON: "true"
+      PINVOYAGER__TELEMETRY__OTLP_ENDPOINT: "http://otel-collector:4318/v1/traces"
+      PINVOYAGER__TELEMETRY__SERVICE_NAME: "pinvoyager-api"
       # PINVOYAGER__SERVER__BIND is set in the image to 0.0.0.0:8080. Override
       # it here only if you also override the image's HEALTHCHECK.
     ports:
@@ -76,12 +82,26 @@ services:
     # Must exceed PINVOYAGER__SERVER__SHUTDOWN_TIMEOUT_SECS, or `docker stop`
     # SIGKILLs the process mid-drain and the graceful shutdown is decorative.
     stop_grace_period: 30s
-    # Phase 4 writes uploads to disk (D7). The image already creates /data owned
-    # by the non-root user; uncomment once the service has a storage path in its
-    # configuration, so this is a real mount and not dead config.
-    # volumes:
-    #   - uploads:/data
+    volumes:
+      - uploads:/data
+
+  jaeger:
+    # All-in-one, transient in-memory storage: a small development trace viewer.
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.21.0
+    ports:
+      - "127.0.0.1:${JAEGER_PORT:-16686}:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.162.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      jaeger:
+        condition: service_started
+    volumes:
+      - ./dev/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:${OTEL_HTTP_PORT:-4318}:4318"
 
 volumes:
   pgdata:
-  # uploads:
+  uploads:

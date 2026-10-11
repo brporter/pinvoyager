@@ -171,6 +171,7 @@ const PERMITTED: &[(&str, &str)] = &[
     ("sessions", "token_hash"),
     ("auth_attempts", "binding_hash"),
     ("photos", "content_hash"),
+    ("photo_cleanup", "content_hash"),
 ];
 
 #[tokio::test]

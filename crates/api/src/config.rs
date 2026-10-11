@@ -1,8 +1,5 @@
 //! Typed configuration.
 //!
-//! CONTRACT — the shape below is fixed; other modules depend on these field
-//! names. The implementation of [`Config::load`] is owned by the config agent.
-//!
 //! Precedence, lowest to highest: built-in defaults → `config.toml` →
 //! `PINVOYAGER__`-prefixed environment variables (double underscore separates
 //! nested keys, e.g. `PINVOYAGER__DATABASE__MAX_CONNECTIONS`).
@@ -51,7 +48,7 @@ pub struct Config {
     pub photos: PhotosConfig,
 }
 
-/// Photo storage and upload limits (phase 4).
+/// Photo storage and upload limits.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct PhotosConfig {
@@ -95,7 +92,7 @@ pub struct PhotosConfig {
     pub webp_quality: f32,
 }
 
-/// Authentication configuration (phase 3).
+/// Authentication configuration.
 #[derive(Debug, Deserialize)]
 pub struct AuthConfig {
     /// Public base URL of this service, used to build provider redirect URIs.
@@ -193,7 +190,7 @@ pub struct ServerConfig {
     pub bind: SocketAddr,
     /// How long to let in-flight requests finish after a shutdown signal.
     pub shutdown_timeout_secs: u64,
-    /// Per-request timeout. Uploads get their own, larger, limit in phase 4.
+    /// Per-request timeout, including uploads and queue backpressure.
     pub request_timeout_secs: u64,
 }
 
@@ -217,6 +214,10 @@ pub struct TelemetryConfig {
     pub log_level: String,
     /// JSON in production, pretty in development.
     pub json: bool,
+    /// Full OTLP/HTTP traces URL. None keeps logging without trace export.
+    pub otlp_endpoint: Option<String>,
+    /// Resource name shown in the trace viewer.
+    pub service_name: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -273,8 +274,15 @@ impl Config {
     ///
     /// A missing required setting must produce an error naming the setting.
     pub fn load() -> Result<Self, ConfigError> {
-        // Each `merge` outranks the ones before it, so this reads lowest to
-        // highest: built-in defaults, then the file, then the environment.
+        Self::from_figment(
+            Figment::new()
+                .merge(Toml::file(CONFIG_FILE))
+                .merge(Env::prefixed(ENV_PREFIX).split(ENV_SEPARATOR)),
+        )
+    }
+
+    /// Tests supply explicit sources; production supplies its file and environment.
+    pub fn from_figment(sources: Figment) -> Result<Self, ConfigError> {
         Figment::new()
             .merge(Serialized::default(
                 "database.max_connections",
@@ -288,11 +296,7 @@ impl Config {
                 "database.acquire_timeout_secs",
                 DEFAULT_ACQUIRE_TIMEOUT_SECS,
             ))
-            // An absent file is not an error: configuring everything through
-            // the environment is a legitimate deployment, and extraction still
-            // fails on any required key that nothing supplied.
-            .merge(Toml::file(CONFIG_FILE))
-            .merge(Env::prefixed(ENV_PREFIX).split(ENV_SEPARATOR))
+            .merge(sources)
             .extract()
             .map_err(ConfigError::from_figment)
     }
@@ -368,6 +372,8 @@ impl Default for TelemetryConfig {
             // Pretty by default because the default audience is a developer.
             // Deployments set `PINVOYAGER__TELEMETRY__JSON=true`.
             json: false,
+            otlp_endpoint: None,
+            service_name: "pinvoyager-api".to_owned(),
         }
     }
 }

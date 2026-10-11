@@ -10,7 +10,7 @@
 # and they stay in lockstep. (If `rust:<version>-slim-bookworm` is not
 # published for the pinned toolchain, switch both to `trixie`.)
 ARG RUST_VERSION=1.94
-ARG DEBIAN_CODENAME=bookworm
+ARG DEBIAN_CODENAME=trixie
 
 # --------------------------------------------------------------------------
 # builder
@@ -88,11 +88,11 @@ RUN apt-get update \
         ca-certificates \
         curl \
         libheif1 \
+        libheif-plugin-libde265 \
         libwebp7 \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root from the start. Phase 4 writes user uploads to disk (D7); a process
-# that never runs as root cannot be talked into writing outside what it owns.
+# The service runs as an unprivileged user with a writable upload directory.
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
 
@@ -103,13 +103,10 @@ WORKDIR /app
 COPY --from=builder --chown=root:root \
     /app/target/release/pinvoyager-api /usr/local/bin/pinvoyager-api
 
-# `sqlx::migrate!` embeds the migrations in the binary, so these are not needed
-# to boot. They are here for phase 8, which moves migrations out of startup and
-# into a deploy step that runs `sqlx migrate run` against this image.
-COPY --from=builder --chown=root:root /app/crates/api/migrations /app/migrations
+# Migrations are embedded in the binary and applied at startup.
 
 # Upload root (D7). Owned by `app` because it is the one directory the service
-# is expected to write to. Mount a volume here when phase 4 lands.
+# writes to. Compose mounts the persistent uploads volume here.
 RUN mkdir -p /data && chown app:app /data
 
 USER app
@@ -119,6 +116,7 @@ USER app
 # networking problem rather than a config one. Everything else comes from the
 # environment — see .env.example for the full set.
 ENV PINVOYAGER__SERVER__BIND=0.0.0.0:8080
+ENV PINVOYAGER__PHOTOS__STORAGE_ROOT=/data
 EXPOSE 8080
 
 # Liveness only — /health deliberately does not touch the database, so a

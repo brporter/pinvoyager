@@ -1,23 +1,6 @@
-//! Database access.
-//!
-//! CONTRACT — `connect`, `migrate`, and `ping` signatures are fixed;
-//! implementations and everything under `repo` are owned by the database agent.
-//!
-//! D8: every function here is `async`. Repository functions take an executor
-//! (`impl sqlx::PgExecutor<'_>`) rather than the pool directly, so a caller can
-//! pass either the pool or a transaction — which is what lets tests run inside
-//! a transaction that rolls back, and lets phase 5 compose multi-statement work
-//! without a second set of functions.
-//!
-//! ## Runtime-checked queries, for now
-//!
-//! Everything here uses `sqlx::query`/`sqlx::query_as` rather than the
-//! `query!`/`query_as!` macros. The macros need either a live `DATABASE_URL` or
-//! a committed `.sqlx` offline cache at *compile* time, and phase 2 has neither
-//! — using them now would make the crate fail to build for anyone without a
-//! database. Phase 3 creates the offline cache (`cargo sqlx prepare`) and
-//! switches these call sites to the compile-time macros, which is the stated
-//! goal; the query text moves across unchanged.
+//! Async database setup and migrations. Repository operations accept a pool or
+//! transaction executor. Checked queries use committed .sqlx metadata; dynamic
+//! queries are verified by database integration tests.
 
 pub mod repo;
 
@@ -75,12 +58,10 @@ pub async fn connect(config: &DatabaseConfig) -> Result<PgPool, DbError> {
 
 /// Applies migrations from `crates/api/migrations`.
 ///
-/// Note phase 8 moves this to a deploy step; it runs at startup only for local
-/// development convenience, and that split should stay easy to make.
 pub async fn migrate(pool: &PgPool) -> Result<(), DbError> {
     // The path is relative to `CARGO_MANIFEST_DIR`, and the migrations are
     // embedded in the binary at compile time — so the deployed artifact needs
-    // no migration files alongside it when phase 8 moves this to a deploy step.
+    // no migration files alongside it.
     sqlx::migrate!("./migrations")
         .run(pool)
         .await

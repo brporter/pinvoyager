@@ -3,7 +3,10 @@ use super::*;
 #[test]
 fn serde_applies_defaults_to_optional_configuration_sections() {
     let server: ServerConfig = serde_json::from_str("{}").expect("server defaults");
-    assert_eq!(server.bind, "127.0.0.1:8080".parse().unwrap());
+    assert_eq!(
+        server.bind,
+        "127.0.0.1:8080".parse().expect("valid test fixture")
+    );
     assert_eq!(server.shutdown_timeout_secs, 30);
     assert_eq!(server.request_timeout_secs, 30);
 
@@ -34,7 +37,10 @@ fn serde_applies_defaults_to_optional_configuration_sections() {
 
 #[test]
 fn load_reads_the_repository_configuration_and_default_values() {
-    let config = Config::load().expect("repository config is valid");
+    let config = Config::from_figment(Figment::from(Toml::string(include_str!(
+        "../../../config.toml"
+    ))))
+    .expect("repository config is valid");
 
     assert_eq!(config.database.max_connections, DEFAULT_MAX_CONNECTIONS);
     assert_eq!(config.database.min_connections, DEFAULT_MIN_CONNECTIONS);
@@ -42,7 +48,10 @@ fn load_reads_the_repository_configuration_and_default_values() {
         config.database.acquire_timeout_secs,
         DEFAULT_ACQUIRE_TIMEOUT_SECS
     );
-    assert_eq!(config.server.bind, "127.0.0.1:8080".parse().unwrap());
+    assert_eq!(
+        config.server.bind,
+        "127.0.0.1:8080".parse().expect("valid test fixture")
+    );
     assert!(config.auth.dev_login);
 }
 

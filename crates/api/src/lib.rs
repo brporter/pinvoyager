@@ -30,3 +30,7 @@ pub use state::AppState;
 #[cfg(test)]
 #[path = "../tests/support/photo_voyage.rs"]
 mod photo_voyage;
+
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+mod test_support;
