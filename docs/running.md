@@ -2,23 +2,22 @@
 
 ## Native prerequisites
 
-Phase 4 links against two C libraries, and needs a third tool to verify its
-central guarantee:
+The API uses libheif to decode HEIC images and libwebp to encode WebP variants. The
+tests use exiftool to check that generated variants contain no original GPS, timestamp,
+or camera metadata:
 
 ```sh
 brew install libheif webp pkg-config exiftool     # macOS
 # Debian/Ubuntu: libheif-dev libwebp-dev pkg-config libimage-exiftool-perl
 ```
 
-- **libheif** — `image` has no HEIC decoder at all. It is not a feature flag;
-  the decoder does not exist, largely because HEIC wraps HEVC. iPhones shoot
-  HEIC by default, so this is not optional (D9).
-- **libwebp** — the pure-Rust WebP encoder is lossless-only, and lossless WebP
-  on a photograph is typically larger than the source JPEG, which would invert
-  the reason for choosing WebP.
-- **exiftool** — the test suite runs it against generated variants to prove no
-  GPS, timestamp, or camera data survives. Without it that test cannot run, and
-  that test is what makes the granularity feature real rather than cosmetic.
+- **libheif 1.17 or newer**, with an HEVC decoder plugin, is required for HEIC
+  support. See `crates/api/src/photos/decode.rs::decode_heic` and D9 in
+  [implementation constraints](architecture/constraints.md).
+- **libwebp** supplies the lossy encoder used by
+  `crates/api/src/photos/variants.rs::encode_variant`.
+- **exiftool** is required by the metadata-removal tests in
+  `crates/api/src/photos/variants_tests.rs`. Those tests fail if it is unavailable.
 
 ## Prerequisites
 
@@ -34,15 +33,15 @@ brew install libheif webp pkg-config exiftool     # macOS
 ## First run
 
 ```sh
-docker compose up -d          # PostgreSQL only
+docker compose up -d          # PostgreSQL + Collector + Jaeger
 export DATABASE_URL='postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager'
 sqlx migrate run --source crates/api/migrations
 cargo run -p pinvoyager-api
 ```
 
-The committed `config.toml` already holds development values matching the
-Compose database, so no `.env` is needed for a host-side run. Copy one when you
-want to change something without editing a committed file:
+The committed `config.toml` already holds development values matching the Compose
+database, so no `.env` is needed for a host-side run. Copy one when you want to override
+settings locally:
 
 ```sh
 cp .env.example .env
@@ -57,13 +56,12 @@ curl localhost:8080/ready     # readiness — 503 if the database is unreachable
 ```
 
 The service also applies migrations at startup, so `sqlx migrate run` is only
-needed when you want the schema in place without booting the service. Phase 8
-moves migrations to a deploy step.
+needed when you want the schema in place without booting the service.
 
 ## Day to day
 
 ```sh
-docker compose up -d          # database up
+docker compose up -d          # development dependencies up
 docker compose ps             # `db` should read (healthy)
 docker compose logs -f db
 docker compose down           # stop; the pgdata volume survives
@@ -77,49 +75,62 @@ psql "$DATABASE_URL"          # shell into the database
 
 ## Signing in without provider credentials
 
-Debug builds expose a forged sign-in, so the rest of the product can be built
-before four sets of OAuth credentials exist. `config.toml` enables it.
+Debug builds can expose `/auth/dev/login` to create a session without provider
+credentials. The committed `config.toml` enables it.
 
 ```sh
 curl -i -X POST http://127.0.0.1:8080/auth/dev/login \
      -H 'content-type: application/json' \
-     -d '{"subject":"alice@example.test","display_name":"Alice"}'
+     -d '{"subject":"alice@example.test"}'
 ```
 
 The response sets a real session cookie; every authenticated endpoint then works
 normally. Re-running with the same `subject` signs in to the same account rather
 than creating a second one, exactly as a returning provider sign-in does.
+New accounts have no display name until they choose one in the app. The legacy
+`display_name` login field is accepted but ignored. Save a name using the
+authenticated `PATCH /api/me` endpoint. The name migration preserves valid unique
+handles and clears invalid, reserved, or duplicate legacy labels; those users
+will see the same prompt on their next visit. See [display names](display-names.md).
 
-`subject` is stored as the **provider subject**, not as an email — this service
-holds no email address anywhere. An email-shaped string is a memorable
-handle for choosing which account you are.
+The development provider stores `subject` as the account's provider identifier. The
+example uses an email-shaped string to make that identifier easy to remember.
 
-**This is a complete authentication bypass.** It is absent from release builds
-rather than disabled in them, because the route sits behind
-`#[cfg(debug_assertions)]`. To verify that claim rather than trust it:
+The route bypasses provider authentication. `#[cfg(debug_assertions)]` in
+`crates/api/src/http/auth.rs::routes` omits it from release builds. To check that the
+route string is absent from the release binary:
 
 ```sh
 SQLX_OFFLINE=true cargo build --release
 strings target/release/pinvoyager-api | grep -c '/auth/dev/login'   # must print 0
 ```
 
+## Reviewing image-processing traces
+
+`docker compose up -d` also starts an OpenTelemetry Collector and Jaeger.
+The committed API configuration exports to the Collector on port 4318.
+After creating a voyage and uploading photos, open [Jaeger](http://localhost:16686)
+and select `pinvoyager-api` and `POST /api/voyages`. Expand each
+`photo.process <photo UUID>` branch to compare queue wait, decode, resize,
+encode, and write times. See [tracing](tracing.md) for the full walkthrough,
+configuration, trace shape, and limitations.
+
 ## Watching for blocked runtime threads
 
-D8's rule is that nothing blocking may run on a runtime worker thread. That
-class of bug does not fail a test — it shows up as tail latency under
-concurrency — so `tokio-console` is how you actually see it.
+D8 requires CPU-heavy image work and blocking file operations to run off Tokio worker
+threads. Blocking a worker can delay other requests under concurrent load. Use
+`tokio-console` to inspect task activity; passing unit tests alone does not establish
+that runtime workers remain responsive.
 
 ```sh
 RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio-console
 tokio-console                 # in a second terminal
 ```
 
-**Both parts are required.** The feature flag installs the console layer, but
-tokio only emits task instrumentation under `--cfg tokio_unstable`; with the
-flag alone the console connects and shows nothing.
-
-The cfg is deliberately not set in `.cargo/config.toml`, because that would
-apply it to every build including the release binary in the container image.
+Both flags are required. The `tokio-console` feature installs the console layer; `--cfg
+tokio_unstable` enables Tokio task instrumentation. Without the latter, the console has
+no task data to display. Set it for this command only so ordinary builds do not include
+that instrumentation.
 
 ## Tests
 
@@ -129,7 +140,7 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 
 # Backend coverage (requires cargo-llvm-cov and PostgreSQL)
-# Run serially because shutdown tests send signals to their test process.
+# Use the same serial execution setting as the coverage check in CI.
 cargo coverage -- --test-threads=1
 ```
 
@@ -137,21 +148,27 @@ Install the coverage subcommand once with `cargo install cargo-llvm-cov --locked
 `cargo coverage` instruments all workspace tests and fails unless line,
 function, and region coverage each reach 100%. Start PostgreSQL and set
 `DATABASE_URL` as described under [First run](#first-run) first. See the
-[coverage plan](coverage-plan.md) for the current baseline, branch coverage
-limitation, and work needed to reach the thresholds.
+[test reference](testing.md) for coverage scope and test-environment limitations.
 
 The backend command uses stable Rust and checks lines, functions, and regions.
 Rust branch instrumentation requires nightly, so this project does not collect
 branch percentages. Tests should cover both outcomes of each meaningful
 conditional instead.
 
+### On-demand photo performance regression
+
+The large-image worker benchmark is ignored by normal test runs. It measures
+the `photo.resize` and `photo.encode` OpenTelemetry spans using 12- and
+24-megapixel JPEG, HEIC, and RGBA PNG inputs. See
+[photo performance](photo-performance.md) for the unoptimized/optimized commands,
+JSON reports, and saved-baseline regression checks.
+
 ### Web upload regression checks
 
 Run `npm --prefix web run test:regression` for the upload controls, creation
 screen, polling lifecycle, and first-visit route integration. Run
 `npm --prefix web run test -- --coverage`, type checking, lint, and build for
-full frontend validation. See `docs/upload-regression-tests.md` for native HEIC
-checks, regression sensitivity, browser checks, and the execution results.
+full frontend validation. See [testing](testing.md) for native HEIC suites and the limits of browser substitutes.
 
 ## Queries and the offline cache
 
@@ -167,34 +184,43 @@ and has no database to check against.
 
 ## Container
 
+The Dockerfile uses Debian trixie and the libheif 1.17 API feature set supported
+by its packaged native library. The runtime installs the HEVC decoder plugin.
+The API runs as uid 10001, stores uploads at `/data`, and Compose mounts the
+persistent `uploads` volume there.
+
 ```sh
 docker build -t pinvoyager-api .
 docker compose --profile api up --build    # database + service together
 ```
 
-The service in Compose reaches the database at host `db`, not `localhost`, and
-waits for its healthcheck before starting — otherwise it races initdb and fails
-its first migration.
+The API container connects to PostgreSQL at host `db`. Compose waits for the database
+healthcheck to pass before starting the API so startup migrations can connect to an
+initialized database.
 
 Notes on the image:
 
-- It ships **no `config.toml`**. That file is a development file pointing at a
-  localhost database; baking it in would give a container a fallback that
-  quietly hides a missing `PINVOYAGER__DATABASE__URL`. In a container the
-  environment is the only configuration source.
-- Runs as a non-root user (`app`, uid 10001). `/data` is the one writable
-  directory it owns; phase 4 uploads go there.
-- Binds `0.0.0.0:8080`. A loopback bind inside a container is unreachable from
-  outside it, so the image sets `PINVOYAGER__SERVER__BIND` itself. Overriding it
-  means also overriding the image's `HEALTHCHECK`, which is hardcoded to that
-  port.
-- Dependencies compile in a layer keyed on the manifests alone, so a source-only
-  change does not recompile every crate. Touching `Cargo.toml` or `Cargo.lock`
-  does — that is expected and takes a while.
+- The image omits the development `config.toml`. Set
+  `PINVOYAGER__DATABASE__URL` in the environment; the development database URL
+  is not available as a fallback.
+- The API runs as a non-root user (`app`, uid 10001). `/data` is the one writable
+  directory it owns. The image sets the storage root to `/data`, and Compose
+  mounts its named `uploads` volume there. Compose supplies the required
+  authentication callback origin through `PINVOYAGER__AUTH__BASE_URL`, defaulting
+  to `http://localhost:8080`. Set it to the externally reachable API origin when
+  using another port or a proxy.
+- The API binds `0.0.0.0:8080` so callers outside the container can reach it.
+  The image sets `PINVOYAGER__SERVER__BIND` and a `HEALTHCHECK` using port 8080.
+  Update the healthcheck if you change the bind port.
+- Docker caches dependency compilation in a layer based on the Cargo manifests
+  and lockfile. Changing application source reuses that layer; changing a
+  manifest or `Cargo.lock` rebuilds it.
 
 ```sh
 docker run --rm -p 8080:8080 \
   -e PINVOYAGER__DATABASE__URL='postgres://pinvoyager:pinvoyager@host.docker.internal:5432/pinvoyager' \
+  -e PINVOYAGER__PHOTOS__STORAGE_ROOT=/data \
+  -v pinvoyager-uploads:/data \
   -e PINVOYAGER__DATABASE__MAX_CONNECTIONS=10 \
   -e PINVOYAGER__DATABASE__MIN_CONNECTIONS=1 \
   -e PINVOYAGER__DATABASE__ACQUIRE_TIMEOUT_SECS=5 \
@@ -208,5 +234,5 @@ docker run --rm -p 8080:8080 \
 | Startup fails naming a setting | It has no default and no value. See `.env.example`. |
 | `port is already allocated` | Something else holds 5432. Set `POSTGRES_PORT` in `.env` and update both URLs. |
 | Connection refused from the container | Used `localhost` where the container needs `db` (Compose) or `host.docker.internal` (plain `docker run`). |
-| `db` never reaches `healthy` | `docker compose logs db` — usually a half-initialized volume. `docker compose down -v`. |
+| `db` never reaches `healthy` | Inspect `docker compose logs db` and the existing volume before changing database storage. |
 | Container build fails on a `query!` macro | The `.sqlx` cache is stale. Rerun `cargo sqlx prepare`. |
