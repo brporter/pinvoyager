@@ -1,8 +1,5 @@
 //! Server-side sessions.
 //!
-//! CONTRACT — signatures below are fixed; implementations are owned by the
-//! session agent.
-//!
 //! Sessions are server-side so they can be **revoked**. A self-contained signed
 //! cookie cannot be invalidated before it expires, which matters more here than
 //! in a typical application: with social-only sign-in the account *is* the
@@ -182,8 +179,7 @@ pub async fn revoke(
     Ok(())
 }
 
-/// Destroys every session for a user. Phase 8's account deletion needs this,
-/// and it is the mechanism behind any future "sign me out everywhere".
+/// Revokes every active session for the account.
 pub async fn revoke_all_for_user(
     executor: impl PgExecutor<'_>,
     user_id: Uuid,

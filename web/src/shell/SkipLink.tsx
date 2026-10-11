@@ -4,8 +4,7 @@
  * The design system provides `.pv-sr`, which hides an element from sight
  * permanently — correct for a label, wrong for a skip link, which has to become
  * visible when it receives focus or it is a control a keyboard user can reach
- * and cannot see. The usual fix is a `:focus` rule in CSS; this phase writes no
- * CSS, so the same effect is produced by swapping the class on focus.
+ * and cannot see. Focus state swaps the hidden class for the visible treatment.
  */
 
 import { useState } from "react";

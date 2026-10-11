@@ -1,45 +1,4 @@
-/**
- * Route table and application shell.
- *
- * CONTRACT — the route paths below are fixed; the screens and the shell are
- * owned by the routing agent and the screens agent.
- *
- * Every screen in `design/screens/` has a route here. The design is the
- * specification: if a screen exists there, it has a route, and if a route
- * exists here, there is a design for it.
- *
- * | path                  | design file                       | auth           |
- * |-----------------------|-----------------------------------|----------------|
- * | `/`                   | screens/discover.html             | public         |
- * | `/voyages/:id`        | screens/voyage-detail.html        | public if published |
- * | `/voyages/:id/edit`   | screens/voyage-edit.html          | owner          |
- * | `/upload`             | screens/upload-flow.html          | required       |
- * | `/u/:userId`          | screens/profile.html              | public         |
- * | `/settings`           | screens/settings.html             | required       |
- * | `/signin`             | screens/sign-in.html              | public         |
- * | `/auth/callback`      | screens/auth-states.html          | public         |
- * | anything else         | screens/not-found.html            | public         |
- *
- * Note what "public" means here: most of this application is readable without
- * an account, because every published voyage is world-readable. A signed-out
- * visitor is an ordinary user of this site, not someone being held at a gate,
- * and the navigation reflects that.
- *
- * ## Structure
- *
- * The paths above are unchanged; what surrounds them is three layout routes.
- *
- *  * `AppShell` — the top bar, and the tab bar below the `md` breakpoint. Every
- *    ordinary route, including the 404.
- *  * `RequireAuth` — the three routes that need a session. It redirects rather
- *    than refusing, carrying a validated `redirect_to`, and it is a routing
- *    convenience rather than access control: the server owns that, and
- *    `/voyages/:id/edit` is owner-only in a way the client cannot check.
- *  * `AuthShell` — sign-in and the callback, which the design draws with the
- *    brand alone and no navigation. A screen that exists to make one decision
- *    should not offer four ways to leave it, and the tab bar in particular
- *    would offer tabs that route straight back here.
- */
+/** Application routes, session context, and display-name requirements. */
 
 import { Route, Routes } from "react-router";
 
@@ -67,7 +26,7 @@ export function App() {
           <Route element={<AppShell />}>
             <Route path="/" element={<Discover />} />
             <Route path="/voyages/:id" element={<VoyageDetail />} />
-            <Route path="/u/:userId" element={<Profile />} />
+            <Route path="/u/:identifier" element={<Profile />} />
 
             <Route element={<RequireAuth />}>
               <Route path="/voyages/:id/edit" element={<VoyageEdit />} />

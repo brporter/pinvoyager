@@ -85,9 +85,7 @@ describe("destinationOr", () => {
 
 describe("signInPath", () => {
   it("carries a validated destination and encodes it", () => {
-    expect(signInPath("/voyages/abc/edit")).toBe(
-      "/signin?redirect_to=%2Fvoyages%2Fabc%2Fedit",
-    );
+    expect(signInPath("/voyages/abc/edit")).toBe("/signin?redirect_to=%2Fvoyages%2Fabc%2Fedit");
   });
 
   it("drops a destination that does not pass instead of forwarding it", () => {

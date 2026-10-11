@@ -1,27 +1,14 @@
-//! Sign in with Apple.
+//! Sign in with Apple, using the shared OIDC verification path.
 //!
-//! Apple is OIDC, and the verification path is the shared one in [`super::oidc`].
-//! Three things are not shared, and each one reshapes something:
-//!
-//! 1. **The client secret is not a string, it is a JWT we mint.** Apple gives
-//!    you a `.p8` ES256 private key and a key ID; the `client_secret` sent to
-//!    the token endpoint is a short-lived JWT signed with it, valid for at most
-//!    six months. So the secret has a lifetime, has to be cached, and has to be
-//!    regenerated before it lapses — [`AppleClientSecret`].
-//! 2. **`response_mode=form_post`.** Apple requires it whenever a scope beyond
-//!    `openid` is requested, and returns the callback as an HTML form POST
-//!    rather than a redirect with query parameters. That is why phase 3 has a
-//!    `POST /auth/apple/callback` at all.
-//! 3. **The name arrives once, in the POST body, and never again.** It is not in
-//!    the ID token, it is not at any userinfo endpoint, and re-authorizing does
-//!    not bring it back — only revoking the app in the user's Apple ID settings
-//!    and starting over does. Absent is the *normal* case, not an error.
+//! Apple requires an ES256 JWT as the client secret. `AppleClientSecret`
+//! caches that signature and renews it before expiry. Authorization uses a
+//! form-POST callback; provider names and email addresses are not requested.
 
 use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
-use openidconnect::{ClientSecret, Scope};
+use openidconnect::ClientSecret;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -84,14 +71,8 @@ impl AppleProvider {
             &config.client_id,
             secret,
             super::callback_uri(base_url, ProviderKind::Apple)?,
-            // `name` is the only extra scope worth asking for. `email` is not
-            // requested: this service does not store an email address, and Apple
-            // would otherwise hand us a private-relay address we would have to
-            // throw away.
-            vec![Scope::new("name".to_owned())],
-            // Required by Apple whenever a scope beyond `openid` is requested,
-            // and the reason the Apple callback is a POST. Omitting it makes
-            // Apple reject the authorization request outright.
+            vec![],
+            // Keep the callback transport consistent with the registered Apple flow.
             vec![("response_mode", "form_post")],
         )
         .await?;
@@ -115,73 +96,9 @@ impl crate::auth::AuthProvider for AppleProvider {
         code: &str,
         pkce_verifier: &str,
         nonce: &str,
-        form_body: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError> {
-        let mut identity = self.core.exchange(code, pkce_verifier, nonce).await?;
-
-        // First authorization only, and nowhere else. If it is not taken from
-        // this body it is gone permanently, so it is read before anything can
-        // return early — but its absence is never a failure.
-        if let Some(name) = display_name_from_form_body(form_body) {
-            identity.display_name = Some(name);
-        }
-
-        Ok(identity)
+        self.core.exchange(code, pkce_verifier, nonce).await
     }
-}
-
-/// The `user` field Apple form-POSTs on first authorization.
-///
-/// Apple also puts an `email` (and `isPrivateEmail`) in here. They are
-/// deliberately not fields on this struct: serde ignores what it is not asked
-/// for, so the address is dropped at the parse boundary rather than existing in
-/// a variable someone could later decide to store (D1).
-#[derive(Debug, Deserialize)]
-struct AppleUserPayload {
-    name: Option<AppleName>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AppleName {
-    #[serde(rename = "firstName")]
-    first_name: Option<String>,
-    #[serde(rename = "lastName")]
-    last_name: Option<String>,
-}
-
-/// Digs the display name out of Apple's form-POST body.
-///
-/// Every failure here is `None`, never an error. A missing `user` field is the
-/// ordinary case for every sign-in after the first, and even a malformed one is
-/// not worth failing a sign-in over — the name is decoration, the subject is the
-/// identity.
-fn display_name_from_form_body(form_body: Option<&str>) -> Option<String> {
-    let body = form_body?;
-
-    let raw = url::form_urlencoded::parse(body.as_bytes())
-        .find(|(key, _)| key == "user")
-        .map(|(_, value)| value)?;
-
-    let payload = match serde_json::from_str::<AppleUserPayload>(&raw) {
-        Ok(payload) => payload,
-        Err(err) => {
-            // Worth a log: if Apple changes this shape, first authorizations
-            // silently stop carrying names and nothing else would say so.
-            tracing::warn!(error = %err, "could not parse Apple's `user` form field");
-            return None;
-        }
-    };
-
-    let name = payload.name?;
-    let full = [name.first_name.as_deref(), name.last_name.as_deref()]
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    (!full.is_empty()).then_some(full)
 }
 
 /// Mints and caches Apple's client-secret JWT.

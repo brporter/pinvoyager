@@ -17,7 +17,7 @@ import type { Me } from "../../api/types";
 export const SIGNED_IN: Me = {
   user: {
     id: "0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
-    display_name: "Ada Lovelace",
+    display_name: "ada-lovelace",
     avatar_url: null,
     created_at: "2026-02-01T10:00:00Z",
   },

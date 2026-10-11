@@ -1,7 +1,6 @@
 use super::*;
 
-#[path = "../../../tests/support/mod.rs"]
-mod support;
+use crate::test_support as support;
 
 #[test]
 fn a_configured_issuer_keeps_the_spelling_the_provider_uses() {
@@ -122,13 +121,23 @@ async fn standard_provider_authorizes_and_exchanges_without_an_apple_form_body()
     let redirect = provider.authorize().expect("authorization should succeed");
     assert_eq!(redirect.url.host_str(), mock.issuer().host_str());
 
-    let code = mock.token().issue();
+    let code = mock
+        .token()
+        .claim(
+            "picture",
+            serde_json::json!("https://images.example/avatar.jpg"),
+        )
+        .issue();
     let identity = provider
-        .exchange(&code, support::PKCE_VERIFIER, support::NONCE, None)
+        .exchange(&code, support::PKCE_VERIFIER, support::NONCE)
         .await
         .expect("the adapter should delegate the verified OIDC exchange");
     assert_eq!(identity.provider, ProviderKind::Google);
     assert_eq!(identity.subject, support::SUBJECT);
+    assert_eq!(
+        identity.avatar_url.as_deref(),
+        Some("https://images.example/avatar.jpg")
+    );
 }
 
 #[tokio::test]
@@ -182,4 +191,37 @@ async fn unknown_signing_key_refetches_jwks_once_then_still_rejects_the_token() 
 
     assert!(matches!(error, AuthError::TokenVerification(_)));
     assert_eq!(mock.jwks_requests(), before + 1);
+}
+
+#[tokio::test]
+async fn stopped_provider_is_reported_at_discovery_exchange_and_key_refresh() {
+    let mock = support::MockOidcProvider::start().await;
+    let core = core_for_test(&mock, Vec::new()).await;
+    let issuer = mock.issuer().clone();
+    drop(mock);
+    tokio::task::yield_now().await;
+    assert!(matches!(
+        core.exchange("unused", support::PKCE_VERIFIER, support::NONCE)
+            .await,
+        Err(AuthError::Provider(_))
+    ));
+    core.metadata.write().expect("metadata").jwks_fetched_at =
+        Instant::now() - JWKS_MIN_REFETCH_INTERVAL - Duration::from_secs(1);
+    assert!(matches!(
+        core.refresh_jwks().await,
+        Err(AuthError::Provider(_))
+    ));
+    let discovered = OidcCore::discover(
+        ProviderKind::Google,
+        &issuer,
+        support::CLIENT_ID,
+        Arc::new(StaticClientSecret::new(&SecretString::from(
+            support::CLIENT_SECRET,
+        ))),
+        RedirectUrl::new("http://pinvoyager.example/auth/google/callback".to_owned()).expect("URL"),
+        vec![],
+        vec![],
+    )
+    .await;
+    assert!(matches!(discovered, Err(AuthError::Configuration(_))));
 }

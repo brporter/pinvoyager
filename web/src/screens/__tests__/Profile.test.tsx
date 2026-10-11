@@ -12,7 +12,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useVoyages } from "../../api/hooks";
+import { useVoyages, usePublicProfile } from "../../api/hooks";
 import { Profile } from "../Profile";
 import {
   ADA,
@@ -20,18 +20,21 @@ import {
   apiFailure,
   authState,
   draft,
-  feedResult,
   loadedFeed,
+  feedResult,
   renderScreen,
   voyage,
 } from "./support";
 
-vi.mock("../../api/hooks", () => ({ useVoyages: vi.fn() }));
+vi.mock("../../api/hooks", () => ({ useVoyages: vi.fn(), usePublicProfile: vi.fn() }));
 
 const mockedUseVoyages = vi.mocked(useVoyages);
 
-function renderProfile(userId: string, auth = authState(null)) {
-  return renderScreen(<Profile />, { path: `/u/${userId}`, route: "/u/:userId", auth });
+function renderProfile(
+  userId: string,
+  auth: import("../../auth/context").AuthState = authState(ADA),
+) {
+  return renderScreen(<Profile />, { path: `/u/${userId}`, route: "/u/:identifier", auth });
 }
 
 beforeEach(() => {
@@ -48,45 +51,28 @@ describe("Profile", () => {
     renderProfile(ADA.id, authState(ADA));
 
     expect(screen.getByText("Draft")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /sanriku coast, unfinished/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /sanriku coast, unfinished/i })).toBeInTheDocument();
 
     // And asks for the list that contains drafts in the first place.
     expect(mockedUseVoyages).toHaveBeenCalledWith({ mine: true });
   });
 
-  it("shows a stranger no draft badge and no draft", () => {
-    // The public feed never returns one; the screen must not invent a place
-    // for it either.
-    mockedUseVoyages.mockReturnValue(loadedFeed([voyage()]));
-    renderProfile(ADA.id);
-
-    expect(screen.queryByText("Draft")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /three weeks in hokkaido/i })).toBeInTheDocument();
-    expect(mockedUseVoyages).toHaveBeenCalledWith({});
-  });
-
-  it("does not badge a draft that leaked into a stranger's feed", () => {
-    // Belt and braces: even if the API ever returned one, this view would not
-    // announce which side of the publish line it is on.
-    mockedUseVoyages.mockReturnValue(loadedFeed([draft(), voyage()]));
-    renderProfile(ADA.id);
-
-    expect(screen.queryByText("Draft")).not.toBeInTheDocument();
-  });
-
-  it("lists only that creator's voyages out of the public feed", () => {
+  it("shows processed voyage covers alongside draft badges and leaves empty voyages without images", () => {
     mockedUseVoyages.mockReturnValue(
       loadedFeed([
-        voyage({ id: "mine", title: "Coastal, in fog" }),
-        voyage({ id: "theirs", owner_id: STRANGER_ID, title: "Desert roads" }),
+        draft({ cover_url: "/api/photos/draft-cover/thumb" }),
+        voyage({ cover_url: "/api/photos/public-cover/thumb" }),
+        voyage({ id: "empty", title: "Empty voyage", cover_url: null }),
       ]),
     );
-    renderProfile(ADA.id);
-
-    expect(screen.getByRole("link", { name: /coastal, in fog/i })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /desert roads/i })).not.toBeInTheDocument();
+    const { container } = renderProfile(ADA.id, authState(ADA));
+    expect(
+      Array.from(container.querySelectorAll(".pv-voyage-card img"), (image) =>
+        image.getAttribute("src"),
+      ),
+    ).toEqual(["/api/photos/draft-cover/thumb", "/api/photos/public-cover/thumb"]);
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /empty voyage/i })).toBeInTheDocument();
   });
 
   it("has no follower count and no follow button", () => {
@@ -104,7 +90,7 @@ describe("Profile", () => {
     mockedUseVoyages.mockReturnValue(loadedFeed([draft(), voyage()]));
     renderProfile(ADA.id, authState(ADA));
 
-    expect(screen.getByRole("heading", { name: "Ada Lovelace", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ada-lovelace", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("1 voyage · 1 draft")).toBeInTheDocument();
   });
 
@@ -142,18 +128,14 @@ describe("Profile", () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     } as unknown as MediaQueryList;
-    vi.stubGlobal("matchMedia", vi.fn(() => mediaQuery));
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => mediaQuery),
+    );
     mockedUseVoyages.mockReturnValue(loadedFeed([voyage()]));
     renderProfile(ADA.id, authState(ADA));
 
     expect(screen.getByText(/joined .*2026/)).toBeInTheDocument();
-  });
-
-  it("shows the empty state only once the feed is exhausted", () => {
-    mockedUseVoyages.mockReturnValue(loadedFeed([]));
-    renderProfile(ADA.id);
-
-    expect(screen.getByRole("heading", { name: "No public voyages" })).toBeInTheDocument();
   });
 
   it("offers the owner a way to start rather than an empty grid", () => {
@@ -162,17 +144,6 @@ describe("Profile", () => {
 
     expect(screen.getByRole("heading", { name: "No voyages yet" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Upload photos" })).toHaveAttribute("href", "/upload");
-  });
-
-  it("keeps a page of a stranger's feed from claiming the creator has nothing", () => {
-    // None of this page belongs to them, but there are more pages to come.
-    mockedUseVoyages.mockReturnValue(
-      loadedFeed([voyage({ owner_id: STRANGER_ID })], "cursor-2"),
-    );
-    renderProfile(ADA.id);
-
-    expect(screen.queryByRole("heading", { name: "No public voyages" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Load more voyages" })).toBeInTheDocument();
   });
 
   it("renders the error state rather than throwing", () => {
@@ -208,23 +179,33 @@ describe("Profile", () => {
     expect(screen.queryByText("Draft")).not.toBeInTheDocument();
   });
 
-  it("copes with a creator who has no name and no picture", () => {
-    // An Apple-only account whose first authorization was not captured has
-    // neither, and a stranger's name is not on the wire at all.
-    mockedUseVoyages.mockReturnValue(feedResult({ isPending: true }));
-    renderProfile(STRANGER_ID);
-
-    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "This creator" })).toBeInTheDocument();
-  });
-
   it("labels an owner's avatar when the account has no name or picture", () => {
     mockedUseVoyages.mockReturnValue(loadedFeed([]));
-    renderProfile(
-      ADA.id,
-      authState({ ...ADA, display_name: null, avatar_url: null }),
-    );
+    renderProfile(ADA.id, authState({ ...ADA, display_name: null, avatar_url: null }));
 
     expect(screen.getByRole("img", { name: "Your account" })).toBeInTheDocument();
   });
+});
+
+it("loads the requested stranger's public profile without scanning discovery", () => {
+  vi.mocked(usePublicProfile).mockReturnValue({
+    ...feedResult(),
+    data: {
+      pages: [{ user: { ...ADA, id: STRANGER_ID }, voyages: [voyage()], next_before: null }],
+      pageParams: [null],
+    },
+  } as ReturnType<typeof usePublicProfile>);
+  renderProfile(STRANGER_ID, authState(ADA));
+  expect(mockedUseVoyages).not.toHaveBeenCalled();
+  expect(usePublicProfile).toHaveBeenCalledWith(STRANGER_ID);
+  expect(screen.getByRole("link", { name: /Three weeks in Hokkaido/i })).toBeInTheDocument();
+});
+
+it("shows loading while the owner's voyage query is pending", () => {
+  mockedUseVoyages.mockReturnValue({ isPending: true } as ReturnType<typeof useVoyages>);
+  renderProfile(ADA.id);
+  expect(screen.getByRole("list", { name: "Loading voyages" })).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
 });

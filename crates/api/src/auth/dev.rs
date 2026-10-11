@@ -27,7 +27,7 @@
 //! The caller supplies a `subject`, and an email-shaped string is the natural
 //! thing to type. It is stored as the provider subject — an opaque identifier
 //! that merely looks like an email — because this service stores no email
-//! address anywhere (D3, and phase 3's resolved question). Nothing parses it,
+//! address anywhere (D3). Nothing parses it,
 //! nothing mails it, and it never appears in a response.
 
 use axum::Json;
@@ -52,9 +52,8 @@ pub struct DevLoginRequest {
     /// Google, which is only a convenience — nothing contacts it.
     #[serde(default)]
     pub provider: Option<String>,
-    /// Optional display name for a freshly created account. Ignored when the
-    /// account already exists, matching the real flow: a returning sign-in does
-    /// not overwrite the user's name with whatever the provider currently says.
+    /// Legacy request field, accepted but ignored. Like real sign-in, a new
+    /// account chooses its unique public name through PATCH /api/me (D14).
     #[serde(default)]
     pub display_name: Option<String>,
 }
@@ -105,7 +104,7 @@ pub async fn login(
     {
         Some(identity) => identity.user_id,
         None => {
-            let user = users::create(&mut *tx, request.display_name.as_deref(), None).await?;
+            let user = users::create(&mut *tx, None, None).await?;
             identities::create(&mut *tx, user.id, db_provider, &request.subject).await?;
             user.id
         }

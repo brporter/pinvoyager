@@ -4,8 +4,7 @@ use crate::config::{
 };
 use secrecy::SecretString;
 
-#[path = "../../tests/support/mod.rs"]
-mod support;
+use crate::test_support as support;
 
 const APPLE_TEST_KEY: &str = "-----BEGIN PRIVATE KEY-----\n\
         MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg5XYNJMqUWV4t8Ive\n\
@@ -29,7 +28,7 @@ fn a_deployment_with_no_credentials_still_has_a_registry() {
 async fn configured_apple_provider_is_discovered_and_registered() {
     let mock = support::MockOidcProvider::start().await;
     let config = AuthConfig {
-        base_url: url::Url::parse("http://pinvoyager.example").unwrap(),
+        base_url: url::Url::parse("http://pinvoyager.example").expect("valid test fixture"),
         session: Default::default(),
         providers: ProvidersConfig {
             apple: Some(AppleProviderConfig {
@@ -43,13 +42,15 @@ async fn configured_apple_provider_is_discovered_and_registered() {
         dev_login: false,
     };
 
-    let registry = ProviderRegistry::from_config_with_apple_issuer(&config, mock.issuer().as_str())
-        .await
-        .expect("registry construction is non-fatal");
+    let registry =
+        ProviderRegistry::from_config_with_apple_issuer(&config, mock.issuer().as_str()).await;
 
     assert_eq!(registry.configured(), vec![ProviderKind::Apple]);
     assert_eq!(
-        registry.get(ProviderKind::Apple).unwrap().kind(),
+        registry
+            .get(ProviderKind::Apple)
+            .expect("valid test fixture")
+            .kind(),
         ProviderKind::Apple
     );
 }
@@ -58,7 +59,7 @@ async fn configured_apple_provider_is_discovered_and_registered() {
 async fn every_configured_provider_is_discovered_registered_and_authorizable() {
     let mock = support::MockOidcProvider::start().await;
     let config = AuthConfig {
-        base_url: url::Url::parse("http://pinvoyager.example").unwrap(),
+        base_url: url::Url::parse("http://pinvoyager.example").expect("valid test fixture"),
         session: Default::default(),
         providers: ProvidersConfig {
             google: Some(OidcProviderConfig {
@@ -85,9 +86,8 @@ async fn every_configured_provider_is_discovered_registered_and_authorizable() {
         dev_login: false,
     };
 
-    let registry = ProviderRegistry::from_config_with_apple_issuer(&config, mock.issuer().as_str())
-        .await
-        .expect("all four configured providers should initialize");
+    let registry =
+        ProviderRegistry::from_config_with_apple_issuer(&config, mock.issuer().as_str()).await;
 
     assert_eq!(
         registry.configured(),
@@ -108,7 +108,7 @@ async fn every_configured_provider_is_discovered_registered_and_authorizable() {
 #[tokio::test]
 async fn a_provider_that_fails_startup_discovery_is_disabled_without_stopping_startup() {
     let config = AuthConfig {
-        base_url: url::Url::parse("http://pinvoyager.example").unwrap(),
+        base_url: url::Url::parse("http://pinvoyager.example").expect("valid test fixture"),
         session: Default::default(),
         providers: ProvidersConfig {
             apple: Some(AppleProviderConfig {
@@ -124,8 +124,7 @@ async fn a_provider_that_fails_startup_discovery_is_disabled_without_stopping_st
 
     let registry =
         ProviderRegistry::from_config_with_apple_issuer(&config, "http://127.0.0.1:1/unreachable")
-            .await
-            .expect("one disabled provider does not fail startup");
+            .await;
 
     assert!(registry.configured().is_empty());
     assert!(registry.get(ProviderKind::Apple).is_none());

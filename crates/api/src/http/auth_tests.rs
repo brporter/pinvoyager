@@ -17,12 +17,11 @@ impl crate::auth::AuthProvider for MislabelledProvider {
         _code: &str,
         _pkce_verifier: &str,
         _nonce: &str,
-        _form_body: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError> {
         Ok(VerifiedIdentity {
             provider: ProviderKind::Facebook,
             subject: "mislabelled-subject".to_owned(),
-            display_name: None,
+
             avatar_url: None,
         })
     }
@@ -67,12 +66,11 @@ impl crate::auth::AuthProvider for StaticIdentityProvider {
         _code: &str,
         _pkce_verifier: &str,
         _nonce: &str,
-        _form_body: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError> {
         Ok(VerifiedIdentity {
             provider: ProviderKind::Google,
             subject: "simulated-concurrent-first-sign-in".to_owned(),
-            display_name: Some("No account survives the collision".to_owned()),
+
             avatar_url: None,
         })
     }
@@ -134,7 +132,6 @@ async fn concurrent_first_sign_in_unique_violation_is_a_safe_rejection(pool: sql
             code: Some("code"),
             state: Some(state),
             error: None,
-            form_body: None,
         },
     )
     .await;
@@ -206,7 +203,6 @@ async fn link_unique_violation_is_reported_as_already_linked(pool: sqlx::PgPool)
             code: Some("code"),
             state: Some(state),
             error: None,
-            form_body: None,
         },
     )
     .await;
@@ -273,7 +269,6 @@ async fn callback_rejects_an_identity_labelled_as_another_provider(pool: sqlx::P
             code: Some("code"),
             state: Some(state),
             error: None,
-            form_body: None,
         },
     )
     .await;
@@ -306,7 +301,7 @@ fn session_cookie_attributes_match_session_configuration() {
     assert_eq!(cookie.path(), Some("/"));
     assert_eq!(
         cookie.max_age().map(|age| age.whole_seconds()),
-        Some(86_400)
+        Some(604_800)
     );
 }
 
@@ -338,8 +333,14 @@ fn cookie_seconds_clamp_instead_of_wrapping() {
 
 #[test]
 fn provider_parser_accepts_known_names_and_hides_unknown_names() {
-    assert_eq!(parse_provider("google").unwrap(), ProviderKind::Google);
-    assert_eq!(parse_provider("apple").unwrap(), ProviderKind::Apple);
+    assert_eq!(
+        parse_provider("google").expect("valid test fixture"),
+        ProviderKind::Google
+    );
+    assert_eq!(
+        parse_provider("apple").expect("valid test fixture"),
+        ProviderKind::Apple
+    );
     assert!(matches!(
         parse_provider("not-configured"),
         Err(AppError::NotFound)

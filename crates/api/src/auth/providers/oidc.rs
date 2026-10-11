@@ -117,8 +117,12 @@ fn issuer_url(issuer: &Url) -> Result<IssuerUrl, AuthError> {
         ));
     }
 
-    IssuerUrl::new(issuer.as_str().trim_end_matches('/').to_owned())
-        .map_err(|err| AuthError::Configuration(format!("invalid issuer URL: {err}")))
+    // Removing trailing slashes from an already parsed HTTP URL cannot
+    // invalidate it. Preserve the raw spelling required for issuer comparison.
+    Ok(
+        IssuerUrl::new(issuer.as_str().trim_end_matches('/').to_owned())
+            .expect("a normalized HTTP issuer remains a valid URL"),
+    )
 }
 
 impl OidcCore {
@@ -279,13 +283,6 @@ impl OidcCore {
         Ok(VerifiedIdentity {
             provider: self.kind,
             subject: claims.subject().as_str().to_owned(),
-            // Absent for Apple, which sends the name in the form body on first
-            // authorization only, and often absent for Microsoft. Optional
-            // everywhere rather than defaulted to something invented.
-            display_name: claims
-                .name()
-                .and_then(|name| name.get(None))
-                .map(|name| name.as_str().to_owned()),
             avatar_url: claims
                 .picture()
                 .and_then(|picture| picture.get(None))
@@ -387,7 +384,6 @@ impl crate::auth::AuthProvider for StandardOidcProvider {
         code: &str,
         pkce_verifier: &str,
         nonce: &str,
-        _form_body: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError> {
         // No form body: only Apple posts one, and only on first authorization.
         self.core.exchange(code, pkce_verifier, nonce).await

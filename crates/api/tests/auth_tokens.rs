@@ -1,4 +1,4 @@
-//! Crafted-token verification (phase 3, T3).
+//! Crafted-token verification.
 //!
 //! > A token signed by the wrong key, with the wrong `aud`, expired, or with a
 //! > mismatched `nonce` is rejected in each case. Test with crafted tokens, not
@@ -49,9 +49,7 @@ async fn registry_for(mock: &MockOidcProvider) -> ProviderRegistry {
     }))
     .expect("the mock's auth configuration should deserialize");
 
-    ProviderRegistry::from_config(&config)
-        .await
-        .expect("building a registry against a reachable provider should succeed")
+    ProviderRegistry::from_config(&config).await
 }
 
 /// A provider that failed discovery is *disabled*, not fatal — which is correct
@@ -99,7 +97,7 @@ fn assert_rejected(result: Result<VerifiedIdentity, AuthError>, what: &str) {
 // discovery document, or published a key that did not correspond to the one it
 // signs with, then every rejection test would pass without the service ever
 // having verified anything. It also needs no provider implementation, so it
-// keeps working as a smoke test while the rest of phase 3 is in flight.
+// verifies that the mock provider can issue a token accepted by the verifier.
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -185,7 +183,7 @@ async fn a_correctly_formed_token_verifies() {
 
     let code = mock.token().issue();
     let identity = provider(&registry)
-        .exchange(&code, PKCE_VERIFIER, NONCE, None)
+        .exchange(&code, PKCE_VERIFIER, NONCE)
         .await
         .expect("a token with correct signature, issuer, audience, expiry and nonce must verify");
 
@@ -221,7 +219,7 @@ async fn a_token_signed_by_a_different_key_is_rejected() {
 
     assert_rejected(
         provider(&registry)
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token signed by a key that is not in the JWKS, bearing the published kid",
     );
@@ -240,7 +238,7 @@ async fn a_token_bearing_an_unknown_kid_is_rejected_without_hammering_the_jwks()
 
     assert_rejected(
         provider(&registry)
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token signed by an unpublished key and bearing an unknown kid",
     );
@@ -268,7 +266,7 @@ async fn a_token_for_a_different_audience_is_rejected() {
 
     assert_rejected(
         provider(&registry)
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token whose `aud` is another client",
     );
@@ -289,7 +287,7 @@ async fn a_token_from_a_different_issuer_is_rejected() {
 
     assert_rejected(
         provider(&registry)
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token whose `iss` is not the provider discovery was performed against",
     );
@@ -311,7 +309,7 @@ async fn an_expired_token_is_rejected() {
 
     assert_rejected(
         provider(&registry)
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token that expired an hour ago",
     );
@@ -335,7 +333,7 @@ async fn a_token_whose_nonce_does_not_match_the_attempt_is_rejected() {
     assert_rejected(
         provider(&registry)
             // The attempt's nonce, which the token does not carry.
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token carrying a nonce from a different attempt",
     );
@@ -354,7 +352,7 @@ async fn a_token_with_no_nonce_at_all_is_rejected() {
 
     assert_rejected(
         provider(&registry)
-            .exchange(&code, PKCE_VERIFIER, NONCE, None)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
             .await,
         "a token with no `nonce` claim, against an attempt that has one",
     );

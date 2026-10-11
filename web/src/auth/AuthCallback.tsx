@@ -1,41 +1,4 @@
-/**
- * `/auth/callback` — `design/screens/auth-states.html`.
- *
- * Everything that happens after the redirect back from a provider. Four states:
- * verifying, canceled, provider conflict, and one generic failure.
- *
- * ## Why the failures all look the same
- *
- * A rejected `state`, a replayed callback, an expired attempt, a bad signature
- * and a nonce mismatch produce one screen and one sentence. Distinguishing them
- * for the user distinguishes them for someone probing the endpoint; the real
- * cause goes to the server log against the request id, which is the reference
- * this screen asks the user to quote. That is why the copy below never tries to
- * say *which* check failed.
- *
- * ## How this screen is reached
- *
- * The provider redirects to `/auth/{provider}/callback`, which the API owns. On
- * success it answers 303 to the destination and the browser never sees this
- * route. This screen is the failure surface, reached with the outcome in the
- * query string:
- *
- * ```text
- * /auth/callback?status=canceled&provider=google
- * /auth/callback?status=conflict&provider=apple
- * /auth/callback?status=failed&provider=microsoft&ref=7f3a-2b91
- * ```
- *
- * With no `status` it falls back to reading the session: signed in means the
- * flow worked and the browser is sent onward, signed out means it did not.
- *
- * NOTE FOR THE ENDPOINTS AGENT — the API does not currently redirect here. It
- * answers those failures as JSON `AppError` bodies (400 for cancellation and
- * generic failure, 409 for a conflict), which a browser following a top-level
- * redirect renders as raw JSON. Turning those into redirects carrying the
- * parameters above is what connects this screen to the flow; until then it is
- * reachable and correct but exercised only by the tests and by hand.
- */
+/** Displays callback outcomes and resumes the validated return path. */
 
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import type { ReactNode } from "react";
@@ -165,8 +128,8 @@ export function AuthCallback() {
         }
         body={
           <>
-            You declined access at {providerName ?? "the provider"}, so nothing was created. You
-            can try again or use a different provider.
+            You declined access at {providerName ?? "the provider"}, so nothing was created. You can
+            try again or use a different provider.
           </>
         }
         actions={
@@ -212,8 +175,8 @@ export function AuthCallback() {
         alert
         body={
           <>
-            It is linked to a different PinVoyager account. To bring it to this account, sign in
-            to the other one first and unlink it there.
+            It is linked to a different PinVoyager account. To bring it to this account, sign in to
+            the other one first and unlink it there.
             <br />
             <br />
             {/* Quoted exactly, and it is a promise the server keeps: the link

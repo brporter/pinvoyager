@@ -30,8 +30,6 @@ describe("useAuth", () => {
   });
 
   it("throws when rendered outside AuthProvider", () => {
-    expect(() => render(<Probe />)).toThrow(
-      "useAuth must be used inside an <AuthProvider>",
-    );
+    expect(() => render(<Probe />)).toThrow("useAuth must be used inside an <AuthProvider>");
   });
 });

@@ -42,7 +42,7 @@ pub struct Identity {
 ///
 /// A unique violation on `(provider, subject)` is the expected failure and is
 /// returned as-is: it means the identity is already attached to some account,
-/// and D3 requires that to be refused rather than merged. Phase 3 decides what
+/// and D3 requires that to be refused rather than merged. The callback decides what
 /// the user sees; the repository's job is to not paper over it.
 pub async fn create(
     executor: impl PgExecutor<'_>,

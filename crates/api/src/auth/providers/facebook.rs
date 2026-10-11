@@ -34,7 +34,7 @@ use crate::config::FacebookProviderConfig;
 /// maintenance item, not a set-and-forget.
 const GRAPH_VERSION: &str = "v23.0";
 
-/// Only `public_profile`, which is what `id`, `name` and `picture` need.
+/// Only `public_profile`, which is what `id` and `picture` need.
 ///
 /// Notably not `email`: this service does not store an email address, so asking
 /// for one would mean showing the user a consent screen for data we intend to
@@ -43,7 +43,7 @@ const SCOPE: &str = "public_profile";
 
 /// Exactly the fields used below. Graph returns whatever is asked for, so the
 /// list is the whole of the data-minimization story for this provider.
-const ME_FIELDS: &str = "id,name,picture.type(large)";
+const ME_FIELDS: &str = "id,picture.type(large)";
 
 pub(crate) struct FacebookProvider {
     client_id: String,
@@ -60,7 +60,7 @@ impl FacebookProvider {
     /// control.
     pub(crate) fn new(config: &FacebookProviderConfig, base_url: &Url) -> Result<Self, AuthError> {
         let graph_api_root = Url::parse(&format!("https://graph.facebook.com/{GRAPH_VERSION}/"))
-            .map_err(|err| AuthError::Configuration(format!("bad Graph API URL: {err}")))?;
+            .expect("the versioned Graph API URL is a static HTTPS URL");
         Self::build(config, base_url, graph_api_root)
     }
 
@@ -168,7 +168,6 @@ impl crate::auth::AuthProvider for FacebookProvider {
         code: &str,
         pkce_verifier: &str,
         _nonce: &str,
-        _form_body: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError> {
         // Encoded explicitly rather than through `reqwest`'s `form()` helper,
         // which needs the optional `form` feature that this crate does not
@@ -218,7 +217,7 @@ impl crate::auth::AuthProvider for FacebookProvider {
             // App-scoped: stable for this app and this person, and meaningless
             // to any other app. This is the subject, and it is never parsed.
             subject: profile.id,
-            display_name: profile.name.filter(|name| !name.trim().is_empty()),
+
             avatar_url: profile
                 .picture
                 .and_then(|picture| picture.data)
@@ -246,7 +245,6 @@ struct TokenResponse {
 #[derive(Deserialize)]
 struct MeResponse {
     id: String,
-    name: Option<String>,
     picture: Option<Picture>,
 }
 

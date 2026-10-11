@@ -1,12 +1,8 @@
 //! Authentication extractors.
 //!
-//! CONTRACT — types are fixed; the `FromRequestParts` implementations are owned
-//! by the session agent.
-//!
 //! The point of these is that authentication becomes a **type-level**
 //! requirement. A handler that takes [`CurrentUser`] cannot run without one, so
-//! there is no `if !authenticated { return }` to forget. Phase 5's ownership
-//! checks build on this.
+//! handlers enforce ownership after the extractor authenticates the caller.
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
@@ -25,7 +21,7 @@ pub struct CurrentUser {
 }
 
 /// A user if there is one. For endpoints that serve both signed-in and
-/// anonymous callers — which is most of the read surface, since every voyage is
+/// anonymous callers — which is most of the read surface, since a published voyage is
 /// public (D6).
 #[derive(Debug, Clone)]
 pub struct MaybeUser(pub Option<CurrentUser>);

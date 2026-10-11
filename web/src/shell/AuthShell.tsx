@@ -1,17 +1,4 @@
-/**
- * The chrome for the sign-in and callback screens.
- *
- * Deliberately not `AppShell`. `design/screens/sign-in.html` draws a desktop
- * bar carrying the brand and nothing else, and a mobile frame with no bar at
- * all — no navigation links, no tab bar, no "Sign in" button. A screen whose
- * whole purpose is one decision should not also offer four ways to leave it,
- * and the tab bar in particular would offer tabs that route back here.
- *
- * The centring, padding and sunken background are `.si-shell` from that file.
- * They are inline rather than a class because they belong to these two screens
- * rather than to the design system, which is exactly how the design file itself
- * treats them.
- */
+/** Centered authentication layout with shared site identity. */
 
 import { Link, Outlet } from "react-router";
 

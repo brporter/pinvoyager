@@ -51,7 +51,9 @@ describe("DevSignIn", () => {
 
     fireEvent.submit(screen.getByRole("button", { name: "Forge a session" }).closest("form")!);
 
-    expect(await screen.findByText(`Development sign-in failed (${String(status)}).`)).toBeInTheDocument();
+    expect(
+      await screen.findByText(`Development sign-in failed (${String(status)}).`),
+    ).toBeInTheDocument();
   });
 
   it("reports a network failure and clears it on the next attempt", async () => {
@@ -65,11 +67,15 @@ describe("DevSignIn", () => {
     const form = screen.getByRole("button", { name: "Forge a session" }).closest("form")!;
 
     fireEvent.submit(form);
-    expect(await screen.findByText("Could not reach the API. Is it running on :8080?")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Could not reach the API. Is it running on :8080?"),
+    ).toBeInTheDocument();
 
     fireEvent.submit(form);
     await waitFor(() => expect(onSignedIn).toHaveBeenCalledOnce());
-    expect(screen.queryByText("Could not reach the API. Is it running on :8080?")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Could not reach the API. Is it running on :8080?"),
+    ).not.toBeInTheDocument();
   });
 
   it("disables submission for a blank or whitespace-only subject", async () => {
@@ -110,6 +116,8 @@ describe("DevSignIn", () => {
 
     fireEvent.submit(screen.getByRole("button", { name: "Forge a session" }).closest("form")!);
 
-    expect(await screen.findByText("Could not reach the API. Is it running on :8080?")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Could not reach the API. Is it running on :8080?"),
+    ).toBeInTheDocument();
   });
 });

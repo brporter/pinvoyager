@@ -1,27 +1,11 @@
-/**
- * `/signin` — `design/screens/sign-in.html`.
- *
- * Four buttons and nothing else. There is no email field, no password field,
- * and no registration screen, because a successful first sign-in *is* the
- * signup: the server's identity lookup either finds a row or creates one, and
- * both paths converge on the same session.
- *
- * Two pieces of copy are load-bearing and are quoted from the design rather
- * than paraphrased:
- *
- *  * **"Sign in or create an account."** With no signup screen to point at, a
- *    first-time visitor needs to be told that this one serves them too —
- *    otherwise they hunt for a "Sign up" link that does not exist.
- *  * **"Every voyage you create is public."** It is the single most surprising
- *    property of the product and the one most likely to cause regret, so it
- *    belongs before the decision rather than after it.
- */
+/** Provider sign-in choices and safe return navigation. */
 
 import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 
 import { signInUrl } from "../api/client";
-import { PROVIDERS, ProviderButton } from "../components/ProviderButton";
+import { ProviderButton } from "../components/ProviderButton";
+import { PROVIDERS } from "../components/providers";
 import type { Provider } from "../components/ProviderButton";
 import { PinIcon } from "../components/icons";
 import { AuthCard } from "./AuthCard";

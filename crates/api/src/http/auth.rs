@@ -1,8 +1,5 @@
 //! Authentication endpoints.
 //!
-//! CONTRACT — `routes()` is fixed; the handlers are owned by the endpoints
-//! agent.
-//!
 //! ```text
 //! GET  /auth/{provider}/start      begin sign-in
 //! GET  /auth/{provider}/callback   OIDC / OAuth2 redirect callback
@@ -75,7 +72,7 @@ const GENERIC_FAILURE: &str = "We could not complete sign-in. Starting again nor
 /// matters, and it is true: nothing is written before the exchange.
 const CANCELED: &str = "Sign-in was canceled, so nothing was created.";
 
-/// The provider-conflict copy, from `design/screens/auth-states.html`. The last
+/// The provider-conflict message. The last
 /// sentence is a promise about server state, not a soothing noise — see
 /// [`link`], which is written so that it cannot become false.
 const ALREADY_LINKED: &str = "That account is already linked to a different PinVoyager account. \
@@ -123,7 +120,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/auth/link/{provider}", post(link_start))
         .route("/auth/logout", post(logout))
-        .route("/api/me", get(me));
+        .route("/api/me", get(me).patch(super::profiles::update));
 
     // Not compiled into a release binary. `debug_assertions` is off in the
     // release profile and the container image builds `--release`, so this route
@@ -233,10 +230,6 @@ async fn begin(
 struct CallbackQuery {
     code: Option<String>,
     state: Option<String>,
-    /// `access_denied` when the user declined; anything else is a provider-side
-    /// failure. Every field here is optional because these arrive from the
-    /// provider's redirect and a missing one must be a rejection, not a 422
-    /// that says which field was absent.
     error: Option<String>,
 }
 
@@ -245,8 +238,6 @@ struct Callback<'a> {
     code: Option<&'a str>,
     state: Option<&'a str>,
     error: Option<&'a str>,
-    /// Apple's raw form body, passed through to the provider untouched.
-    form_body: Option<&'a str>,
 }
 
 /// The ordinary redirect callback: Google, Microsoft, Facebook.
@@ -269,7 +260,6 @@ async fn callback(
             code: query.code.as_deref(),
             state: query.state.as_deref(),
             error: query.error.as_deref(),
-            form_body: None,
         },
     )
     .await;
@@ -277,14 +267,8 @@ async fn callback(
     to_browser(outcome, jar, kind, &headers)
 }
 
-/// Apple's callback: `response_mode=form_post`, so a POST with a form body.
-///
-/// The body is taken as a string and handed to the provider whole. Apple's
-/// first-authorization `user` payload is a JSON object *inside* this body and
-/// arrives exactly once, ever (D1); re-serializing it here would mean this
-/// handler deciding what parts of it survive, and anything it dropped would be
-/// unrecoverable. Extracting `code` and `state` is this handler's only claim on
-/// the body.
+/// Apple's form-POST callback. Only authorization code, state, and error are
+/// consumed; account display names are chosen inside PinVoyager.
 async fn form_callback(
     State(state): State<AppState>,
     Path(provider): Path<String>,
@@ -307,7 +291,6 @@ async fn form_callback(
             code: field(&fields, "code"),
             state: field(&fields, "state"),
             error: field(&fields, "error"),
-            form_body: Some(&body),
         },
     )
     .await;
@@ -321,8 +304,7 @@ async fn form_callback(
 /// browser here, or POSTs a form to it. Whatever this returns is what fills the
 /// window. A JSON error body — which is the right answer everywhere else in
 /// this service — puts `{"code":"bad_request","message":"..."}` on screen as
-/// plain text, and the designed failure screens in
-/// `design/screens/auth-states.html` are never reached at all.
+/// plain text instead of opening the application's callback screen.
 ///
 /// So a failure becomes a 303 to the frontend's `/auth/callback` screen,
 /// carrying the outcome in the query string. The screen decides what to show;
@@ -393,10 +375,9 @@ fn to_browser(
 
     // The jar still travels, because a failed callback has already had the
     // browser-binding cookie cleared and that removal must reach the browser.
-    match redirect(StatusCode::SEE_OTHER, &target) {
-        Ok(response) => (jar, response).into_response(),
-        Err(err) => err.into_response(),
-    }
+    let response = redirect(StatusCode::SEE_OTHER, &target)
+        .expect("callback targets contain only fixed paths and filtered ASCII values");
+    (jar, response).into_response()
 }
 
 /// The callback, once the transport difference has been flattened away.
@@ -475,12 +456,7 @@ async fn complete(
     // and `nonce` for the OIDC three, a Graph lookup for Facebook. Whatever
     // fails inside it reaches the client as the same sentence.
     let identity = provider
-        .exchange(
-            code,
-            &attempt.pkce_verifier,
-            &attempt.nonce,
-            callback.form_body,
-        )
+        .exchange(code, &attempt.pkce_verifier, &attempt.nonce)
         .await
         .map_err(auth_failed)?;
 
@@ -554,12 +530,7 @@ async fn sign_in(state: &AppState, identity: &VerifiedIdentity) -> AppResult<Ses
                 // D2: the first sign-in *is* the signup. There is no separate
                 // registration step to reach, which is why this is an insert rather
                 // than a 404 pointing at one.
-                let user = users::create(
-                    &mut *tx,
-                    identity.display_name.as_deref(),
-                    identity.avatar_url.as_deref(),
-                )
-                .await?;
+                let user = users::create(&mut *tx, None, identity.avatar_url.as_deref()).await?;
 
                 identities::create(&mut *tx, user.id, provider, &identity.subject)
                     .await
@@ -698,7 +669,7 @@ struct LinkedProvider {
 
 /// The current user and their linked providers (T11).
 ///
-/// D2 makes the list load-bearing rather than decorative: a user whose only
+/// A user whose only
 /// provider becomes inaccessible has no recovery path this service controls, so
 /// seeing how many they have is what prompts them to link a second.
 async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<MeResponse>> {
@@ -750,12 +721,8 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<
 /// shared voyage link opens signed in. `Path=/` because the whole API is behind
 /// it.
 ///
-/// No `Max-Age`: `cookie`'s `time::Duration` is not nameable from this crate
-/// (the `cookie` crate reaches us only through axum-extra's re-exports, which
-/// stop at `Cookie`), and stringly-typed cookie building is not worth the
-/// bug it invites. The consequence is a cookie that ends with the browser
-/// session even though the server-side row is good for longer, which is a
-/// safe-direction failure but not the intended one — see the phase notes.
+/// The browser cookie lasts to the absolute session ceiling. Server lookup
+/// enforces sliding idle expiry, so activity cannot outlive that ceiling.
 pub(crate) fn session_cookie(config: &SessionConfig, token: &SessionToken) -> Cookie<'static> {
     Cookie::build((config.cookie_name.clone(), token.expose().to_owned()))
         .http_only(true)
@@ -769,7 +736,7 @@ pub(crate) fn session_cookie(config: &SessionConfig, token: &SessionToken) -> Co
         // resolving anyway — a cookie outliving its row only produces a
         // confusing 401.
         .max_age(cookie::time::Duration::seconds(clamp_secs(
-            config.idle_timeout_secs,
+            config.absolute_timeout_secs,
         )))
         .build()
 }
@@ -781,7 +748,7 @@ const BINDING_COOKIE: &str = "pv_auth_binding";
 
 /// The cookie that ties an authorization attempt to the browser that began it.
 ///
-/// Three attributes are load-bearing and none of them is the obvious choice:
+/// The browser-binding flow requires these three cookie attributes:
 ///
 /// * **`SameSite=None`.** Apple's callback is a cross-site form POST, and a
 ///   `Lax` cookie is not sent on one — every Apple sign-in would fail the

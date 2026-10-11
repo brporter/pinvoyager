@@ -83,9 +83,7 @@ async fn app_with_providers(
     }))
     .expect("valid test config");
 
-    let providers = ProviderRegistry::from_config(&config.auth)
-        .await
-        .expect("the local OIDC provider discovery succeeds");
+    let providers = ProviderRegistry::from_config(&config.auth).await;
     http::router(AppState::new(
         pool,
         Arc::new(config),
@@ -280,6 +278,10 @@ async fn oidc_start_callback_and_current_user_complete_a_sign_in(pool: PgPool) {
         .await
         .expect("small current-user response");
     let body: Value = serde_json::from_slice(&body).expect("valid current-user JSON");
+    assert!(
+        body["user"]["display_name"].is_null(),
+        "provider labels are not claimed handles"
+    );
     assert_eq!(body["identities"][0]["provider"], "google");
     assert_eq!(
         body["identities"].as_array().expect("identity list").len(),
@@ -384,7 +386,7 @@ async fn callback_rejections_are_generic_and_clear_the_binding_cookie(pool: PgPo
     assert!(
         response.headers()[header::LOCATION]
             .to_str()
-            .unwrap()
+            .expect("valid test fixture")
             .contains("status=failed")
     );
     assert!(
@@ -412,7 +414,7 @@ async fn callback_rejections_are_generic_and_clear_the_binding_cookie(pool: PgPo
     assert!(
         response.headers()[header::LOCATION]
             .to_str()
-            .unwrap()
+            .expect("valid test fixture")
             .contains("status=failed")
     );
 
@@ -428,7 +430,7 @@ async fn callback_rejections_are_generic_and_clear_the_binding_cookie(pool: PgPo
     assert!(
         response.headers()[header::LOCATION]
             .to_str()
-            .unwrap()
+            .expect("valid test fixture")
             .contains("status=failed")
     );
 
@@ -458,7 +460,7 @@ async fn callback_rejections_are_generic_and_clear_the_binding_cookie(pool: PgPo
     assert!(
         response.headers()[header::LOCATION]
             .to_str()
-            .unwrap()
+            .expect("valid test fixture")
             .contains("status=failed")
     );
 
@@ -473,7 +475,7 @@ async fn callback_rejections_are_generic_and_clear_the_binding_cookie(pool: PgPo
     assert!(
         response.headers()[header::LOCATION]
             .to_str()
-            .unwrap()
+            .expect("valid test fixture")
             .contains("status=failed")
     );
 
@@ -493,7 +495,7 @@ async fn callback_rejections_are_generic_and_clear_the_binding_cookie(pool: PgPo
     assert!(
         response.headers()[header::LOCATION]
             .to_str()
-            .unwrap()
+            .expect("valid test fixture")
             .contains("status=failed")
     );
 }
@@ -615,9 +617,12 @@ async fn linking_a_new_provider_attaches_it_to_the_current_account_without_reiss
     );
 
     let repeated_start = send(&app, "POST", "/auth/link/microsoft", Some(&session_cookie)).await;
-    let repeated_authorization =
-        Url::parse(repeated_start.headers()[header::LOCATION].to_str().unwrap())
-            .expect("provider URL parses");
+    let repeated_authorization = Url::parse(
+        repeated_start.headers()[header::LOCATION]
+            .to_str()
+            .expect("valid test fixture"),
+    )
+    .expect("provider URL parses");
     let repeated_query = |key: &str| {
         repeated_authorization
             .query_pairs()
@@ -629,10 +634,10 @@ async fn linking_a_new_provider_attaches_it_to_the_current_account_without_reiss
     let repeated_nonce = repeated_query("nonce");
     let repeated_binding = repeated_start.headers()[header::SET_COOKIE]
         .to_str()
-        .unwrap()
+        .expect("valid test fixture")
         .split(';')
         .next()
-        .unwrap()
+        .expect("valid test fixture")
         .to_owned();
     let repeated_code = provider
         .token()
@@ -684,8 +689,12 @@ async fn linking_an_identity_owned_by_another_account_changes_neither_account(po
 
     let started = send(&app, "POST", "/auth/link/microsoft", Some(&owner_session)).await;
     assert_eq!(started.status(), StatusCode::SEE_OTHER);
-    let authorization = Url::parse(started.headers()[header::LOCATION].to_str().unwrap())
-        .expect("provider URL parses");
+    let authorization = Url::parse(
+        started.headers()[header::LOCATION]
+            .to_str()
+            .expect("valid test fixture"),
+    )
+    .expect("provider URL parses");
     let query = |key: &str| {
         authorization
             .query_pairs()
@@ -697,10 +706,10 @@ async fn linking_an_identity_owned_by_another_account_changes_neither_account(po
     let nonce = query("nonce");
     let binding_cookie = started.headers()[header::SET_COOKIE]
         .to_str()
-        .unwrap()
+        .expect("valid test fixture")
         .split(';')
         .next()
-        .unwrap()
+        .expect("valid test fixture")
         .to_owned();
     let code = provider
         .token()

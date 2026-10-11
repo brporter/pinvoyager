@@ -67,7 +67,7 @@ fn debug_does_not_reveal_the_token() {
 }
 
 async fn a_user(pool: &PgPool) -> Uuid {
-    crate::db::repo::users::create(pool, Some("Test"), None)
+    crate::db::repo::users::create(pool, None, None)
         .await
         .expect("create user")
         .id

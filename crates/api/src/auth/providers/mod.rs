@@ -4,8 +4,8 @@
 //!
 //! Three of them (Google, Microsoft, Apple) are OIDC and share [`oidc::OidcCore`];
 //! Facebook is not OIDC at all and has no ID token to verify, so it talks to the
-//! Graph API instead. Apple is OIDC but deviates in three ways that are large
-//! enough to justify its own module — see [`apple`].
+//! Graph API instead. Apple mints signed client secrets and uses a form-POST
+//! callback — see [`apple`].
 //!
 //! ## What "verified" means, and where it happens
 //!
@@ -19,10 +19,7 @@
 //! - **`exp`** (and `iat`) against the clock;
 //! - **`nonce`** against the value we stored in the pending attempt.
 //!
-//! The risk in this phase was never implementing those checks — it was
-//! *configuring* them wrongly, since a misconfigured verifier still returns
-//! `Ok` and an unverified token looks identical in a debugger. The call sites in
-//! [`oidc`] name each check where it is enabled.
+//! The call sites in [`oidc`] identify where verification is configured.
 //!
 //! ## D1
 //!

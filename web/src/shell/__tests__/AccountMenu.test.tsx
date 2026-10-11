@@ -81,8 +81,7 @@ describe("AccountMenu", () => {
     await user.click(trigger);
 
     const listener = addListener.mock.calls.find(([type]) => type === "pointerdown")?.[1] as
-      | EventListener
-      | undefined;
+      EventListener | undefined;
     expect(listener).toBeTypeOf("function");
     act(() => listener?.({ target: {} } as PointerEvent));
 

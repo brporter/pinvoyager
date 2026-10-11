@@ -4,8 +4,8 @@
  * This is the client half of the open-redirect check in
  * `crates/api/src/http/auth.rs::safe_redirect`. The server is the authority —
  * it validates a `redirect_to` before storing it and again before using it, so
- * nothing here is load-bearing for security. What this buys is agreement: the
- * client never sends a destination the server would silently drop, so "sign in
+ * this client check keeps navigation consistent. The client never sends a
+ * destination the server would silently drop, so "sign in
  * and come back to where I was" either works or is visibly replaced by the
  * default, rather than half-working.
  *

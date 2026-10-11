@@ -10,34 +10,17 @@ import { createContext } from "react";
 
 import type { CurrentUser, LinkedProvider } from "../api/types";
 
-/**
- * Three states, not two.
- *
- * `loading` is separate from `anonymous` on purpose. Collapsing them makes the
- * first paint of every protected route a redirect to sign-in, because "we have
- * not asked yet" and "we asked and nobody is signed in" would be the same
- * value — and a signed-in user reloading `/upload` would be bounced to the
- * sign-in screen and then back, which looks like the session was lost.
- *
- * `failed` is separate from `anonymous` for the mirror-image reason: a 500 or a
- * dropped connection is not evidence that the visitor has no account.
- */
-export type AuthStatus = "loading" | "anonymous" | "authenticated" | "failed";
-
-export interface AuthState {
-  status: AuthStatus;
-  /** Non-null exactly when `status` is `authenticated`. */
-  user: CurrentUser | null;
-  /** The providers linked to this account. Empty unless authenticated. */
-  identities: LinkedProvider[];
-  /** Set exactly when `status` is `failed`. A 401 never lands here. */
-  error: Error | null;
-  /** Re-reads `/api/me`. Awaited by callers that need the answer, such as the
-   *  callback screen deciding whether sign-in actually worked. */
+/** Loading and failed reads do not imply that the visitor is signed out. */
+type SessionState =
+  | { status: "loading"; user: null; identities: LinkedProvider[]; error: null }
+  | { status: "anonymous"; user: null; identities: LinkedProvider[]; error: null }
+  | { status: "authenticated"; user: CurrentUser; identities: LinkedProvider[]; error: null }
+  | { status: "failed"; user: null; identities: LinkedProvider[]; error: Error };
+export type AuthStatus = SessionState["status"];
+export type AuthState = SessionState & {
   refresh: () => Promise<void>;
-  /** Destroys the session server-side and drops to the anonymous state. */
   signOut: () => Promise<void>;
-}
+};
 
 /**
  * `null` rather than a default state, so `useAuth` can tell "outside the

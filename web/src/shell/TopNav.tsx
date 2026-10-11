@@ -1,18 +1,4 @@
-/**
- * The top bar, wired to the session.
- *
- * The bar itself is `components/TopNav`, which owns the markup from
- * `design/components/navigation.html`. This is the connected half: it decides
- * what the links are, and it replaces the default right-hand controls with a
- * "New voyage" action and the account disclosure, because the presentational
- * component draws a static avatar and sign-out has to live somewhere.
- *
- * The bar exists at both breakpoints — the mobile frames in `design/screens/`
- * keep a compact version of it above the content and add the tab bar below.
- * What changes is its contents: on mobile the navigation links are dropped,
- * because the tab bar underneath is already doing the navigating and repeating
- * the destinations would be two ways to reach four places on a 390px screen.
- */
+/** Connects session and route state to the navigation components. */
 
 import { Link, useLocation } from "react-router";
 
@@ -35,11 +21,7 @@ export function TopNav({ desktop }: { desktop: boolean }) {
   return (
     <TopNavBar
       links={desktop ? topNavLinks(user) : []}
-      user={
-        user === null
-          ? null
-          : { displayName: user.display_name, avatarUrl: user.avatar_url }
-      }
+      user={user === null ? null : { displayName: user.display_name, avatarUrl: user.avatar_url }}
       actions={
         <>
           {desktop && user !== null ? (

@@ -4,7 +4,7 @@
  * `/upload`, `/settings` and `/voyages/:id/edit` and nothing else. Everything
  * else in this application is public, because every published voyage is
  * world-readable — a signed-out visitor is an ordinary user of this site, not
- * someone being held at a gate, so wrapping routes in this by default would be
+ * someone who must sign in, so wrapping routes in this by default would be
  * the wrong shape entirely.
  *
  * Note what this is and is not. It is a routing convenience: it puts a

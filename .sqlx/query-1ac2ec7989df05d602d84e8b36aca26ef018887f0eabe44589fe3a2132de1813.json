@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile_names (name, user_id) VALUES ($1, $2)\n         ON CONFLICT (name) DO UPDATE SET user_id = profile_names.user_id\n         WHERE profile_names.user_id = EXCLUDED.user_id RETURNING name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile_names",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1ac2ec7989df05d602d84e8b36aca26ef018887f0eabe44589fe3a2132de1813"
+}

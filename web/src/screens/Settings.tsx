@@ -1,142 +1,12 @@
-/**
- * Settings — implements `design/screens/settings.html` (T9).
- *
- * Profile, default location precision, linked sign-in methods, and deletion.
- * There is no password section, no two-factor section and no email preferences,
- * because none of those exist in this architecture.
- *
- * ## The rule this screen exists to enforce
- *
- * **Unlinking the last remaining provider is refused.** Sign-in is social-only
- * and no password is stored anywhere, so a user who removes their only identity
- * has no way back into the account — and no support path we control can restore
- * it, because there is nothing to prove ownership against. The refusal is
- * therefore structural rather than a warning dialog: with one provider linked
- * the control is `disabled`, and it is paired with a `Toast` explaining the
- * consequence and the remedy. A disabled control with no reason attached reads
- * as a bug.
- *
- * The same reasoning is why linking is *prompted* rather than merely permitted:
- * recovery is genuinely impossible here, so the interface nudges toward a
- * second provider instead of waiting for the user to work that out.
- *
- * ## Endpoints this screen needs that the service does not yet expose
- *
- * Three of the actions the design draws have no handler in `crates/api` today.
- * They are wired here to the paths the design implies, through {@link send}
- * below, so that the screen becomes functional the moment those handlers land
- * rather than having to be rewritten:
- *
- *  * `PATCH  /api/me`               — change the display name
- *  * `DELETE /auth/link/{provider}` — unlink a provider
- *  * `DELETE /api/me`               — delete the account
- *
- * Until then each of them answers 404/405 and the screen shows a real error,
- * which is the honest behavior: the alternative is a Save button that silently
- * does nothing. `POST /auth/link/{provider}` — the one that *does* exist — is a
- * form submission rather than a fetch, because it answers with a 302 to the
- * provider's consent screen and that has to be a full-page navigation.
- *
- * The default precision control is a local preference (see
- * {@link readDefaultGranularity}). `MeResponse` carries no such field, so there
- * is nowhere on the server to put it yet.
- *
- * ## No email address appears anywhere here
- *
- * Deliberate, and a phase 3 recommendation: provider-supplied email is not
- * needed for sign-in, and storing it would create PII we would otherwise not
- * hold.
- */
-
+/** Current profile and provider-linking controls. */
+import { Link } from "react-router";
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useId, useState } from "react";
-import type { ReactNode } from "react";
-
-import { errorFrom, isApiError, NetworkError } from "../api/client";
-import type { ApiErrorBody } from "../api/client";
-import type { Granularity, LinkedProvider } from "../api/types";
+import { useState, type ReactNode } from "react";
+import { isApiError, NetworkError, updateDisplayName } from "../api/client";
+import type { LinkedProvider } from "../api/types";
 import { useAuth } from "../auth/useAuth";
-import {
-  Avatar,
-  Button,
-  EmptyState,
-  GRANULARITIES,
-  GRANULARITY_LABEL,
-  PROVIDERS,
-  Skeleton,
-  TextField,
-  Toast,
-  WarningTriangleIcon,
-} from "../components";
-import type { Provider } from "../components";
+import { Avatar, Button, EmptyState, PROVIDERS, Skeleton, TextField, Toast } from "../components";
 
-const PROVIDER_NAME: Record<Provider, string> = {
-  google: "Google",
-  apple: "Apple",
-  microsoft: "Microsoft",
-  facebook: "Facebook",
-};
-
-// ---------------------------------------------------------------------------
-// Transport
-// ---------------------------------------------------------------------------
-
-/**
- * A request for the three endpoints `src/api/client.ts` does not yet have.
- *
- * Duplicating the client's `request` is not the intent — this exists only
- * because the calls it makes have no handler yet, so adding them to the typed
- * client would be adding methods for endpoints that answer 405. Failures are
- * routed through the client's own {@link errorFrom} so they arrive as the same
- * `ApiRequestError` every other call throws, `x-request-id` included. When the
- * handlers land, these three move into the client and this function goes away.
- */
-async function send(method: string, path: string, body?: unknown): Promise<void> {
-  const headers = new Headers({ accept: "application/json" });
-  if (body !== undefined) headers.set("content-type", "application/json");
-
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      // The session is an HttpOnly cookie. Without this the request is
-      // anonymous and every one of these answers 401.
-      credentials: "same-origin",
-    });
-  } catch (cause) {
-    throw new NetworkError("The request could not be sent.", cause);
-  }
-
-  if (response.ok) return;
-
-  let parsed: ApiErrorBody = {
-    code: "unknown",
-    message: response.statusText || "The request failed.",
-  };
-  try {
-    const text = await response.text();
-    if (text !== "") {
-      const decoded: unknown = JSON.parse(text);
-      if (decoded !== null && typeof decoded === "object") {
-        const candidate = decoded as Partial<ApiErrorBody>;
-        parsed = {
-          code: typeof candidate.code === "string" ? candidate.code : parsed.code,
-          message:
-            typeof candidate.message === "string" ? candidate.message : parsed.message,
-        };
-      }
-    }
-  } catch {
-    // Not our error shape — a proxy's HTML page, most likely. The status is
-    // still the useful part.
-  }
-
-  throw errorFrom(response.status, parsed, response.headers.get("x-request-id"));
-}
-
-/** What to put in front of a person when one of the above fails. */
 function messageOf(error: unknown): string {
   if (error instanceof NetworkError) {
     return "The request could not be sent. Check your connection and try again.";
@@ -149,44 +19,6 @@ function messageOf(error: unknown): string {
   }
   return error.message;
 }
-
-// ---------------------------------------------------------------------------
-// Default precision — a local preference until the API carries one
-// ---------------------------------------------------------------------------
-
-const GRANULARITY_KEY = "pinvoyager.default_granularity";
-
-/** `~1 km` rather than `exact`. Every voyage is world-readable, so the default
- *  has to be the cautious one: a user who never touches this control must not
- *  be publishing their exact coordinates because of it. */
-const GRANULARITY_FALLBACK: Granularity = "km1";
-
-function isGranularity(value: string | null): value is Granularity {
-  return value !== null && (GRANULARITIES as readonly string[]).includes(value);
-}
-
-export function readDefaultGranularity(): Granularity {
-  try {
-    const stored = window.localStorage.getItem(GRANULARITY_KEY);
-    return isGranularity(stored) ? stored : GRANULARITY_FALLBACK;
-  } catch {
-    // Storage disabled, or a private window that refuses it. The default is a
-    // perfectly good answer.
-    return GRANULARITY_FALLBACK;
-  }
-}
-
-function writeDefaultGranularity(value: Granularity): void {
-  try {
-    window.localStorage.setItem(GRANULARITY_KEY, value);
-  } catch {
-    // Nothing to recover: the choice still applies for this session.
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
 
 export function Settings() {
   const { status, user, identities, error, refresh } = useAuth();
@@ -213,9 +45,7 @@ export function Settings() {
         )}
 
         {status !== "loading" && status !== "failed" && user === null && (
-          <EmptyState title="You are signed out" >
-            Sign in again to reach your settings.
-          </EmptyState>
+          <EmptyState title="You are signed out">Sign in again to reach your settings.</EmptyState>
         )}
 
         {user !== null && (
@@ -225,9 +55,7 @@ export function Settings() {
               avatarUrl={user.avatar_url}
               onSaved={() => void refresh()}
             />
-            <PrecisionSection />
-            <ProvidersSection identities={identities} onChanged={() => void refresh()} />
-            <DeleteSection />
+            <ProvidersSection identities={identities} />
           </>
         )}
       </div>
@@ -253,19 +81,16 @@ function Section({
   title,
   description,
   children,
-  danger = false,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
-  danger?: boolean;
 }) {
   return (
     <section
       className="pv-card"
       style={{
         padding: "var(--pv-space-5)",
-        borderColor: danger ? "var(--pv-danger-bg)" : undefined,
       }}
     >
       <h2
@@ -312,7 +137,7 @@ function ProfileSection({
   }
 
   const save = useMutation({
-    mutationFn: (name: string) => send("PATCH", "/api/me", { display_name: name }),
+    mutationFn: updateDisplayName,
     retry: false,
     onSuccess: onSaved,
   });
@@ -329,8 +154,8 @@ function ProfileSection({
               put a picture — PinVoyager stores none and the avatar comes from
               whichever provider supplied one — so the explanation is shown
               without a control that could not work. */}
-          Your picture comes from your sign-in provider. Initials are used when a
-          provider does not supply one.
+          Your picture comes from your sign-in provider. Initials are used when a provider does not
+          supply one.
         </p>
       </div>
 
@@ -344,21 +169,26 @@ function ProfileSection({
           label="Display name"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          help="Shown on your public profile and every voyage you publish."
+          help="Unique public URL: /u/your-name. Use 3–30 letters, digits, or hyphens; start with a letter and end with a letter or digit."
           error={save.isError ? messageOf(save.error) : undefined}
         />
 
+        {displayName !== null && (
+          <p className="pv-xs">
+            <Link to={`/u/${encodeURIComponent(displayName)}`}>View your profile</Link>
+          </p>
+        )}
+
         <div style={{ marginTop: "var(--pv-space-4)" }}>
-          <Button
-            type="submit"
-            variant="secondary"
-            disabled={!dirty}
-            loading={save.isPending}
-          >
+          <Button type="submit" variant="secondary" disabled={!dirty} loading={save.isPending}>
             Save name
           </Button>
           {save.isSuccess && !dirty && (
-            <span className="pv-xs pv-muted" role="status" style={{ marginLeft: "var(--pv-space-3)" }}>
+            <span
+              className="pv-xs pv-muted"
+              role="status"
+              style={{ marginLeft: "var(--pv-space-3)" }}
+            >
               Saved.
             </span>
           )}
@@ -368,78 +198,9 @@ function ProfileSection({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Default precision
-// ---------------------------------------------------------------------------
-
-function PrecisionSection() {
-  const [value, setValue] = useState<Granularity>(GRANULARITY_FALLBACK);
-  const groupId = useId();
-
-  // Read after mount rather than during render: `localStorage` is not available
-  // in every rendering environment, and a lazy initializer that touches it
-  // makes the component unrenderable where it is not.
-  useEffect(() => {
-    setValue(readDefaultGranularity());
-  }, []);
-
-  return (
-    <Section
-      title="Default location precision"
-      description="Applied to new voyages. Each voyage can override it."
-    >
-      <div
-        className="pv-gran-steps"
-        role="group"
-        aria-labelledby={groupId}
-        style={{ maxWidth: 340 }}
-      >
-        <span className="pv-sr" id={groupId}>
-          Default location precision
-        </span>
-        {GRANULARITIES.map((step) => (
-          <button
-            key={step}
-            type="button"
-            className="pv-gran-step"
-            aria-pressed={value === step}
-            onClick={() => {
-              setValue(step);
-              writeDefaultGranularity(step);
-            }}
-          >
-            {GRANULARITY_LABEL[step]}
-          </button>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sign-in methods
-// ---------------------------------------------------------------------------
-
-function ProvidersSection({
-  identities,
-  onChanged,
-}: {
-  identities: readonly LinkedProvider[];
-  onChanged: () => void;
-}) {
+function ProvidersSection({ identities }: { identities: readonly LinkedProvider[] }) {
   const linked = new Map(identities.map((identity) => [identity.provider, identity]));
-
-  // The whole point of this screen. One linked provider means unlinking it
-  // locks the user out permanently, so the count — not a flag on a row — is
-  // what decides whether any unlink control is live.
-  const isLastProvider = linked.size <= 1;
-
-  const unlink = useMutation({
-    mutationFn: (provider: Provider) => send("DELETE", `/auth/link/${provider}`),
-    retry: false,
-    onSuccess: onChanged,
-  });
-
+  const names = { google: "Google", microsoft: "Microsoft", apple: "Apple", facebook: "Facebook" };
   return (
     <Section
       title="Sign-in methods"
@@ -447,214 +208,26 @@ function ProvidersSection({
     >
       {linked.size === 0 && (
         <Toast tone="warning" title="No sign-in methods are listed">
-          This should not be possible for a signed-in account. Reload the page
-          before changing anything here.
+          Reload the page before changing anything here.
         </Toast>
       )}
-
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      <ul style={{ listStyle: "none", padding: 0 }}>
         {PROVIDERS.map((provider) => (
-          <ProviderRow
-            key={provider}
-            provider={provider}
-            identity={linked.get(provider)}
-            isLastProvider={isLastProvider}
-            busy={unlink.isPending && unlink.variables === provider}
-            onUnlink={() => unlink.mutate(provider)}
-          />
+          <li key={provider} className="pv-inline-3" style={{ paddingBlock: "var(--pv-space-3)" }}>
+            <span>{names[provider]}</span>
+            {linked.has(provider) ? (
+              <span className="pv-xs pv-subtle">Linked</span>
+            ) : (
+              // Linking redirects to the provider, so it uses a full-page form POST.
+              <form method="post" action={`/auth/link/${provider}?redirect_to=%2Fsettings`}>
+                <Button type="submit" variant="secondary">
+                  Link
+                </Button>
+              </form>
+            )}
+          </li>
         ))}
       </ul>
-
-      {isLastProvider && linked.size === 1 && (
-        <div style={{ marginTop: "var(--pv-space-3)" }}>
-          {/* The disabled control above is paired with this. A disabled control
-              with no reason attached reads as a bug; this states the
-              consequence and the remedy. */}
-          <Toast tone="warning" title="This is your only way in">
-            Link another provider before unlinking{" "}
-            {PROVIDER_NAME[[...linked.keys()][0]!]}, or you will lose
-            access to this account permanently.
-          </Toast>
-        </div>
-      )}
-
-      {unlink.isError && (
-        <div style={{ marginTop: "var(--pv-space-3)" }}>
-          <Toast tone="error" title="That provider could not be unlinked">
-            {messageOf(unlink.error)}
-          </Toast>
-        </div>
-      )}
-
-      <div
-        className="pv-gran-guarantee"
-        style={{
-          marginTop: "var(--pv-space-4)",
-          background: "var(--pv-accent-subtle)",
-        }}
-      >
-        <WarningTriangleIcon size={16} stroke="var(--pv-accent)" />
-        <div>
-          <strong>Link a second provider.</strong> If you lose access to your only
-          sign-in method, we cannot restore your account — there is no password to
-          reset.
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-function ProviderRow({
-  provider,
-  identity,
-  isLastProvider,
-  busy,
-  onUnlink,
-}: {
-  provider: Provider;
-  identity: LinkedProvider | undefined;
-  isLastProvider: boolean;
-  busy: boolean;
-  onUnlink: () => void;
-}) {
-  const name = PROVIDER_NAME[provider];
-  const reasonId = `unlink-${provider}-reason`;
-  const soleProvider = identity !== undefined && isLastProvider;
-
-  return (
-    <li
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--pv-space-3)",
-        padding: "var(--pv-space-3) 0",
-        borderBottom: "1px solid var(--pv-border)",
-        flexWrap: "wrap",
-      }}
-    >
-      <div className="pv-upload-info">
-        <div className="pv-sm" style={{ fontWeight: "var(--pv-weight-medium)" }}>
-          {name}
-        </div>
-        <div className="pv-xs pv-subtle" id={soleProvider ? reasonId : undefined}>
-          {identity === undefined
-            ? "Not linked"
-            : soleProvider
-              ? "Your only sign-in method — it cannot be unlinked"
-              : `Linked · last used ${relativeDay(identity.last_seen_at)}`}
-        </div>
-      </div>
-
-      {identity === undefined ? (
-        // A real form POST rather than a fetch: `/auth/link/{provider}`
-        // answers 302 to the provider's consent screen, and a redirect chain
-        // that ends off-origin has to be a navigation. POST rather than GET
-        // because a `SameSite=Lax` cookie is not sent on a cross-site POST,
-        // which is what stops another site starting a link flow in a signed-in
-        // user's browser.
-        <form
-          method="post"
-          action={`/auth/link/${provider}?redirect_to=%2Fsettings`}
-          style={{ margin: 0 }}
-        >
-          <Button type="submit" variant="secondary">
-            Link
-          </Button>
-        </form>
-      ) : (
-        <Button
-          variant="ghost"
-          disabled={soleProvider}
-          loading={busy}
-          aria-describedby={soleProvider ? reasonId : undefined}
-          onClick={onUnlink}
-        >
-          Unlink
-        </Button>
-      )}
-    </li>
-  );
-}
-
-/** "2 days ago" from an ISO timestamp. Coarse on purpose — the exact minute a
- *  provider was last used is not information this screen is for. */
-function relativeDay(iso: string): string {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return "recently";
-
-  const days = Math.floor((Date.now() - then) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${String(days)} days ago`;
-  if (days < 30) {
-    const weeks = Math.floor(days / 7);
-    return weeks === 1 ? "1 week ago" : `${String(weeks)} weeks ago`;
-  }
-  const months = Math.floor(days / 30);
-  return months === 1 ? "1 month ago" : `${String(months)} months ago`;
-}
-
-// ---------------------------------------------------------------------------
-// Deletion
-// ---------------------------------------------------------------------------
-
-function DeleteSection() {
-  const [confirming, setConfirming] = useState(false);
-
-  const destroy = useMutation({
-    mutationFn: () => send("DELETE", "/api/me"),
-    retry: false,
-    onSuccess: () => {
-      // Nothing left to render against: the account is gone, so the whole
-      // application has to be re-entered from the signed-out state.
-      window.location.assign("/");
-    },
-  });
-
-  return (
-    <Section
-      title="Delete account"
-      description="Permanently removes your account, your voyages, and your photos. Published voyages stop being reachable immediately — anyone who has linked to one will find a dead link. This cannot be undone."
-      danger
-    >
-      {/* Two steps, and deliberately so: the first press only reveals the
-          confirmation. A single click must never be able to destroy an account,
-          and a `confirm()` dialog is dismissed by reflex. */}
-      {!confirming ? (
-        <Button variant="danger" onClick={() => setConfirming(true)}>
-          Delete my account
-        </Button>
-      ) : (
-        <div className="pv-stack-3">
-          <Toast tone="error" title="Delete this account permanently?">
-            Your voyages and photos are removed and cannot be recovered. Links
-            other people have to your published voyages will break.
-          </Toast>
-
-          <div className="pv-inline-3">
-            <Button
-              variant="danger"
-              loading={destroy.isPending}
-              onClick={() => destroy.mutate()}
-            >
-              Yes, delete my account permanently
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={destroy.isPending}
-              onClick={() => setConfirming(false)}
-            >
-              Keep my account
-            </Button>
-          </div>
-
-          {destroy.isError && (
-            <Toast tone="error" title="Your account was not deleted">
-              {messageOf(destroy.error)}
-            </Toast>
-          )}
-        </div>
-      )}
     </Section>
   );
 }

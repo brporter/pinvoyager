@@ -1,6 +1,5 @@
 use super::*;
-#[path = "../../../tests/support/mod.rs"]
-mod support;
+use crate::test_support as support;
 use secrecy::SecretString;
 
 /// A throwaway P-256 key pair generated for this test file and used nowhere
@@ -137,44 +136,6 @@ fn client_secret_is_cached_and_renewed_before_expiry() {
 }
 
 #[test]
-fn first_authorization_name_is_taken_from_the_form_body() {
-    let body = "code=abc&state=xyz&user=%7B%22name%22%3A%7B%22firstName%22%3A%22Ada%22%2C%22lastName%22%3A%22Lovelace%22%7D%2C%22email%22%3A%22ada%40example.com%22%7D";
-
-    assert_eq!(
-        display_name_from_form_body(Some(body)),
-        Some("Ada Lovelace".to_owned())
-    );
-}
-
-#[test]
-fn a_missing_name_is_normal_rather_than_an_error() {
-    // Every Apple sign-in after the first looks like this.
-    assert_eq!(
-        display_name_from_form_body(Some("code=abc&state=xyz")),
-        None
-    );
-    assert_eq!(display_name_from_form_body(None), None);
-    // Present but useless, in the shapes Apple actually sends.
-    assert_eq!(display_name_from_form_body(Some("user=%7B%7D")), None);
-    assert_eq!(
-        display_name_from_form_body(Some("user=%7B%22name%22%3A%7B%7D%7D")),
-        None
-    );
-    // Malformed: logged, but never a failed sign-in.
-    assert_eq!(display_name_from_form_body(Some("user=not-json")), None);
-}
-
-#[test]
-fn a_partial_name_is_still_a_name() {
-    assert_eq!(
-        display_name_from_form_body(Some(
-            "user=%7B%22name%22%3A%7B%22firstName%22%3A%22Ada%22%7D%7D"
-        )),
-        Some("Ada".to_owned())
-    );
-}
-
-#[test]
 fn invalid_private_key_is_rejected_as_a_provider_configuration_error() {
     let result = AppleClientSecret::new(&AppleProviderConfig {
         client_id: "com.example.pinvoyager.service".to_owned(),
@@ -213,7 +174,7 @@ async fn apple_discovery_rejects_a_bad_key_before_network_discovery() {
         key_id: "KEYID67890".to_owned(),
         private_key_pem: SecretString::from("not a private key"),
     };
-    let base_url = Url::parse("https://pinvoyager.example/").unwrap();
+    let base_url = Url::parse("https://pinvoyager.example/").expect("valid test fixture");
 
     let error = match AppleProvider::discover(&config, &base_url, APPLE_ISSUER).await {
         Ok(_) => panic!("invalid signing key must fail before contacting Apple"),
@@ -234,7 +195,7 @@ async fn apple_discovery_probes_its_key_and_uses_the_fixed_form_post_parameters(
         key_id: "KEYID67890".to_owned(),
         private_key_pem: SecretString::from(TEST_KEY_PEM),
     };
-    let base_url = Url::parse("https://pinvoyager.example/").unwrap();
+    let base_url = Url::parse("https://pinvoyager.example/").expect("valid test fixture");
     let apple = AppleProvider::discover(&config, &base_url, mock.issuer().as_str())
         .await
         .expect("Apple can discover against the local OIDC provider");
@@ -246,11 +207,7 @@ async fn apple_discovery_probes_its_key_and_uses_the_fixed_form_post_parameters(
         query.get("response_mode").map(String::as_str),
         Some("form_post")
     );
-    assert!(
-        query
-            .get("scope")
-            .is_some_and(|scope| scope.split_whitespace().any(|part| part == "name"))
-    );
+    assert!(query.get("scope").is_some_and(|scope| scope == "openid"));
 }
 
 async fn apple_provider_against_mock(mock: &support::MockOidcProvider) -> AppleProvider {
@@ -261,7 +218,7 @@ async fn apple_provider_against_mock(mock: &support::MockOidcProvider) -> AppleP
         Arc::new(test_secret()),
         openidconnect::RedirectUrl::new("http://pinvoyager.example/auth/apple/callback".to_owned())
             .expect("valid callback URL"),
-        vec![openidconnect::Scope::new("name".to_owned())],
+        vec![],
         vec![("response_mode", "form_post")],
     )
     .await
@@ -271,7 +228,7 @@ async fn apple_provider_against_mock(mock: &support::MockOidcProvider) -> AppleP
 }
 
 #[tokio::test]
-async fn apple_provider_builds_form_post_authorization_and_applies_the_first_name() {
+async fn apple_provider_uses_form_post_without_requesting_profile_names() {
     use crate::auth::AuthProvider as _;
 
     let mock = support::MockOidcProvider::start().await;
@@ -284,26 +241,16 @@ async fn apple_provider_builds_form_post_authorization_and_applies_the_first_nam
         query.get("response_mode").map(String::as_str),
         Some("form_post")
     );
-    assert!(
-        query
-            .get("scope")
-            .is_some_and(|scope| scope.split_whitespace().any(|part| part == "name"))
-    );
+    assert!(query.get("scope").is_some_and(|scope| scope == "openid"));
 
     let code = mock
         .token()
         .audience("com.example.pinvoyager.service")
         .issue();
     let identity = apple
-        .exchange(
-            &code,
-            support::PKCE_VERIFIER,
-            support::NONCE,
-            Some("user=%7B%22name%22%3A%7B%22firstName%22%3A%22Ada%22%2C%22lastName%22%3A%22Lovelace%22%7D%7D"),
-        )
+        .exchange(&code, support::PKCE_VERIFIER, support::NONCE)
         .await
         .expect("valid mock ID token verifies");
 
     assert_eq!(identity.provider, ProviderKind::Apple);
-    assert_eq!(identity.display_name.as_deref(), Some("Ada Lovelace"));
 }

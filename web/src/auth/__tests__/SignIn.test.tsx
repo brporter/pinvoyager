@@ -40,12 +40,21 @@ describe("SignIn", () => {
   it.each(["anonymous", "loading", "failed"] as const)(
     "renders the provider choices while auth is %s",
     (status) => {
-      renderAt("/signin", { ...signedOut, status });
+      renderAt(
+        "/signin",
+        status === "failed"
+          ? { ...signedOut, status, error: new Error("read failed") }
+          : { ...signedOut, status },
+      );
 
-      expect(screen.getByRole("heading", { name: "Sign in or create an account" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Sign in or create an account" }),
+      ).toBeInTheDocument();
       expect(screen.getByText(/Every voyage you create is public/)).toBeInTheDocument();
       for (const provider of ["Google", "Apple", "Microsoft", "Facebook"]) {
-        expect(screen.getByRole("button", { name: `Continue with ${provider}` })).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: `Continue with ${provider}` }),
+        ).toBeInTheDocument();
       }
       expect(screen.queryByLabelText(/email|password/i)).not.toBeInTheDocument();
     },
@@ -97,16 +106,15 @@ describe("SignIn", () => {
     renderAt("/signin");
 
     expect(screen.queryByRole("button", { name: "Forge a session" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Sign in or create an account" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Sign in or create an account" }),
+    ).toBeInTheDocument();
   });
 
   it("refreshes the session after the development sign-in succeeds", async () => {
     const user = userEvent.setup();
     const refresh = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, status: 200 } as Response),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 } as Response));
     renderAt("/signin", { ...signedOut, refresh });
 
     const submit = screen.getByRole("button", { name: "Forge a session" });

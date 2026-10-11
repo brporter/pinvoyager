@@ -17,7 +17,7 @@ pub struct User {
 /// Creates an account.
 ///
 /// There is no separate registration path — D2 makes a first successful
-/// sign-in the signup — so phase 3 calls this from inside the callback handler,
+/// sign-in the signup — so the callback handler calls this,
 /// in the same transaction that inserts the identity row. That is why this
 /// takes an executor rather than a pool.
 pub async fn create(
@@ -58,6 +58,21 @@ pub async fn find_by_id(
         User,
         "SELECT id, display_name, avatar_url, created_at FROM users WHERE id = $1",
         id,
+    )
+    .fetch_optional(executor)
+    .await
+}
+
+/// Resolve either a current handle or an alias; reserved/deleted names return no user.
+pub async fn find_by_profile_name(
+    executor: impl PgExecutor<'_>,
+    name: &str,
+) -> Result<Option<User>, sqlx::Error> {
+    sqlx::query_as!(
+        User,
+        "SELECT u.id, u.display_name, u.avatar_url, u.created_at FROM users u
+         JOIN profile_names n ON n.user_id = u.id WHERE n.name = $1",
+        name,
     )
     .fetch_optional(executor)
     .await

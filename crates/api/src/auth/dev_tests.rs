@@ -49,9 +49,9 @@ async fn a_disabled_dev_login_is_indistinguishable_from_a_missing_route() {
     let result = invoke(
         state(lazy_pool(), false),
         DevLoginRequest {
+            display_name: None,
             subject: "person@example.test".to_owned(),
             provider: None,
-            display_name: None,
         },
     )
     .await;
@@ -65,9 +65,9 @@ async fn blank_subject_and_unknown_provider_are_bad_requests() {
     let blank = invoke(
         app.clone(),
         DevLoginRequest {
+            display_name: None,
             subject: " \t ".to_owned(),
             provider: None,
-            display_name: None,
         },
     )
     .await;
@@ -78,9 +78,9 @@ async fn blank_subject_and_unknown_provider_are_bad_requests() {
     let unknown = invoke(
         app,
         DevLoginRequest {
+            display_name: None,
             subject: "person@example.test".to_owned(),
             provider: Some("unknown".to_owned()),
-            display_name: None,
         },
     )
     .await;
@@ -104,9 +104,9 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
         invoke(
             app.clone(),
             DevLoginRequest {
+                display_name: None,
                 subject: subject.clone(),
                 provider: Some("google".to_owned()),
-                display_name: Some("Ada Lovelace".to_owned()),
             },
         )
         .with_subscriber(subscriber)
@@ -117,14 +117,14 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
     let first_body = to_bytes(first_response.into_body(), usize::MAX)
         .await
         .expect("small login response");
-    let first: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+    let first: serde_json::Value = serde_json::from_slice(&first_body).expect("valid test fixture");
 
     let (second_jar, second_response) = invoke(
         app,
         DevLoginRequest {
+            display_name: None,
             subject: subject.clone(),
             provider: None,
-            display_name: Some("Replacement Name".to_owned()),
         },
     )
     .await
@@ -133,19 +133,24 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
     let second_body = to_bytes(second_response.into_body(), usize::MAX)
         .await
         .expect("small login response");
-    let second: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+    let second: serde_json::Value =
+        serde_json::from_slice(&second_body).expect("valid test fixture");
 
     assert_eq!(first["provider"], "google");
     assert_eq!(second["provider"], "google");
     assert_eq!(first["subject"], subject);
     assert_eq!(first["user_id"], second["user_id"]);
 
-    let user_id: uuid::Uuid = first["user_id"].as_str().unwrap().parse().unwrap();
+    let user_id: uuid::Uuid = first["user_id"]
+        .as_str()
+        .expect("valid test fixture")
+        .parse()
+        .expect("valid test fixture");
     let display_name: Option<String> =
         sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
             .bind(user_id)
-            .fetch_optional(&pool)
+            .fetch_one(&pool)
             .await
             .expect("read the stored display name");
-    assert_eq!(display_name.as_deref(), Some("Ada Lovelace"));
+    assert!(display_name.is_none());
 }

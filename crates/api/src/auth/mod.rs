@@ -1,4 +1,4 @@
-//! Authentication (phase 3).
+//! Authentication.
 //!
 //! The whole of this module operates under D1: **no credential of any kind is
 //! stored.** No password, no hash of one, no provider access or refresh token.

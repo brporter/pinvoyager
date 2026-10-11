@@ -1,8 +1,5 @@
 //! In-flight authorization attempts.
 //!
-//! CONTRACT — signatures below are fixed; implementations are owned by the
-//! session agent.
-//!
 //! An attempt is created at `/auth/{provider}/start` and **consumed** at the
 //! callback. Single-use is the point: it is what makes a replayed callback
 //! fail. Consumption must therefore be an atomic `DELETE ... RETURNING`, not a

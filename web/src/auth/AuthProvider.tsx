@@ -18,8 +18,9 @@ import { useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 
 import { useMe, useSignOut } from "../api/hooks";
+import { ChooseDisplayName } from "./ChooseDisplayName";
 import { AuthContext } from "./context";
-import type { AuthState, AuthStatus } from "./context";
+import type { AuthState } from "./context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const me = useMe();
@@ -44,31 +45,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [mutateAsync]);
 
   const value = useMemo<AuthState>(() => {
-    // Order matters. `isPending` first, because a query that has never
-    // resolved has `data === undefined` and would otherwise be read as
-    // anonymous — which is how every protected route ends up redirecting to
-    // sign-in for a moment on reload.
-    const status: AuthStatus = me.isPending
-      ? "loading"
-      : me.isError
-        ? "failed"
-        : me.data === null
-          ? "anonymous"
-          : "authenticated";
-
+    const actions = { refresh, signOut };
+    if (me.isPending)
+      return { ...actions, status: "loading", user: null, identities: [], error: null };
+    if (me.isError)
+      return { ...actions, status: "failed", user: null, identities: [], error: me.error };
+    if (me.data == null)
+      return { ...actions, status: "anonymous", user: null, identities: [], error: null };
     return {
-      status,
-      user: me.data?.user ?? null,
-      identities: me.data?.identities ?? [],
-      // A 401 never reaches here: `useMe` resolves it to `null`, because "not
-      // signed in" is an ordinary answer in an application that is almost
-      // entirely readable without an account. Only a real failure — a 5xx, a
-      // dropped connection — sets this.
-      error: me.isError ? me.error : null,
-      refresh,
-      signOut,
+      ...actions,
+      status: "authenticated",
+      user: me.data.user,
+      identities: me.data.identities,
+      error: null,
     };
   }, [me.isPending, me.isError, me.data, me.error, refresh, signOut]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {value.status === "authenticated" &&
+      value.user !== null &&
+      value.user.display_name === null ? (
+        <ChooseDisplayName />
+      ) : (
+        children
+      )}
+    </AuthContext.Provider>
+  );
 }

@@ -1,12 +1,4 @@
-/**
- * The card both authentication screens sit in.
- *
- * `.si-card` from `design/screens/sign-in.html` and `.as-card` from
- * `design/screens/auth-states.html` are the same card at two widths, one of
- * them center-aligned. Neither is in `design/components.css` — they are
- * screen-local styles in their own design files — so they are reproduced here
- * as inline style rather than invented as new design-system classes.
- */
+/** Shared sign-in and callback card layout. */
 
 import type { ReactNode } from "react";
 

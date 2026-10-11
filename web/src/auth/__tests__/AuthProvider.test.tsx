@@ -9,7 +9,8 @@
  * anonymous site and offers them a sign-in button they do not need.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { isApiError } from "../../api/client";
@@ -24,9 +25,7 @@ function Probe() {
       <span data-testid="status">{status}</span>
       <span data-testid="user">{user?.display_name ?? "none"}</span>
       <span data-testid="error">{error === null ? "none" : error.message}</span>
-      <span data-testid="error-status">
-        {isApiError(error) ? String(error.status) : "none"}
-      </span>
+      <span data-testid="error-status">{isApiError(error) ? String(error.status) : "none"}</span>
     </>
   );
 }
@@ -67,9 +66,62 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
     });
 
-    expect(screen.getByTestId("user")).toHaveTextContent("Ada Lovelace");
+    expect(screen.getByTestId("user")).toHaveTextContent("ada-lovelace");
   });
 
+  it("requires an initial display name, saves it, and resumes the original screen", async () => {
+    const user = userEvent.setup();
+    let chosen: string | null = null;
+    const fetch = vi.fn(async (_input: RequestInfo | URL, options?: RequestInit) => {
+      if (options?.method === "PATCH") {
+        chosen = JSON.parse(String(options.body)).display_name;
+        return new Response(null, { status: 204 });
+      }
+      return new Response(
+        JSON.stringify({ ...SIGNED_IN, user: { ...SIGNED_IN.user, display_name: chosen } }),
+      );
+    });
+    vi.stubGlobal("fetch", fetch);
+    renderProbe();
+    expect(
+      await screen.findByRole("heading", { name: "Choose your display name" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("status")).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Display name" }), "betaporter");
+    expect(screen.getByText("Public profile: /u/betaporter")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByTestId("user")).toHaveTextContent("betaporter");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/me",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ display_name: "betaporter" }),
+      }),
+    );
+  });
+
+  it("keeps profile setup open when a name is unavailable and refuses blank submission", async () => {
+    const user = userEvent.setup();
+    const fetch = vi.fn(async (_input: RequestInfo | URL, options?: RequestInit) =>
+      options?.method === "PATCH"
+        ? new Response(JSON.stringify({ code: "conflict", message: "That name is unavailable." }), {
+            status: 409,
+          })
+        : new Response(
+            JSON.stringify({ ...SIGNED_IN, user: { ...SIGNED_IN.user, display_name: null } }),
+          ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    renderProbe();
+    const name = await screen.findByRole("textbox", { name: "Display name" });
+    fireEvent.submit(name.closest("form")!);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await user.type(name, "settings");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("That name is unavailable.")).toBeInTheDocument();
+    expect(name).toHaveValue("settings");
+    expect(screen.queryByTestId("status")).not.toBeInTheDocument();
+  });
   it("does not report a server failure as being signed out", async () => {
     stubMe(500);
     renderProbe();

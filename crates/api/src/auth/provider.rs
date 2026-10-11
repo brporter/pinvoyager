@@ -1,9 +1,5 @@
 //! Provider abstraction.
 //!
-//! CONTRACT — the trait, `ProviderKind`, `VerifiedIdentity` and
-//! `ProviderRegistry`'s signatures are fixed; implementations are owned by the
-//! provider agent.
-//!
 //! Three of the four providers are OIDC-conformant and share almost everything.
 //! Facebook is not: it issues no ID token, so its subject comes from a Graph
 //! API call instead. The trait exists so that difference lives in one
@@ -68,18 +64,13 @@ impl From<ProviderKind> for DbProvider {
 /// What a provider tells us about someone, after verification.
 ///
 /// Note the absence of an email field. This service does not store email
-/// (D3, and phase 3's resolved open question), and not having it on the struct
+/// (D3), and not having it on the struct
 /// means no handler can casually start.
 #[derive(Debug, Clone)]
 pub struct VerifiedIdentity {
     pub provider: ProviderKind,
     /// The provider's stable subject identifier. Opaque — never parsed.
     pub subject: String,
-    /// Apple returns this **only on first authorization**, in the form-POST
-    /// body, and never again. If it is not captured then it is gone for good,
-    /// which is why the whole pipeline treats it as optional rather than
-    /// assuming a name exists.
-    pub display_name: Option<String>,
     pub avatar_url: Option<String>,
 }
 
@@ -107,15 +98,11 @@ pub trait AuthProvider: Send + Sync {
     /// Decoding a token is not verifying it, and an unverified token looks
     /// identical in a debugger.
     ///
-    /// `form_body` carries Apple's first-authorization user payload, which
-    /// arrives in the POST body rather than in any token. Empty for everyone
-    /// else.
     async fn exchange(
         &self,
         code: &str,
         pkce_verifier: &str,
         nonce: &str,
-        form_body: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError>;
 }
 
@@ -160,14 +147,14 @@ impl ProviderRegistry {
     ///
     /// A provider that fails discovery at startup must not take the whole
     /// service down: log it, disable that provider, and keep serving.
-    pub async fn from_config(config: &crate::config::AuthConfig) -> Result<Self, AuthError> {
+    pub async fn from_config(config: &crate::config::AuthConfig) -> Self {
         Self::from_config_with_apple_issuer(config, super::providers::apple::APPLE_ISSUER).await
     }
 
     async fn from_config_with_apple_issuer(
         config: &crate::config::AuthConfig,
         apple_issuer: &str,
-    ) -> Result<Self, AuthError> {
+    ) -> Self {
         let base_url = &config.base_url;
         let configured = &config.providers;
 
@@ -228,7 +215,7 @@ impl ProviderRegistry {
                     tracing::info!(provider = kind.as_str(), "provider ready");
                     providers.insert(kind, provider);
                 }
-                // The load-bearing arm. A provider whose discovery document is
+                // A provider whose discovery document is
                 // unreachable — an outage, a proxy, a typo'd issuer — must not
                 // stop the other three from serving. It is logged at warn and
                 // its endpoints will 404 until the next restart, which is a
@@ -259,11 +246,7 @@ impl ProviderRegistry {
             tracing::warn!("no authentication providers are available — sign-in is disabled");
         }
 
-        // The only `Err` this function returns comes from building a provider
-        // that cannot fail for an external reason, which in practice means it
-        // does not return `Err` at all. Refusing to boot is reserved for
-        // something genuinely unrecoverable.
-        Ok(Self { providers })
+        Self { providers }
     }
 
     /// A registry with nothing configured.

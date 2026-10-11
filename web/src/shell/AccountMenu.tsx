@@ -1,19 +1,4 @@
-/**
- * The avatar in the top bar, and what it opens.
- *
- * DESIGN DEVIATION, deliberate and narrow. `design/components/navigation.html`
- * draws the signed-in bar ending in a static avatar with a `title`, and no
- * screen in `design/screens/` draws a sign-out control anywhere. Phase 6's T5
- * nonetheless requires that logout returns to the signed-out state, so it needs
- * a home. This is the smallest one: the avatar becomes a disclosure with two
- * destinations behind it, and the avatar itself still looks exactly as drawn.
- *
- * It is a disclosure, not a `role="menu"`. A real menu owes the user arrow-key
- * navigation, type-ahead, and focus that never lands on an item via Tab — a
- * contract that is easy to half-implement and worse half-implemented than not
- * attempted. Two links behind a button that reports `aria-expanded` is fully
- * keyboard-operable with no bespoke key handling at all.
- */
+/** Accessible account menu for profile navigation, settings, and sign-out. */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";

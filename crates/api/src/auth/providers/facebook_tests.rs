@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 
 #[test]
 fn facebook_authorization_url_reports_an_invalid_base() {
-    let provider = configured_provider(Url::parse("http://127.0.0.1:1234").unwrap());
+    let provider =
+        configured_provider(Url::parse("http://127.0.0.1:1234").expect("valid test fixture"));
     let error = match provider.authorize_at("://invalid") {
         Ok(_) => panic!("malformed authorization endpoint should be rejected"),
         Err(error) => error,
@@ -46,21 +47,24 @@ async fn serve_graph(
     let (parts, body) = request.into_parts();
     let body = to_bytes(body, usize::MAX).await.expect("read request body");
     let uri = parts.uri.to_string();
-    requests.lock().unwrap().push(SeenRequest {
-        method: parts.method.to_string(),
-        uri: uri.clone(),
-        authorization: parts
-            .headers
-            .get("authorization")
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned),
-        content_type: parts
-            .headers
-            .get("content-type")
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned),
-        body: String::from_utf8_lossy(&body).into_owned(),
-    });
+    requests
+        .lock()
+        .expect("valid test fixture")
+        .push(SeenRequest {
+            method: parts.method.to_string(),
+            uri: uri.clone(),
+            authorization: parts
+                .headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned),
+            content_type: parts
+                .headers
+                .get("content-type")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned),
+            body: String::from_utf8_lossy(&body).into_owned(),
+        });
 
     let (status, body) = if parts.method == "POST" && uri.starts_with("/v23.0/oauth/access_token") {
         (reply.token_status, reply.token_body)
@@ -130,7 +134,7 @@ fn the_facebook_provider_has_its_own_kind_and_versioned_graph_endpoint() {
     assert_eq!(provider.kind(), ProviderKind::Facebook);
     assert_eq!(
         provider.graph_url("me").expect("Graph URL"),
-        Url::parse("https://graph.facebook.com/v23.0/me").unwrap()
+        Url::parse("https://graph.facebook.com/v23.0/me").expect("valid test fixture")
     );
     assert_eq!(
         provider
@@ -173,7 +177,7 @@ fn authorization_uses_state_pkce_and_only_the_public_profile_scope() {
         query
             .get("code_challenge")
             .map(String::as_str)
-            .unwrap()
+            .expect("valid test fixture")
             .len(),
         43
     );
@@ -193,19 +197,19 @@ async fn exchange_sends_the_code_and_pkce_then_fetches_the_profile_with_the_toke
     let provider = configured_provider(root);
 
     let identity = provider
-        .exchange("auth code +", "pkce verifier", "ignored nonce", None)
+        .exchange("auth code +", "pkce verifier", "ignored nonce")
         .await
         .expect("exchange and profile request succeed");
 
     assert_eq!(identity.provider, ProviderKind::Facebook);
     assert_eq!(identity.subject, "app-scoped-42");
-    assert_eq!(identity.display_name.as_deref(), Some("Ada Lovelace"));
+
     assert_eq!(
         identity.avatar_url.as_deref(),
         Some("https://images.example/ada.jpg")
     );
 
-    let requests = requests.lock().unwrap();
+    let requests = requests.lock().expect("valid test fixture");
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[0].method, "POST");
     assert_eq!(requests[0].uri, "/v23.0/oauth/access_token");
@@ -241,7 +245,7 @@ async fn exchange_sends_the_code_and_pkce_then_fetches_the_profile_with_the_toke
     assert!(
         requests[1]
             .uri
-            .starts_with("/v23.0/me?fields=id%2Cname%2Cpicture.type%28large%29")
+            .starts_with("/v23.0/me?fields=id%2Cpicture.type%28large%29")
     );
     assert_eq!(
         requests[1].authorization.as_deref(),
@@ -261,14 +265,14 @@ async fn exchange_refuses_a_provider_error_status_before_parsing_its_body() {
     .await;
 
     let error = configured_provider(root)
-        .exchange("bad-code", "verifier", "nonce", None)
+        .exchange("bad-code", "verifier", "nonce")
         .await
         .expect_err("a rejected code exchange must fail");
 
     assert!(
         matches!(error, AuthError::Provider(message) if message.contains("code exchange was rejected"))
     );
-    assert_eq!(requests.lock().unwrap().len(), 1);
+    assert_eq!(requests.lock().expect("valid test fixture").len(), 1);
     task.abort();
 }
 
@@ -283,14 +287,14 @@ async fn exchange_rejects_an_unreadable_token_response() {
     .await;
 
     let error = configured_provider(root)
-        .exchange("code", "verifier", "nonce", None)
+        .exchange("code", "verifier", "nonce")
         .await
         .expect_err("malformed token JSON must fail");
 
     assert!(
         matches!(error, AuthError::Provider(message) if message.contains("unreadable token response"))
     );
-    assert_eq!(requests.lock().unwrap().len(), 1);
+    assert_eq!(requests.lock().expect("valid test fixture").len(), 1);
     task.abort();
 }
 
@@ -305,7 +309,7 @@ async fn exchange_reports_a_transport_failure() {
         Url::parse(&format!("http://{address}/v23.0/")).expect("construct local Graph API URL");
 
     let error = configured_provider(graph_root)
-        .exchange("code", "verifier", "nonce", None)
+        .exchange("code", "verifier", "nonce")
         .await
         .expect_err("connection refusal must fail exchange");
 
@@ -329,19 +333,19 @@ async fn exchange_rejects_graph_errors_and_malformed_profile_responses() {
         .await;
 
         let error = configured_provider(root)
-            .exchange("code", "verifier", "nonce", None)
+            .exchange("code", "verifier", "nonce")
             .await
             .expect_err("Graph API failure must fail sign-in");
 
         assert!(matches!(error, AuthError::Provider(message) if message.contains(expected)));
-        assert_eq!(requests.lock().unwrap().len(), 2);
+        assert_eq!(requests.lock().expect("valid test fixture").len(), 2);
         task.abort();
     }
 }
 
 #[tokio::test]
 async fn profile_mapping_drops_blank_names_and_placeholder_avatars() {
-    for (profile_body, expected_name, expected_avatar) in [
+    for (profile_body, _expected_name, expected_avatar) in [
         (
             r#"{"id":"id-1","name":"   ","picture":{"data":{"url":"https://images.example/default.png","is_silhouette":true}}}"#,
             None,
@@ -367,12 +371,33 @@ async fn profile_mapping_drops_blank_names_and_placeholder_avatars() {
         .await;
 
         let identity = configured_provider(root)
-            .exchange("code", "verifier", "nonce", None)
+            .exchange("code", "verifier", "nonce")
             .await
             .expect("profile mapping succeeds");
 
-        assert_eq!(identity.display_name.as_deref(), expected_name);
         assert_eq!(identity.avatar_url.as_deref(), expected_avatar);
         task.abort();
     }
+}
+
+#[tokio::test]
+async fn graph_profile_reports_unusable_urls_and_connection_failure() {
+    let provider = configured_provider(Url::parse("mailto:test@example.com").expect("opaque URL"));
+    assert!(matches!(
+        provider.graph_url("me"),
+        Err(AuthError::Configuration(_))
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve port");
+    let root = Url::parse(&format!(
+        "http://{}/",
+        listener.local_addr().expect("address")
+    ))
+    .expect("URL");
+    drop(listener);
+    assert!(matches!(
+        configured_provider(root).fetch_profile("token").await,
+        Err(AuthError::Provider(_))
+    ));
 }
