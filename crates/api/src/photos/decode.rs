@@ -1,7 +1,5 @@
 //! Decoding, including the HEIC path.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the imaging agent.
-//!
 //! `image` handles JPEG, PNG and WebP. It has **no HEIC decoder at all** — not
 //! a disabled feature, the decoder does not exist, largely because HEIC wraps
 //! HEVC and carries patent encumbrance the maintainers declined. HEIC therefore
@@ -45,7 +43,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use image::{DynamicImage, ImageBuffer, ImageReader, Rgb, Rgba};
-use libheif_rs::{ColorSpace, HeifContext, LibHeif, RgbChroma, StreamReader};
+use libheif_rs::{ColorSpace, HeifContext, LibHeif, Plane, RgbChroma, StreamReader};
 
 use crate::photos::{ImageFormat, PhotoError};
 
@@ -174,30 +172,20 @@ fn decode_heic(path: &Path) -> Result<DynamicImage, PhotoError> {
         .decode(&handle, color_space, None)
         .map_err(undecodable)?;
 
-    let planes = decoded.planes();
-    let plane = planes.interleaved.ok_or_else(|| {
-        PhotoError::Undecodable("HEIC decoded without an interleaved plane".into())
-    })?;
-
-    image_from_interleaved(
-        plane.width,
-        plane.height,
-        plane.storage_bits_per_pixel,
-        plane.stride,
-        Some(plane.data),
-    )
+    image_from_interleaved(decoded.planes().interleaved)
 }
 
-/// Converts libheif's interleaved plane to an owned image while dropping row
-/// padding and validating the shape reported by the native decoder.
-fn image_from_interleaved(
-    width: u32,
-    height: u32,
-    storage_bits_per_pixel: u8,
-    stride: usize,
-    data: Option<&[u8]>,
-) -> Result<DynamicImage, PhotoError> {
-    let data = data.ok_or_else(|| {
+/// Copies the native plane into an owned image, validating dimensions and
+/// dropping row padding before constructing the image buffer.
+fn image_from_interleaved(plane: Option<Plane<&[u8]>>) -> Result<DynamicImage, PhotoError> {
+    let Plane {
+        width,
+        height,
+        storage_bits_per_pixel,
+        stride,
+        data,
+        ..
+    } = plane.ok_or_else(|| {
         PhotoError::Undecodable("HEIC decoded without an interleaved plane".into())
     })?;
     let channels = usize::from(storage_bits_per_pixel / 8);
@@ -233,7 +221,8 @@ fn image_from_interleaved(
         ImageBuffer::<Rgb<u8>, _>::from_raw(width, height, pixels).map(DynamicImage::ImageRgb8)
     };
 
-    image.ok_or_else(|| PhotoError::Undecodable("HEIC pixel buffer was the wrong size".into()))
+    // Width, height, channel count, and exact buffer length were checked above.
+    Ok(image.expect("validated interleaved pixel buffer"))
 }
 
 /// The process-wide libheif handle.

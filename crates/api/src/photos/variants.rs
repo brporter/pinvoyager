@@ -1,11 +1,9 @@
 //! Derived variants: resized, re-encoded, stripped.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the imaging agent.
-//!
 //! # The strip is the feature
 //!
-//! Per D6 this module carries the load-bearing guarantee of the whole product.
-//! Every voyage is public, so a served image is a public artifact. If someone
+//! D6 requires every served variant to omit original metadata.
+//! Published voyages are public, so a served image is a public artifact. If someone
 //! chooses ~50 km granularity and the served WebP still carries its original
 //! GPS EXIF, the granularity control is decorative and anyone who downloads the
 //! file reads the exact coordinates out of it.
@@ -87,8 +85,10 @@ pub fn encode_variant(
     kind: VariantKind,
     quality: f32,
 ) -> Result<Vec<u8>, PhotoError> {
-    let resized = fit_within(image, kind.max_edge());
-    encode_webp(resized.as_ref(), quality)
+    let resized =
+        tracing::info_span!("photo.resize").in_scope(|| fit_within(image, kind.max_edge()));
+    tracing::info_span!("photo.encode", photo.webp_quality = quality)
+        .in_scope(|| encode_webp(resized.as_ref(), quality))
 }
 
 /// Scales down to fit inside a `max_edge` square, preserving aspect ratio.

@@ -1,16 +1,7 @@
 //! Public visibility of photograph bytes (D6).
 //!
-//! Every voyage is public, which has to mean the *pictures* are public and not
-//! merely the JSON describing them. Phase 4 served variants to their owner
-//! only, so a published voyage rendered as a page of broken images for everyone
-//! but its author — the voyage was world-readable and its photographs were not.
-//!
-//! These tests pin the three-way distinction that fixes it:
-//!
-//! * attached to a **published** voyage → anyone may fetch the bytes
-//! * attached only to a **draft** → nobody but the owner, or "draft" would leak
-//!   its contents to anyone holding a photo id
-//! * attached to **nothing** → nobody but the owner
+//! Published voyage variants are readable anonymously. Draft variants and
+//! exact photo metadata require their owner. Every photo belongs to a voyage.
 //!
 //! They drive the real router, because the thing under test is an
 //! authorization decision made by a handler, not a predicate in isolation.
@@ -117,7 +108,11 @@ async fn photo_with_variant(pool: &PgPool, root: &ScratchRoot, owner: Uuid) -> U
         .await
         .expect("mark ready");
 
-    let path = storage::variant_path(&root.0, &ContentHash(hash), VariantKind::Thumb);
+    let path = storage::variant_path(
+        &root.0,
+        &ContentHash::try_from(hash).expect("valid fixture hash"),
+        VariantKind::Thumb,
+    );
     std::fs::create_dir_all(path.parent().expect("variant path has a parent"))
         .expect("create shard dirs");
     // Not a real WebP. The handler serves bytes and sets a server-determined

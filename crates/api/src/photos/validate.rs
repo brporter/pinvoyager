@@ -1,9 +1,7 @@
 //! Upload validation.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the upload agent.
-//!
-//! Checks are ordered cheapest-first, and the order is the design: each gate
-//! exists so the expensive operation behind it never runs on hostile input.
+//! Validate inexpensive properties before decoding so oversized or unsupported
+//! input does not trigger expensive image work.
 //!
 //! 1. Size cap — before the body is read
 //! 2. Magic bytes — before any decoder is handed the file

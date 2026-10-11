@@ -25,27 +25,17 @@ fn capture_time_fallbacks_offsets_and_invalid_fields_are_handled() {
     let capture = Value::Ascii(vec![b"2021:07:04 12:34:56".to_vec()]);
     let offset = Value::Ascii(vec![b"+02:00".to_vec()]);
     assert_eq!(
-        captured_at_values(Tag::DateTime, &capture, Some(&offset))
-            .unwrap()
+        captured_at_values(&capture, Some(&offset))
+            .expect("valid test fixture")
             .to_rfc3339(),
         "2021-07-04T10:34:56+00:00"
     );
-    assert!(captured_at_values(Tag::DateTimeOriginal, &Value::Short(vec![1]), None).is_none());
+    assert!(captured_at_values(&Value::Short(vec![1]), None).is_none());
     assert!(
-        captured_at_values(
-            Tag::DateTimeOriginal,
-            &Value::Ascii(vec![b"2021:02:31 12:34:56".to_vec()]),
-            None,
-        )
-        .is_none()
+        captured_at_values(&Value::Ascii(vec![b"2021:02:31 12:34:56".to_vec()]), None,).is_none()
     );
     assert!(
-        captured_at_values(
-            Tag::DateTimeOriginal,
-            &Value::Ascii(vec![b"2021:07:04 25:34:56".to_vec()]),
-            None,
-        )
-        .is_none()
+        captured_at_values(&Value::Ascii(vec![b"2021:07:04 25:34:56".to_vec()]), None,).is_none()
     );
 
     let short_dms = Value::Rational(vec![Rational::from((1, 1)), Rational::from((2, 1))]);
@@ -166,7 +156,7 @@ fn gps_signs_follow_the_reference_in_every_hemisphere() {
     }
 }
 
-/// D6 and the phase plan both turn on coordinates being stored exactly:
+/// D6 requires exact coordinates in owner metadata:
 /// granularity is applied when serving, so any rounding here is a precision
 /// loss that cannot be undone and that no later setting can recover.
 #[test]
@@ -337,6 +327,73 @@ fn a_coordinate_without_its_reference_is_dropped() {
     ]);
 
     let data = extract(&path);
-    assert!(data.latitude.is_some(), "latitude still has its reference");
+    assert!(data.latitude.is_none(), "an incomplete pair is unplaced");
     assert!(data.longitude.is_none(), "longitude has no hemisphere");
+}
+
+#[test]
+fn incomplete_gps_is_unplaced() {
+    let dir = ScratchDir::new("partial-gps");
+    let path = write_jpeg(&dir, "partial", 16, 16);
+    exiftool(&[
+        "-overwrite_original",
+        "-GPSLatitude=35",
+        "-GPSLatitudeRef=N",
+        path.to_str().expect("path"),
+    ]);
+    let metadata = extract(&path);
+    assert_eq!((metadata.latitude, metadata.longitude), (None, None));
+}
+
+#[test]
+fn gps_reference_must_match_its_axis() {
+    use ::exif::{Rational, Tag, Value};
+    let coordinate = Value::Rational(vec![
+        Rational::from((35, 1)),
+        Rational::from((0, 1)),
+        Rational::from((0, 1)),
+    ]);
+    for (tag, wrong_reference) in [
+        (Tag::GPSLatitude, "E"),
+        (Tag::GPSLatitude, "W"),
+        (Tag::GPSLongitude, "N"),
+        (Tag::GPSLongitude, "S"),
+    ] {
+        assert!(
+            coordinate_values(
+                &coordinate,
+                &Value::Ascii(vec![wrong_reference.as_bytes().to_vec()]),
+                tag
+            )
+            .is_none()
+        );
+    }
+}
+
+#[test]
+fn metadata_is_optional_when_the_reader_cannot_rewind() {
+    struct Unseekable(std::io::Cursor<Vec<u8>>);
+    impl std::io::Read for Unseekable {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.0.read(buf)
+        }
+    }
+    impl std::io::BufRead for Unseekable {
+        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+            self.0.fill_buf()
+        }
+        fn consume(&mut self, n: usize) {
+            self.0.consume(n);
+        }
+    }
+    impl Seek for Unseekable {
+        fn seek(&mut self, _: SeekFrom) -> std::io::Result<u64> {
+            Err(std::io::Error::other("reader cannot rewind"))
+        }
+    }
+    let exif = extract_reader(Unseekable(std::io::Cursor::new(vec![0; 12])));
+    assert!(exif.latitude.is_none());
+    assert!(exif.longitude.is_none());
+    assert!(exif.orientation.is_none());
+    assert!(exif.captured_at.is_none());
 }

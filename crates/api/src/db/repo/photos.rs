@@ -1,16 +1,14 @@
 //! Photos repository.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the upload agent.
-//!
 //! Every function takes an executor, so the callback can create a photo and
-//! enqueue it inside one transaction, and tests can roll back.
+//! record it inside one transaction, and tests can roll back.
 
 use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
 /// A photo row. Coordinates here are **exact** — granularity is applied at the
-/// serialization boundary in phase 5, never in the repository, so that there is
+/// serialization boundary when building public responses, never in the repository, so that there is
 /// exactly one place to get it right.
 #[derive(Debug, Clone)]
 pub struct Photo {
@@ -232,22 +230,16 @@ pub async fn pending(executor: impl PgExecutor<'_>, limit: i64) -> Result<Vec<Uu
 /// the `WHERE` clause rather than in a preceding `SELECT` so there is no window
 /// between the check and the delete.
 ///
-/// The statement's snapshot alone cannot protect against a new upload of the
-/// same bytes. Handlers also take `lock_content` in a transaction around the
-/// storage write and insert, or deletion and unlink, to close that race.
+/// The caller locks the voyage and content hash, deletes in a transaction,
+/// then schedules cleanup. Cleanup rechecks references after commit under the
+/// same content lock before unlinking. The CTE snapshot alone is insufficient.
 pub async fn delete_returning_orphaned(
     executor: impl PgExecutor<'_>,
     id: Uuid,
     owner_id: Uuid,
 ) -> Result<Option<(String, bool)>, sqlx::Error> {
-    // `AND photos.id <> $1` is necessary and is the thing that looks wrong
-    // at a glance. A data-modifying CTE's effects are *not* visible to the rest
-    // of the statement: every part reads the same snapshot, taken before the
-    // statement ran, so the outer `EXISTS` still sees the row the CTE just
-    // deleted. Without the exclusion this returns `false` for every photo ever
-    // deleted, no file is ever unlinked, and the store grows forever — a bug
-    // that no single-photo test would catch, because "did not delete the file"
-    // looks exactly like "correctly kept a shared file".
+    // A modifying CTE and its outer SELECT share the pre-delete snapshot.
+    // Exclude the deleted ID explicitly when checking remaining references.
     let row = sqlx::query!(
         r#"WITH deleted AS (
                DELETE FROM photos

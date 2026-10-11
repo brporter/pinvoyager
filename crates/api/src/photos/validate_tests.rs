@@ -48,7 +48,7 @@ fn accepted_formats_are_recognized_by_their_magic() {
     }
 }
 
-/// The acceptance criterion from the phase plan: a `.jpg` whose bytes are
+/// A `.jpg` whose bytes are
 /// actually HTML is rejected. The extension never reaches this function,
 /// which is exactly why it cannot help the attacker.
 #[test]
@@ -272,39 +272,6 @@ fn probing_a_missing_file_is_a_storage_error() {
     ));
 }
 
-/// Writes a small HEIC, or returns `None` when this libheif build has no
-/// HEVC encoder plugin.
-///
-/// Encoding HEIC needs x265, which is a separate plugin from the decoder
-/// and is genuinely absent in some distributions' libheif packages —
-/// including, deliberately, ones that ship a decode-only build for patent
-/// reasons (D9). Making the fixture optional keeps the suite honest on
-/// those machines instead of failing on something the product never does.
-fn write_heic(path: &Path, width: u32, height: u32) -> Option<()> {
-    use libheif_rs::{
-        Channel, ColorSpace, CompressionFormat, EncoderQuality, HeifContext, Image, LibHeif,
-        RgbChroma,
-    };
-
-    let lib = LibHeif::new();
-    let mut encoder = lib.encoder_for_format(CompressionFormat::Hevc).ok()?;
-    encoder.set_quality(EncoderQuality::Lossy(50)).ok()?;
-
-    let mut image = Image::new(width, height, ColorSpace::Rgb(RgbChroma::Rgb)).ok()?;
-    image
-        .create_plane(Channel::Interleaved, width, height, 8)
-        .ok()?;
-    if let Some(plane) = image.planes_mut().interleaved {
-        plane.data.fill(0x40);
-    }
-
-    let mut context = HeifContext::new().ok()?;
-    context.encode_image(&image, &mut encoder, None).ok()?;
-    context.write_to_file(path.to_str()?).ok()?;
-
-    Some(())
-}
-
 /// The HEIC path, end to end: a file libheif wrote, sniffed from its magic
 /// bytes and then probed for dimensions through libheif's container parse.
 /// Both halves matter — an `ftyp` brand this module does not recognize
@@ -314,14 +281,11 @@ fn dimensions_are_read_from_a_real_heic() {
     let dir = scratch_dir("heic");
     let path = dir.join("probe.heic");
 
-    let Some(()) = write_heic(&path, 40, 24) else {
-        eprintln!(
-            "skipping: this libheif build has no HEVC encoder, so no HEIC \
-                 fixture can be generated. Decoding is unaffected."
-        );
-        std::fs::remove_dir_all(&dir).ok();
-        return;
-    };
+    std::fs::write(
+        &path,
+        include_bytes!("../../tests/fixtures/quadrants-rgb.heic"),
+    )
+    .expect("write committed fixture");
 
     let mut header = vec![0u8; HEADER_BYTES];
     let written = std::fs::read(&path).expect("read heic");
@@ -335,7 +299,7 @@ fn dimensions_are_read_from_a_real_heic() {
 
     assert_eq!(
         probe_dimensions(&path, ImageFormat::Heic).expect("probe heic"),
-        (40, 24)
+        (64, 32)
     );
 
     std::fs::remove_dir_all(&dir).ok();
@@ -356,4 +320,12 @@ fn probing_a_non_heic_through_the_heic_path_fails_cleanly() {
     ));
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn heic_probe_rejects_non_utf8_paths_without_a_lossy_conversion() {
+    use std::os::unix::ffi::OsStringExt;
+    let path = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![0xff]));
+    assert!(matches!(probe_heic(&path), Err(PhotoError::Undecodable(_))));
 }

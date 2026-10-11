@@ -1,11 +1,11 @@
-//! The photo pipeline (phase 4).
+//! The photo pipeline.
 //!
 //! Upload → validate → store → extract EXIF → derive variants → serve.
 //!
 //! Three invariants govern everything here, and each is a decision rather than
 //! a preference:
 //!
-//! **D6 — variants carry no metadata.** Every voyage is public, so a served
+//! **D6 — variants carry no metadata.** Published voyages are public, so a served
 //! image is a public artifact. If a user picks coarse granularity and the
 //! served file still carries its original GPS EXIF, the setting is decorative
 //! and leaks exact coordinates to anyone who downloads it. Re-encoding is not
@@ -24,8 +24,10 @@
 //! the runtime and times out unrelated requests. Everything goes through
 //! [`crate::blocking::run_blocking`].
 
+pub mod cleanup;
 pub mod decode;
 pub mod exif;
+pub mod rate_limit;
 pub mod storage;
 pub mod validate;
 pub mod variants;

@@ -225,7 +225,7 @@ async fn removing_content_takes_the_original_and_every_variant() {
         std::fs::write(&path, b"variant").expect("write variant");
     }
 
-    remove_content(&root, &content).await.expect("remove");
+    remove_content(&root, &content).expect("remove");
 
     assert!(!original_path(&root, &content).exists());
     for kind in VariantKind::ALL {
@@ -242,9 +242,7 @@ async fn removing_content_that_is_already_gone_succeeds() {
     let dir = scratch_dir("remove-absent");
     let root = dir.join("store");
 
-    remove_content(&root, &hash(ABC_SHA256))
-        .await
-        .expect("removing absent content is not an error");
+    remove_content(&root, &hash(ABC_SHA256)).expect("removing absent content is not an error");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -299,9 +297,8 @@ async fn removal_reports_filesystem_errors_for_directories() {
     let unexpected_directory = dir.join("not-a-file");
     std::fs::create_dir(&unexpected_directory).expect("create directory");
 
-    let error = remove_if_present(&unexpected_directory)
-        .await
-        .expect_err("remove_file must reject a directory");
+    let error =
+        remove_if_present(&unexpected_directory).expect_err("remove_file must reject a directory");
 
     assert!(matches!(error, PhotoError::Storage(_)));
     std::fs::remove_dir_all(&dir).ok();
@@ -341,7 +338,7 @@ async fn cross_filesystem_copy_installs_the_destination_and_consumes_the_source(
         "successful copy consumes the staging upload"
     );
     assert_eq!(
-        std::fs::read_dir(destination.parent().unwrap())
+        std::fs::read_dir(destination.parent().expect("valid test fixture"))
             .expect("read destination directory")
             .count(),
         1,
@@ -404,7 +401,33 @@ async fn a_cross_device_rename_error_selects_the_copy_fallback() {
         .await
         .expect("cross-device rename uses the safe copy fallback");
 
-    assert_eq!(std::fs::read(&destination).unwrap(), b"original bytes");
+    assert_eq!(
+        std::fs::read(&destination).expect("valid test fixture"),
+        b"original bytes"
+    );
     assert!(!source.exists());
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn stored_hashes_reject_paths_short_values_and_non_lowercase_hex() {
+    for invalid in [
+        "",
+        "../../etc/passwd",
+        &"a".repeat(63),
+        &"a".repeat(65),
+        &"A".repeat(64),
+        &"g".repeat(64),
+    ] {
+        assert!(
+            ContentHash::try_from(invalid.to_owned()).is_err(),
+            "accepted {invalid}"
+        );
+    }
+    assert_eq!(
+        ContentHash::try_from(ABC_SHA256.to_owned())
+            .expect("valid SHA-256")
+            .as_str(),
+        ABC_SHA256
+    );
 }

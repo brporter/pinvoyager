@@ -1,4 +1,4 @@
-//! Regression tests for the startup recovery sweep (phase 4, T7).
+//! Regression tests for pending-photo recovery.
 //!
 //! A process that dies mid-batch leaves rows at `variant_status = 'pending'`.
 //! Nothing will ever enqueue them again — the only thing that did was the
@@ -63,9 +63,7 @@ fn worker_config(root: &ScratchRoot) -> Config {
 }
 
 async fn a_pending_photo(pool: &PgPool) -> Uuid {
-    let user = users::create(pool, Some("Owner"), None)
-        .await
-        .expect("create user");
+    let user = users::create(pool, None, None).await.expect("create user");
 
     let photo = photos::create(
         pool,
@@ -149,15 +147,9 @@ async fn processing_a_deleted_photo_is_a_successful_noop(pool: PgPool) {
     let scratch = ScratchRoot::new();
     let config = worker_config(&scratch);
 
-    worker::process(
-        &pool,
-        &config,
-        &VariantJob {
-            photo_id: Uuid::now_v7(),
-        },
-    )
-    .await
-    .expect("a photo deleted before processing is an ordinary no-op");
+    worker::process(&pool, &config, &VariantJob::new(Uuid::now_v7()))
+        .await
+        .expect("a photo deleted before processing is an ordinary no-op");
 }
 
 #[sqlx::test]
@@ -169,11 +161,16 @@ async fn processing_an_already_ready_photo_does_not_rewrite_variants(pool: PgPoo
     let scratch = ScratchRoot::new();
     let config = worker_config(&scratch);
 
-    worker::process(&pool, &config, &VariantJob { photo_id: id })
+    worker::process(&pool, &config, &VariantJob::new(id))
         .await
         .expect("an already processed photo is a no-op");
 
-    assert!(std::fs::read_dir(&scratch.0).unwrap().next().is_none());
+    assert!(
+        std::fs::read_dir(&scratch.0)
+            .expect("valid test fixture")
+            .next()
+            .is_none()
+    );
 }
 
 #[sqlx::test]
@@ -184,15 +181,16 @@ async fn processing_a_valid_pending_photo_writes_variants_and_marks_it_ready(poo
         .expect("read photo")
         .expect("photo exists");
     let scratch = ScratchRoot::new();
-    let hash = ContentHash(photo.content_hash);
+    let hash = ContentHash::try_from(photo.content_hash).expect("valid fixture hash");
     let original = storage::original_path(&scratch.0, &hash);
-    std::fs::create_dir_all(original.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(original.parent().expect("valid test fixture"))
+        .expect("valid test fixture");
     image::RgbImage::from_pixel(40, 32, image::Rgb([20, 40, 60]))
         .save_with_format(&original, image::ImageFormat::Jpeg)
         .expect("write original JPEG");
     let config = worker_config(&scratch);
 
-    worker::process(&pool, &config, &VariantJob { photo_id: id })
+    worker::process(&pool, &config, &VariantJob::new(id))
         .await
         .expect("valid pending photo should be processed");
 
@@ -212,7 +210,7 @@ async fn processing_a_corrupt_original_marks_the_photo_failed(pool: PgPool) {
     let scratch = ScratchRoot::new();
     let config = worker_config(&scratch);
 
-    let error = worker::process(&pool, &config, &VariantJob { photo_id: id })
+    let error = worker::process(&pool, &config, &VariantJob::new(id))
         .await
         .expect_err("an undecodable original must fail variant generation");
 

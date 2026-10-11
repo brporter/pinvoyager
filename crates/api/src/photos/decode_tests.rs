@@ -7,8 +7,6 @@ pub(crate) mod testutil {
 
     /// A unique temporary directory that removes itself.
     ///
-    /// Hand-rolled because `tempfile` is not a dependency of this crate and
-    /// `Cargo.toml` is owned elsewhere.
     pub(crate) struct ScratchDir(PathBuf);
 
     impl ScratchDir {
@@ -258,15 +256,32 @@ fn decodes_png_and_jpeg_and_webp() {
     assert_eq!(decoded.dimensions(), (64, 32));
 }
 
+fn convert_plane(
+    width: u32,
+    height: u32,
+    bits: u8,
+    stride: usize,
+    data: Option<&[u8]>,
+) -> Result<DynamicImage, PhotoError> {
+    image_from_interleaved(data.map(|data| Plane {
+        width,
+        height,
+        storage_bits_per_pixel: bits,
+        bits_per_pixel: bits,
+        stride,
+        data,
+    }))
+}
+
 #[test]
 fn heic_plane_conversion_handles_rgb_rgba_and_padded_rows() {
-    let rgb = image_from_interleaved(1, 2, 24, 5, Some(&[255, 0, 0, 9, 9, 0, 255, 0, 9, 9]))
+    let rgb = convert_plane(1, 2, 24, 5, Some(&[255, 0, 0, 9, 9, 0, 255, 0, 9, 9]))
         .expect("valid RGB plane");
     assert_eq!(rgb.color(), image::ColorType::Rgb8);
     assert_eq!(rgb.get_pixel(0, 0).0, [255, 0, 0, 255]);
     assert_eq!(rgb.get_pixel(0, 1).0, [0, 255, 0, 255]);
 
-    let rgba = image_from_interleaved(1, 1, 32, 4, Some(&[1, 2, 3, 4])).expect("valid RGBA plane");
+    let rgba = convert_plane(1, 1, 32, 4, Some(&[1, 2, 3, 4])).expect("valid RGBA plane");
     assert_eq!(rgba.color(), image::ColorType::Rgba8);
     assert_eq!(rgba.get_pixel(0, 0).0, [1, 2, 3, 4]);
 }
@@ -281,7 +296,7 @@ fn heic_plane_conversion_rejects_missing_and_unusable_planes() {
         (Some(&[1, 2, 3][..]), 1, 2, 24, 3),
     ] {
         assert!(matches!(
-            image_from_interleaved(width, height, bits, stride, data),
+            convert_plane(width, height, bits, stride, data),
             Err(PhotoError::Undecodable(_))
         ));
     }
@@ -363,57 +378,11 @@ fn an_undecodable_file_is_an_error_not_a_panic() {
     ));
 }
 
-/// Builds a real HEIC through libheif's own encoder.
-///
-/// The *encoder* is a test fixture, not a product dependency — we only ever
-/// decode HEIC — and it needs an HEVC plugin that a minimal libheif build
-/// may not ship. `None` means the fixture could not be built, which is a
-/// reason to stop rather than to fail a build.
-fn heic_fixture(width: u32, height: u32) -> Option<Vec<u8>> {
-    use libheif_rs::{Channel, CompressionFormat, EncoderQuality, Image as HeifImage};
-
-    let mut encoder = libheif().encoder_for_format(CompressionFormat::Hevc).ok()?;
-    encoder
-        .set_quality(EncoderQuality::LossLess)
-        .expect("set lossless");
-
-    let source = asymmetric_image(width, height).to_rgb8();
-
-    let mut heif_image =
-        HeifImage::new(width, height, ColorSpace::Rgb(RgbChroma::Rgb)).expect("create heif image");
-    heif_image
-        .create_plane(Channel::Interleaved, width, height, 8)
-        .expect("create plane");
-    {
-        let mut planes = heif_image.planes_mut();
-        let plane = planes.interleaved.as_mut().expect("interleaved plane");
-        let row_len = width as usize * 3;
-        for (y, row) in plane
-            .data
-            .chunks_exact_mut(plane.stride)
-            .take(height as usize)
-            .enumerate()
-        {
-            let start = y * row_len;
-            row[..row_len].copy_from_slice(&source.as_raw()[start..start + row_len]);
-        }
-    }
-
-    let mut context = HeifContext::new().expect("heif context");
-    context
-        .encode_image(&heif_image, &mut encoder, None)
-        .expect("encode heic fixture");
-    Some(context.write_to_bytes().expect("serialize heic fixture"))
-}
-
-/// The HEIC path (D9), exercised through libheif in both directions.
+/// Decode a committed synthetic fixture; running tests needs only a decoder.
 #[test]
 fn decodes_heic_through_libheif() {
     let (width, height) = (64u32, 32u32);
-    let Some(bytes) = heic_fixture(width, height) else {
-        eprintln!("skipping: this libheif has no HEVC encoder to build the fixture with");
-        return;
-    };
+    let bytes = include_bytes!("../../tests/fixtures/quadrants-rgb.heic");
 
     let dir = ScratchDir::new("decode-heic");
     let path = dir.path().join("fixture.heic");
@@ -450,10 +419,7 @@ fn decodes_heic_through_libheif() {
 #[test]
 fn a_heic_is_never_rotated_twice() {
     let (width, height) = (64u32, 32u32);
-    let Some(bytes) = heic_fixture(width, height) else {
-        eprintln!("skipping: this libheif has no HEVC encoder to build the fixture with");
-        return;
-    };
+    let bytes = include_bytes!("../../tests/fixtures/quadrants-rgb.heic");
 
     let dir = ScratchDir::new("heic-orientation");
     let path = dir.path().join("tagged.heic");
@@ -482,4 +448,20 @@ fn a_heic_is_never_rotated_twice() {
     // render the same file.
     let decoded = testutil::decode_upright(&path, ImageFormat::Heic);
     assert_eq!(decoded.dimensions(), (width, height));
+}
+
+#[test]
+fn heic_alpha_survives_native_decoding() {
+    let dir = ScratchDir::new("heic-alpha");
+    let path = dir.path().join("alpha.heic");
+    std::fs::write(
+        &path,
+        include_bytes!("../../tests/fixtures/quadrants-rgba.heic"),
+    )
+    .expect("fixture");
+    let decoded = decode(&path, ImageFormat::Heic).expect("decode RGBA HEIC");
+    assert_eq!(decoded.dimensions(), (64, 32));
+    assert_eq!(decoded.color(), image::ColorType::Rgba8);
+    assert_eq!(decoded.get_pixel(4, 4).0[3], 64);
+    assert_eq!(decoded.get_pixel(60, 4).0[3], 255);
 }

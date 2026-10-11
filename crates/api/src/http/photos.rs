@@ -1,56 +1,15 @@
-//! Photo endpoints.
+//! Voyage uploads, owner metadata, photo deletion, and authorized WebP delivery.
 //!
-//! CONTRACT — `routes()` is fixed; handlers owned by the worker/serving agent.
-//!
-//! ```text
-//! POST   /api/voyages/{id}/photos      upload directly into an owned voyage
-//! GET    /api/voyages/{id}/photos      owner-only voyage photo metadata
-//! GET    /api/photos/{id}              metadata
-//! GET    /api/photos/{id}/{variant}    the image itself
-//! DELETE /api/photos/{id}              owner only
-//! ```
-//!
-//! The serving handler is where D7 is enforced, and it is why a static file
-//! server is not acceptable here. It must set:
-//!
-//! * `Content-Type` determined by **us** — always `image/webp`, since every
-//!   variant is one — never echoed from the upload
-//! * `X-Content-Type-Options: nosniff`
-//! * a restrictive `Content-Disposition`
-//! * `ETag` / `Cache-Control: immutable` with a long max-age, which is safe
-//!   precisely because the path is content-derived: the bytes at a given URL
-//!   can never change
-//!
-//! The failure being designed against is a stored XSS: a user uploads a file
-//! the browser sniffs as HTML and it executes on our origin against another
-//! user's session.
-//!
-//! # Two things in here that exist only because of the dependency set
-//!
-//! Both are marked at their definitions, both are correct as written, and both
-//! become deletable with a one-line `Cargo.toml` change that this agent was not
-//! permitted to make:
-//!
-//! * [`Multipart`] is a hand-written streaming reader. axum's `multipart`
-//!   feature is **not** enabled in this workspace, so `axum::extract::Multipart`
-//!   does not exist here. Enabling it (`axum = { features = ["multipart"] }`)
-//!   makes this whole section deletable.
-//! * [`variant_body`] reads a variant into memory rather than streaming it out.
-//!   Streaming a file into a response body requires naming either
-//!   `futures_core::Stream` (for `Body::from_stream`) or `http_body::Frame` (to
-//!   implement `HttpBody` by hand), and **neither type is nameable from this
-//!   crate**: axum re-exports the `HttpBody` trait but not the frame type, and
-//!   nothing else in the tree re-exports either. Adding
-//!   `tokio-util = { version = "0.7", features = ["io"] }` reduces it to
-//!   `Body::from_stream(ReaderStream::new(file))`.
+//! Originals are never served. Variant responses use a server-chosen MIME
+//! type, nosniff, a controlled filename, and private revalidation so origin
+//! authorization applies after publication changes.
 
-use std::collections::HashMap;
 use std::path::Path as FsPath;
-use std::sync::{LazyLock, Mutex, PoisonError};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Instant, SystemTime};
 
-use axum::body::{Body, Bytes, HttpBody};
-use axum::extract::{Path, Query, State};
+use axum::body::Body;
+use axum::extract::multipart::{Field, MultipartError};
+use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -83,9 +42,9 @@ const SNIFF_BYTES: usize = 32;
 const DEFAULT_PAGE: i64 = 50;
 const MAX_PAGE: i64 = 100;
 
-/// One year, `immutable`. Safe only because the bytes behind a variant URL are
-/// content-derived and therefore cannot change.
-const IMAGE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
+/// Revalidate every use, including after publication or ownership changes.
+/// Shared caches must never reuse a response authorized for one caller.
+const IMAGE_CACHE_CONTROL: &str = "private, no-cache, must-revalidate";
 
 /// All photo routes.
 ///
@@ -137,6 +96,7 @@ async fn owned_voyage(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<
     Ok(())
 }
 
+#[tracing::instrument(name = "photo.upload", skip_all, fields(voyage.id = %voyage_id), err(Debug))]
 async fn upload_to_voyage(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -159,11 +119,14 @@ async fn upload(
 
     // T12, and first because it is the only check that costs nothing. A limiter
     // that fires half way through a body has already paid for the transfer.
-    take_upload_token(user.user_id, limits.upload_rate_per_minute)?;
+    state
+        .upload_limiter
+        .take_at(user.user_id, limits.upload_rate_per_minute, Instant::now())
+        .map_err(Rejection::rate_limited)?;
 
     // The declared length, before a byte of the body is read: a truthful client
     // gets its 413 immediately. A lying one — or a chunked body, which declares
-    // no length at all — hits the same limit mid-stream in [`Multipart::fill`],
+    // no length at all — hits the same limit mid-stream in the multipart extractor,
     // which is why both checks exist.
     if let Some(declared) = content_length(&headers)
         && declared > limits.max_upload_bytes
@@ -171,12 +134,17 @@ async fn upload(
         return Err(Rejection::too_large());
     }
 
-    let content_type = headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
-
-    let mut multipart = Multipart::new(content_type, body, limits.max_upload_bytes)?;
+    let upload_key = headers
+        .get("idempotency-key")
+        .map(|value| {
+            value
+                .to_str()
+                .ok()
+                .and_then(|value| Uuid::parse_str(value).ok())
+                .ok_or_else(|| AppError::BadRequest("Idempotency-Key must be a UUID.".to_owned()))
+        })
+        .transpose()?;
+    let mut multipart = read_multipart(headers, body, limits.max_upload_bytes).await?;
 
     // Temporaries live under the storage root rather than in the system temp
     // directory, so committing an upload is a rename within one filesystem. A
@@ -189,15 +157,27 @@ async fn upload(
 
     let mut created = Vec::new();
 
-    while let Some(part) = multipart.next_part().await? {
-        if part.filename.is_none() {
+    while let Some(mut part) = multipart.next_field().await.map_err(multipart_error)? {
+        check_part_headers(&part)?;
+        if part.file_name().is_none() {
             // Not a file part. Skipped rather than refused: the upload form may
             // grow ordinary fields, and this endpoint has no use for them yet.
-            // `next_part` drains the body of a part the caller did not read.
+            // `next_field` drains the body of a part the caller did not read.
             continue;
         }
 
-        created.push(ingest(&state, user.user_id, voyage_id, &mut multipart, &temp_dir).await?);
+        let key = upload_key.map(|key| format!("{key}:{}", created.len()));
+        created.push(
+            ingest(
+                &state,
+                user.user_id,
+                voyage_id,
+                &mut part,
+                &temp_dir,
+                key.as_deref(),
+            )
+            .await?,
+        );
     }
 
     if created.is_empty() {
@@ -219,18 +199,20 @@ async fn ingest(
     state: &AppState,
     owner_id: Uuid,
     voyage_id: Uuid,
-    multipart: &mut Multipart,
+    multipart: &mut Field<'_>,
     temp_dir: &FsPath,
+    upload_key: Option<&str>,
 ) -> Result<PhotoResponse, Rejection> {
     // Content addressing means no caller-supplied string ever reaches the
     // filesystem — including here, where the name is a fresh uuid.
     let temp_path = temp_dir.join(format!("{}.part", Uuid::now_v7()));
 
-    let result = ingest_part(state, owner_id, voyage_id, multipart, &temp_path).await;
+    let result = ingest_part(
+        state, owner_id, voyage_id, multipart, &temp_path, upload_key,
+    )
+    .await;
 
-    if result.is_err() {
-        discard_failed_upload(&temp_path).await;
-    }
+    discard_failed_upload(&temp_path).await;
 
     result
 }
@@ -248,12 +230,14 @@ async fn discard_failed_upload(path: &FsPath) {
     }
 }
 
+#[tracing::instrument(name = "photo.ingest", skip_all, fields(voyage.id = %voyage_id, photo.id = tracing::field::Empty, photo.bytes = tracing::field::Empty), err(Debug))]
 async fn ingest_part(
     state: &AppState,
     owner_id: Uuid,
     voyage_id: Uuid,
-    multipart: &mut Multipart,
+    multipart: &mut Field<'_>,
     temp_path: &FsPath,
+    upload_key: Option<&str>,
 ) -> Result<PhotoResponse, Rejection> {
     let limits = &state.config.photos;
 
@@ -265,7 +249,7 @@ async fn ingest_part(
     let mut format: Option<ImageFormat> = None;
     let mut byte_size: u64 = 0;
 
-    while let Some(chunk) = multipart.next_chunk().await? {
+    while let Some(chunk) = multipart.chunk().await.map_err(multipart_error)? {
         byte_size += chunk.len() as u64;
         if byte_size > limits.max_upload_bytes {
             return Err(Rejection::too_large());
@@ -275,7 +259,7 @@ async fn ingest_part(
             let take = (SNIFF_BYTES - header.len()).min(chunk.len());
             header.extend_from_slice(&chunk[..take]);
 
-            // Gate 2, and the stored-XSS defense. The moment enough bytes exist
+            // Format check, and the stored-XSS defense. The moment enough bytes exist
             // to identify the format, an unrecognized one ends the upload —
             // before the rest of the body is written, and long before any
             // decoder is handed the file. A `.jpg` full of HTML lands here.
@@ -314,16 +298,20 @@ async fn ingest_part(
     // call site decides whether it is a 415 or a 422. The outer `?` is the
     // panic case, which for a decoder handed hostile bytes is a real one.
     let probed = run_blocking_infallible(move || {
-        // Gate 3, before any full decode: a 50,000 × 50,000 PNG is a few
+        // Dimension check, before any full decode: a 50,000 × 50,000 PNG is a few
         // hundred kilobytes on disk and about 10 GB decoded, so only a pixel
         // count catches it — a byte-size limit never will.
-        let (width, height) = validate::probe_dimensions(&probe_path, format)?;
-        validate::check_pixel_budget(width, height, max_megapixels)?;
+        let (width, height) = tracing::info_span!("photo.validate").in_scope(|| {
+            let dimensions = validate::probe_dimensions(&probe_path, format)?;
+            validate::check_pixel_budget(dimensions.0, dimensions.1, max_megapixels)?;
+            Ok::<_, PhotoError>(dimensions)
+        })?;
 
         // Only now, on bytes already known to be an image of a sane size.
-        let hash = ContentHash::of_file(&probe_path)?;
+        let hash =
+            tracing::info_span!("photo.hash").in_scope(|| ContentHash::of_file(&probe_path))?;
         // Read from the original. Absent EXIF is the normal case, not an error.
-        let exif = exif::extract(&probe_path);
+        let exif = tracing::info_span!("photo.exif").in_scope(|| exif::extract(&probe_path));
 
         Ok::<_, PhotoError>((width, height, hash, exif))
     })
@@ -331,8 +319,14 @@ async fn ingest_part(
 
     let (width, height, hash, exif) = probed?;
 
-    // Idempotent, and the dedup path: identical bytes already stored means the
-    // temporary is discarded and one file backs both rows (T3).
+    // Reserve before opening a transaction: backpressure must not consume a
+    // database connection. After commit, sending through this permit cannot
+    // wait or report a closed queue after the photo has already been saved.
+    let permit = state
+        .variants
+        .reserve()
+        .await
+        .map_err(|_| AppError::ServiceUnavailable)?;
     let mut tx = state.pool.begin().await?;
     let owned: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
@@ -342,6 +336,26 @@ async fn ingest_part(
             .await?;
     if owned.is_none() {
         return Err(AppError::NotFound.into());
+    }
+    if let Some(key) = upload_key {
+        let existing: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM photos WHERE voyage_id=$1 AND upload_key=$2")
+                .bind(voyage_id)
+                .bind(key)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if let Some(id) = existing {
+            let photo = photos::find_by_id(&mut *tx, id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            if photo.content_hash != hash.as_str() {
+                return Err(AppError::Conflict(
+                    "This upload key was already used for different bytes.".to_owned(),
+                )
+                .into());
+            }
+            return Ok(photo.into());
+        }
     }
     photos::lock_content(&mut tx, hash.as_str()).await?;
     storage::commit_original(&limits.storage_root, temp_path, &hash).await?;
@@ -357,7 +371,7 @@ async fn ingest_part(
             original_format: format.as_str().to_owned(),
             captured_at: exif.captured_at,
             // Exact, as recorded. Granularity is applied at the serialization
-            // boundary in phase 5; rounding here would discard the precision
+            // boundary when building public responses; rounding here would discard the precision
             // irreversibly and make that decision unmakeable.
             latitude: exif.latitude,
             longitude: exif.longitude,
@@ -365,27 +379,23 @@ async fn ingest_part(
     )
     .await?;
 
+    if let Some(key) = upload_key {
+        sqlx::query("UPDATE photos SET upload_key=$1 WHERE id=$2")
+            .bind(key)
+            .bind(photo.id)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
+    tracing::Span::current().record("photo.id", photo.id.to_string());
+    tracing::Span::current().record("photo.bytes", byte_size);
 
-    // Off the request path (T7). This awaits when the queue is full, which is
-    // backpressure surfacing as a slower upload — much better than an unbounded
-    // queue, and the reason it is not `try_send`.
-    state
-        .variants
-        .enqueue(VariantJob { photo_id: photo.id })
-        .await
-        .map_err(|_| {
-            // The worker is gone, which means shutdown. Reporting "created"
-            // while nothing will ever derive the variants would be a lie; the
-            // row stays `pending` and the next startup sweep picks it up.
-            tracing::error!(photo_id = %photo.id, "variant queue is closed");
-            AppError::ServiceUnavailable
-        })?;
+    permit.send(VariantJob::new(photo.id).with_voyage(voyage_id));
 
     Ok(PhotoResponse::from(photo))
 }
 
-/// The magic-byte gate. Never the extension, never the client's `Content-Type`.
+/// The magic-byte check. Never the extension, never the client's `Content-Type`.
 fn sniff(header: &[u8]) -> Result<ImageFormat, Rejection> {
     validate::sniff_format(header).ok_or_else(Rejection::not_an_image)
 }
@@ -405,12 +415,8 @@ fn content_length(headers: &HeaderMap) -> Option<u64> {
 
 /// One photo as the API describes it.
 ///
-/// Coordinates are the **exact** stored values. That is correct here and only
-/// here: every endpoint in this module is owner-only, and the owner is entitled
-/// to their own precision. Granularity is a phase 5 concern applied at the
-/// serialization boundary of the public surface — inventing a rounding rule in
-/// this file would put a second implementation of it in the codebase, which is
-/// exactly how such rules come to disagree.
+/// Exact coordinates appear only in owner metadata. Public voyage and discovery
+/// responses apply the voyage's granularity before serialization.
 #[derive(Debug, Serialize)]
 struct PhotoResponse {
     id: Uuid,
@@ -507,13 +513,8 @@ async fn metadata(
     Ok(Json(PhotoResponse::from(owned(&state, &user, id).await?)))
 }
 
-/// Loads a photo, or 404s.
-///
-/// A photo owned by somebody else is 404 rather than 403: a 403 confirms that
-/// the id names something real, which an ownership check is not there to
-/// reveal. Phase 5 relaxes this for photos attached to a voyage, which are
-/// public by D6 — these are owner-only exact coordinates, and this is the
-/// uploader's.
+/// Loads exact owner metadata. Missing and foreign photos both return 404
+/// so this endpoint does not confirm the existence of another owner's photo.
 async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Photo, Rejection> {
     let photo = photos::find_by_id(&state.pool, id)
         .await?
@@ -529,7 +530,7 @@ async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Photo, 
 /// Resolves a photo the caller is allowed to **look at**, which is a wider set
 /// than the one they own.
 ///
-/// Used only for serving image bytes. Every voyage is public (D6), so a
+/// Used only for serving image bytes. Published voyages are public (D6), so a
 /// photograph attached to a published voyage is public too — and without this
 /// the product is a public gallery with the pictures painted out: the voyage
 /// JSON is world-readable while every `thumbnail_url` in it 404s for anyone but
@@ -592,10 +593,10 @@ async fn image(
     // be reported as one.
     availability(&photo.variant_status)?;
 
-    let hash = ContentHash(photo.content_hash);
+    let hash = ContentHash::try_from(photo.content_hash)?;
     let path = storage::variant_path(&state.config.photos.storage_root, &hash, kind);
 
-    let (bytes, modified) = match variant_body(&path).await {
+    let (file, size, modified) = match variant_body(&path).await {
         Ok(found) => found,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             // The row says ready and the file is gone: an operational problem,
@@ -612,40 +613,33 @@ async fn image(
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| value.split(',').any(|candidate| candidate.trim() == etag));
 
-    let image_headers = image_headers(&etag, bytes.len() as u64, modified);
+    let image_headers = image_headers(&etag, size, modified);
 
     // A 304 carries the validators and no body — a body on a 304 is a protocol
     // error, and not re-sending the image is the entire point.
     let mut response = if unchanged {
         StatusCode::NOT_MODIFIED.into_response()
     } else {
-        Body::from(bytes).into_response()
+        Body::from_stream(tokio_util::io::ReaderStream::new(file)).into_response()
     };
     response.headers_mut().extend(image_headers);
 
     Ok(response)
 }
 
-/// Reads a variant off disk.
-///
-/// **This buffers, and it should stream.** See the module docs: streaming a
-/// file into a response body needs a nameable `Stream` or `Frame` type, and
-/// this crate has neither. The buffering is bounded — a variant is a WebP whose
-/// longest edge is at most 2560 px, so hundreds of kilobytes, never the 25 MB
-/// original, which is never served at all (D6) — but the correct implementation
-/// is `Body::from_stream(ReaderStream::new(file))` and it becomes available the
-/// moment `tokio-util` with the `io` feature is a dependency.
-///
-/// `tokio::fs::read` is itself `spawn_blocking` underneath, so the read is off
-/// the runtime worker threads either way (D8).
-async fn variant_body(path: &FsPath) -> Result<(Vec<u8>, Option<SystemTime>), std::io::Error> {
-    let bytes = tokio::fs::read(path).await?;
-    let modified = tokio::fs::metadata(path)
-        .await
-        .ok()
-        .and_then(|meta| meta.modified().ok());
-
-    Ok((bytes, modified))
+/// Open without reading the body, so conditional requests avoid image I/O.
+async fn variant_body(
+    path: &FsPath,
+) -> Result<(tokio::fs::File, u64, Option<SystemTime>), std::io::Error> {
+    let file = tokio::fs::File::open(path).await?;
+    let metadata = file.metadata().await?;
+    if !metadata.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "variant is not a regular file",
+        ));
+    }
+    Ok((file, metadata.len(), metadata.modified().ok()))
 }
 
 /// Whether a variant can be served at all, given the row's status.
@@ -782,461 +776,54 @@ pub(super) async fn destroy(
     };
 
     if orphaned {
-        // Best effort, deliberately. The row is already gone, so the caller's
-        // intent has been carried out; failing the request now would report a
-        // deletion that did happen as an error, and the retry would 404. Files
-        // left behind are an operational problem with a log line attached, not
-        // a correctness one.
-        if let Err(err) =
-            storage::remove_content(&state.config.photos.storage_root, &ContentHash(hash)).await
-        {
-            tracing::error!(photo_id = %id, error = %err, "could not remove unreferenced photo files");
-        }
+        crate::photos::cleanup::schedule(&mut tx, &hash).await?;
     }
-
     tx.commit().await?;
+    if orphaned
+        && let Err(error) =
+            crate::photos::cleanup::clean(&state.pool, &state.config.photos.storage_root, &hash)
+                .await
+    {
+        tracing::warn!(%error, "photo deletion committed; file cleanup will be retried");
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ---------------------------------------------------------------------------
-// Per-user upload rate limiting (T12)
-// ---------------------------------------------------------------------------
-
-/// Token buckets, keyed by user.
-///
-/// A process global rather than a field on [`AppState`], because `AppState` is
-/// a fixed contract and this is its only consumer. Two consequences worth
-/// stating rather than discovering: the budget resets when the process does,
-/// and it is per-replica rather than per-cluster. Both are fine for a limit
-/// whose job is to stop one account saturating one machine's disk and its
-/// blocking pool; neither would be fine for a billing quota.
-static UPLOAD_BUCKETS: LazyLock<Mutex<HashMap<Uuid, Bucket>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-/// Entries idle for longer than this are dropped on the next sweep: a bucket
-/// that has been full for two minutes is indistinguishable from a fresh one.
-const BUCKET_IDLE: Duration = Duration::from_secs(120);
-
-/// The map is only walked once it has grown enough to be worth walking, so the
-/// common path stays one hash lookup.
-const BUCKET_SWEEP_AT: usize = 4096;
-
-struct Bucket {
-    tokens: f64,
-    updated: Instant,
-}
-
-/// Takes one token, or reports how many seconds until one exists.
-///
-/// A token bucket rather than a fixed window: a fixed window lets a user spend
-/// a whole minute's budget in the last second of one window and again in the
-/// first second of the next, which is twice the rate it claims to enforce, at
-/// exactly the moment it matters.
-fn take_upload_token(user_id: Uuid, per_minute: u32) -> Result<(), Rejection> {
-    if per_minute == 0 {
-        // Configured off. An honest 429 rather than the division by zero below.
-        return Err(Rejection::rate_limited(60));
-    }
-
-    let capacity = f64::from(per_minute);
-    let per_second = capacity / 60.0;
-    let now = Instant::now();
-
-    // A poisoned mutex means another caller panicked while holding it. What is
-    // behind it is a rate-limit counter, not an invariant anything depends on,
-    // so recovering beats propagating that panic into every later upload.
-    let mut buckets = UPLOAD_BUCKETS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-
-    if buckets.len() > BUCKET_SWEEP_AT {
-        buckets.retain(|_, bucket| now.duration_since(bucket.updated) < BUCKET_IDLE);
-    }
-
-    let bucket = buckets.entry(user_id).or_insert(Bucket {
-        tokens: capacity,
-        updated: now,
-    });
-
-    let elapsed = now.duration_since(bucket.updated).as_secs_f64();
-    bucket.tokens = (bucket.tokens + elapsed * per_second).min(capacity);
-    bucket.updated = now;
-
-    if bucket.tokens >= 1.0 {
-        bucket.tokens -= 1.0;
-        return Ok(());
-    }
-
-    // Rounded up, floored at a second: a `Retry-After: 0` invites an immediate
-    // retry that is guaranteed to fail again.
-    let wait = ((1.0 - bucket.tokens) / per_second).ceil().max(1.0);
-    Err(Rejection::rate_limited(wait as u64))
-}
-
-// ---------------------------------------------------------------------------
-// Streaming multipart reader
-// ---------------------------------------------------------------------------
-//
-// Everything from here to the rejection type exists because this workspace does
-// not enable axum's `multipart` feature, so `axum::extract::Multipart` is not
-// available. It is a deliberately small subset of RFC 7578: enough to walk the
-// parts of a `multipart/form-data` body while holding no more than one chunk
-// plus a boundary's worth of lookahead in memory.
-//
-// Nothing it parses is trusted. The field name is used for nothing, the
-// filename only to tell a file part from an ordinary field, and the part's own
-// `Content-Type` is ignored entirely — the format comes from the magic bytes
-// and from nowhere else.
-
-/// Largest single header line, and the budget for a part's whole header block.
-/// A part header is a handful of short lines; anything larger is a body that
-/// has forgotten to end.
-const MAX_HEADER_LINE: usize = 4 * 1024;
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum Phase {
-    /// Before the first delimiter. Anything here is preamble, and is discarded.
-    Preamble,
-    /// A delimiter has just been consumed; a part's headers come next.
-    Headers,
-    /// Streaming a part's body.
-    Body,
-    /// The closing delimiter has been seen.
-    Finished,
-}
-
-/// What a part's header block says, of the little that is used.
-#[derive(Debug, Default)]
-struct Part {
-    /// Form field name. Recorded for logging and future use; nothing branches
-    /// on it, so a request may name its file fields whatever it likes.
-    #[allow(
-        dead_code,
-        reason = "captured for future use; nothing may branch on it"
-    )]
-    name: Option<String>,
-    /// Present iff this is a file part. **Never** used as a path — storage is
-    /// content-addressed precisely so that this string cannot reach the
-    /// filesystem.
-    filename: Option<String>,
-}
-
-struct Multipart {
+/// Axum streams fields while its body limit counts all multipart framing.
+async fn read_multipart(
+    headers: HeaderMap,
     body: Body,
-    /// `\r\n--{boundary}`. Every delimiter in a well-formed body is preceded by
-    /// CRLF, and searching for the pair is what makes a boundary appearing
-    /// *inside* image data harmless.
-    delimiter: Vec<u8>,
-    buf: Vec<u8>,
-    /// The source is exhausted. Distinct from [`Phase::Finished`], which is
-    /// about having seen the closing delimiter.
-    eof: bool,
-    phase: Phase,
-    /// Bytes taken off the wire so far, and the cap they are checked against.
-    /// Counted here rather than per part, so the multipart framing counts
-    /// towards the limit too — which is the honest reading of "request size".
-    read: u64,
     limit: u64,
-}
-
-impl Multipart {
-    fn new(content_type: &str, body: Body, limit: u64) -> Result<Self, Rejection> {
-        let boundary = boundary(content_type).ok_or_else(|| {
-            AppError::BadRequest("Expected a multipart/form-data request body.".to_owned())
-        })?;
-
-        let mut delimiter = Vec::with_capacity(boundary.len() + 4);
-        delimiter.extend_from_slice(b"\r\n--");
-        delimiter.extend_from_slice(boundary.as_bytes());
-
-        Ok(Self {
-            body,
-            delimiter,
-            // Seeded with a synthetic CRLF so that the very first delimiter —
-            // which sits at offset zero with nothing before it — matches the
-            // same pattern as every later one. Cheaper than a special case that
-            // would be exercised once per request and wrong the rest of the
-            // time.
-            buf: b"\r\n".to_vec(),
-            eof: false,
-            phase: Phase::Preamble,
-            read: 0,
-            limit,
-        })
-    }
-
-    /// Advances to the next part, draining the current one if the caller did
-    /// not read it to the end.
-    async fn next_part(&mut self) -> Result<Option<Part>, Rejection> {
-        loop {
-            match self.phase {
-                Phase::Finished => return Ok(None),
-                Phase::Preamble => self.seek_delimiter().await?,
-                Phase::Body => {
-                    // The caller skipped this part — an ordinary form field —
-                    // so its bytes still have to be walked to reach the
-                    // delimiter that follows them.
-                    while self.next_chunk().await?.is_some() {}
-                }
-                Phase::Headers => return self.read_part_headers().await,
-            }
-        }
-    }
-
-    /// The next slice of the current part's body, or `None` at its end.
-    async fn next_chunk(&mut self) -> Result<Option<Vec<u8>>, Rejection> {
-        if self.phase != Phase::Body {
-            return Ok(None);
-        }
-
-        loop {
-            if let Some(at) = find(&self.buf, &self.delimiter) {
-                let chunk: Vec<u8> = self.buf.drain(..at).collect();
-                self.buf.drain(..self.delimiter.len());
-                self.phase = Phase::Headers;
-
-                return Ok((!chunk.is_empty()).then_some(chunk));
-            }
-
-            if self.eof {
-                // The body ended with no closing delimiter: a truncated upload,
-                // or a client that disconnected. Either way the file is not
-                // whole and must not be stored as though it were.
-                return Err(malformed());
-            }
-
-            // Everything except a possible partial delimiter can be handed on.
-            // Retaining `len - 1` bytes is what makes a delimiter split across
-            // two frames still match.
-            let keep = self.delimiter.len() - 1;
-            if self.buf.len() > keep {
-                let take = self.buf.len() - keep;
-                return Ok(Some(self.buf.drain(..take).collect()));
-            }
-
-            self.fill().await?;
-        }
-    }
-
-    /// Discards everything up to and including the next delimiter.
-    async fn seek_delimiter(&mut self) -> Result<(), Rejection> {
-        loop {
-            if let Some(at) = find(&self.buf, &self.delimiter) {
-                self.buf.drain(..at + self.delimiter.len());
-                self.phase = Phase::Headers;
-                return Ok(());
-            }
-
-            if self.eof {
-                return Err(malformed());
-            }
-
-            // Preamble, which RFC 2046 says to ignore. Dropped rather than
-            // accumulated, so a body that never contains a delimiter cannot
-            // grow the buffer without bound.
-            let keep = self.delimiter.len() - 1;
-            if self.buf.len() > keep {
-                let take = self.buf.len() - keep;
-                self.buf.drain(..take);
-            }
-
-            self.fill().await?;
-        }
-    }
-
-    /// Reads the header block that follows a delimiter.
-    async fn read_part_headers(&mut self) -> Result<Option<Part>, Rejection> {
-        // The rest of the delimiter's own line: `--` for the closing delimiter,
-        // otherwise nothing but optional transport padding.
-        let line = self.read_line().await?;
-        if line.starts_with(b"--") {
-            self.phase = Phase::Finished;
-            return Ok(None);
-        }
-        if line.iter().any(|byte| !matches!(byte, b' ' | b'\t')) {
-            return Err(malformed());
-        }
-
-        let mut part = Part::default();
-        let mut budget = MAX_HEADER_LINE;
-
-        loop {
-            let line = self.read_line().await?;
-            if line.is_empty() {
-                break;
-            }
-
-            budget = budget.checked_sub(line.len()).ok_or_else(malformed)?;
-
-            // Header names are ASCII; a line that is not UTF-8 is not one we
-            // can act on, and skipping it is safe because nothing in here is
-            // required to be present.
-            let Ok(line) = std::str::from_utf8(&line) else {
-                continue;
-            };
-            let Some((name, value)) = line.split_once(':') else {
-                return Err(malformed());
-            };
-
-            if name.trim().eq_ignore_ascii_case("content-disposition") {
-                part.name = parameter(value, "name");
-                part.filename = parameter(value, "filename");
-            }
-            // The part's own `Content-Type` is read by nothing. It is an
-            // attacker-controlled string that happens to look like metadata.
-        }
-
-        self.phase = Phase::Body;
-        Ok(Some(part))
-    }
-
-    /// One CRLF-terminated line, without its terminator.
-    async fn read_line(&mut self) -> Result<Vec<u8>, Rejection> {
-        loop {
-            if let Some(at) = find(&self.buf, b"\r\n") {
-                if at > MAX_HEADER_LINE {
-                    return Err(malformed());
-                }
-                let line: Vec<u8> = self.buf.drain(..at).collect();
-                self.buf.drain(..2);
-                return Ok(line);
-            }
-
-            if self.buf.len() > MAX_HEADER_LINE || self.eof {
-                return Err(malformed());
-            }
-
-            self.fill().await?;
-        }
-    }
-
-    /// Pulls one frame off the source, enforcing the request size cap.
-    async fn fill(&mut self) -> Result<(), Rejection> {
-        match next_frame(&mut self.body).await {
-            Some(Ok(data)) => {
-                self.read += data.len() as u64;
-                if self.read > self.limit {
-                    // T12: an honest 413 rather than a reset connection. Here
-                    // as well as on `Content-Length`, because a chunked body
-                    // declares no length and a dishonest one declares a wrong
-                    // one.
-                    return Err(Rejection::too_large());
-                }
-                self.buf.extend_from_slice(&data);
-                Ok(())
-            }
-            Some(Err(err)) => {
-                tracing::debug!(error = %err, "upload body could not be read");
-                Err(AppError::BadRequest("The request body could not be read.".to_owned()).into())
-            }
-            None => {
-                self.eof = true;
-                Ok(())
-            }
-        }
-    }
-}
-
-/// One data frame from a body.
-///
-/// Written against `HttpBody` directly because the `Stream` adapters live
-/// behind crates this one does not depend on. Trailer frames carry no body
-/// bytes, so they are skipped rather than ending the stream early.
-async fn next_frame(body: &mut Body) -> Option<Result<Bytes, axum::Error>> {
-    loop {
-        let frame =
-            std::future::poll_fn(|cx| std::pin::Pin::new(&mut *body).poll_frame(cx)).await?;
-
-        match frame {
-            Ok(frame) => match frame.into_data() {
-                Ok(data) => return Some(Ok(data)),
-                Err(_trailers) => continue,
-            },
-            Err(err) => return Some(Err(err)),
-        }
-    }
-}
-
-/// The boundary from a `multipart/form-data` content type, if it is one.
-fn boundary(content_type: &str) -> Option<String> {
-    let (mime, params) = content_type.split_once(';')?;
-    if !mime.trim().eq_ignore_ascii_case("multipart/form-data") {
-        return None;
-    }
-
-    let boundary = parameter(params, "boundary")?;
-
-    // RFC 2046: 1–70 characters. A zero-length boundary would match everywhere,
-    // and an over-long one is not something any real client sends.
-    (1..=70).contains(&boundary.len()).then_some(boundary)
-}
-
-/// A `name=value` or `name="value"` parameter out of a header's parameter list.
-fn parameter(params: &str, wanted: &str) -> Option<String> {
-    params.split(';').find_map(|param| {
-        let (name, value) = param.split_once('=')?;
-        if !name.trim().eq_ignore_ascii_case(wanted) {
-            return None;
-        }
-
-        let value = value.trim();
-        // Quoted form. The unescaping is deliberately minimal: the only thing
-        // read off these values is "is there a filename at all", and a cleverer
-        // unescape would be a parser nobody reads.
-        Some(
-            value
-                .strip_prefix('"')
-                .and_then(|rest| rest.strip_suffix('"'))
-                .unwrap_or(value)
-                .to_owned(),
-        )
+) -> Result<Multipart, Rejection> {
+    let mut request = axum::http::Request::new(body);
+    *request.headers_mut() = headers;
+    DefaultBodyLimit::max(usize::try_from(limit).unwrap_or(usize::MAX)).apply(&mut request);
+    Multipart::from_request(request, &()).await.map_err(|_| {
+        AppError::BadRequest("Expected a multipart/form-data request body.".into()).into()
     })
 }
 
-/// First index of `needle` in `haystack`.
-///
-/// Scans for the first byte and only then compares, rather than
-/// `windows().position`, which compares the whole needle at every offset — on a
-/// 25 MB body with a 40-byte boundary that is a gigabyte of comparisons per
-/// request.
-fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || haystack.len() < needle.len() {
-        return None;
+fn check_part_headers(field: &Field<'_>) -> Result<(), Rejection> {
+    // Keep part headers small even though the entire request also has a cap.
+    let size: usize = field
+        .headers()
+        .iter()
+        .map(|(name, value)| name.as_str().len() + value.as_bytes().len() + 4)
+        .sum();
+    if size > 4096 {
+        return Err(AppError::BadRequest("Multipart part headers exceed 4 KB.".into()).into());
     }
-
-    let last = haystack.len() - needle.len();
-    let mut from = 0;
-
-    while from <= last {
-        let offset = haystack[from..=last]
-            .iter()
-            .position(|byte| *byte == needle[0])?;
-        let at = from + offset;
-
-        if &haystack[at..at + needle.len()] == needle {
-            return Some(at);
-        }
-        from = at + 1;
-    }
-
-    None
+    Ok(())
 }
 
-fn malformed() -> Rejection {
-    AppError::BadRequest("The multipart request body is malformed.".to_owned()).into()
+fn multipart_error(error: MultipartError) -> Rejection {
+    if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        Rejection::too_large()
+    } else {
+        AppError::BadRequest("The multipart request body is malformed.".into()).into()
+    }
 }
 
-// ---------------------------------------------------------------------------
-// Rejections
-// ---------------------------------------------------------------------------
-
-/// A failure from one of these handlers.
-///
-/// It exists because [`AppError`]'s variants are a fixed contract and four of
-/// the statuses this phase's design calls for — 413, 415, 422 and 429 — have no
-/// variant to carry them. The response body has the same shape as `AppError`'s,
-/// so a client sees one error format across the whole API regardless of which
-/// type produced it.
 #[derive(Debug)]
 enum Rejection {
     App(AppError),
@@ -1261,7 +848,7 @@ impl Rejection {
         }
     }
 
-    /// The magic-byte gate. A `.jpg` whose bytes are HTML lands here, and this
+    /// The magic-byte check. A `.jpg` whose bytes are HTML lands here, and this
     /// is the stored-XSS defense rather than a formatting nicety.
     fn not_an_image() -> Self {
         Rejection::Explicit {

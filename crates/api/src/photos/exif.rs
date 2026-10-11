@@ -1,7 +1,5 @@
 //! EXIF extraction.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the imaging agent.
-//!
 //! Read from the **original**, never from a variant — variants are stripped by
 //! design, so reading one would always yield nothing.
 //!
@@ -16,7 +14,7 @@
 //! single `spawn_blocking` closure rather than hopping the pool three times.
 
 use std::fs::File;
-use std::io::{BufReader, Read as _, Seek as _, SeekFrom};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone as _, Utc};
@@ -25,7 +23,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone as _, Utc};
 pub struct ExifData {
     pub captured_at: Option<DateTime<Utc>>,
     /// **Exact** coordinates as recorded. Granularity is applied at
-    /// serialization (phase 5), not here — rounding at ingest would discard
+    /// serialization, not here — rounding at ingest would discard
     /// precision irreversibly and make a later granularity change impossible.
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
@@ -61,8 +59,12 @@ pub fn extract(path: &Path) -> ExifData {
     // Buffered, and handed to the reader as a stream: `read_from_container`
     // seeks to the EXIF segment and parses that alone, so a 25 MB original
     // never becomes a 25 MB `Vec` just to read a timestamp out of its header.
-    let mut reader = BufReader::new(file);
+    extract_reader(BufReader::new(file))
+}
 
+/// A reader boundary lets tests exercise seek failures without relying on
+/// platform-specific special files.
+fn extract_reader(mut reader: impl std::io::BufRead + Seek) -> ExifData {
     // Whether the pixels the decoder produces have already been straightened
     // for us. Peeked from the first twelve bytes before anything else reads
     // them, and rewound so the EXIF parser still sees a file from byte zero.
@@ -92,14 +94,18 @@ pub fn extract(path: &Path) -> ExifData {
         }
     };
 
-    ExifData {
-        captured_at: captured_at(&exif),
-        latitude: coordinate(&exif, ::exif::Tag::GPSLatitude, ::exif::Tag::GPSLatitudeRef),
-        longitude: coordinate(
+    // A location is useful only as a complete pair; the database enforces the
+    // same invariant. Partial camera metadata leaves the photo unplaced.
+    let location =
+        coordinate(&exif, ::exif::Tag::GPSLatitude, ::exif::Tag::GPSLatitudeRef).zip(coordinate(
             &exif,
             ::exif::Tag::GPSLongitude,
             ::exif::Tag::GPSLongitudeRef,
-        ),
+        ));
+    ExifData {
+        captured_at: captured_at(&exif),
+        latitude: location.map(|(latitude, _)| latitude),
+        longitude: location.map(|(_, longitude)| longitude),
         orientation: if decoder_owns_orientation {
             None
         } else {
@@ -117,7 +123,7 @@ pub fn extract(path: &Path) -> ExifData {
 ///
 /// This exists only to answer "has libheif already applied the rotation?" —
 /// see the note on [`ExifData::orientation`].
-fn is_iso_bmff(reader: &mut BufReader<File>) -> bool {
+fn is_iso_bmff(reader: &mut impl Read) -> bool {
     let mut header = [0u8; 12];
     // A file too short to hold a box header is not a container; whatever it is,
     // its EXIF orientation is the caller's to apply.
@@ -142,7 +148,7 @@ fn captured_at(exif: &::exif::Exif) -> Option<DateTime<Utc>> {
     let offset_tag = offset_time_tag(tag);
     let offset_value = exif.get_field(offset_tag, ifd).map(|field| &field.value);
 
-    captured_at_values(tag, &field.value, offset_value)
+    captured_at_values(&field.value, offset_value)
 }
 
 fn offset_time_tag(tag: ::exif::Tag) -> ::exif::Tag {
@@ -154,7 +160,6 @@ fn offset_time_tag(tag: ::exif::Tag) -> ::exif::Tag {
 }
 
 fn captured_at_values(
-    tag: ::exif::Tag,
     value: &::exif::Value,
     offset_value: Option<&::exif::Value>,
 ) -> Option<DateTime<Utc>> {
@@ -209,9 +214,8 @@ fn captured_at_values(
 /// test case in the northern-eastern quadrant, because there both signs are
 /// positive and the bug is invisible.
 ///
-/// The value is returned **exact**. Granularity is a serialization concern
-/// (phase 5); rounding here would throw away precision that cannot be
-/// recovered, and would break the future "adjust location" feature.
+/// Preserve exact values in owner metadata; public serialization applies
+/// the voyage's selected granularity.
 fn coordinate(exif: &::exif::Exif, value_tag: ::exif::Tag, ref_tag: ::exif::Tag) -> Option<f64> {
     let field = exif.get_field(value_tag, ::exif::In::PRIMARY)?;
     let reference = exif.get_field(ref_tag, ::exif::In::PRIMARY)?;
@@ -226,7 +230,7 @@ fn coordinate_values(
     let ::exif::Value::Rational(ref dms) = *value else {
         return None;
     };
-    let [degrees, minutes, seconds] = dms.get(..3)? else {
+    let [degrees, minutes, seconds, ..] = dms.as_slice() else {
         return None;
     };
 
@@ -241,9 +245,9 @@ fn coordinate_values(
     // The reference is a one-character ASCII string. Anything else is a file we
     // cannot interpret, and a coordinate we cannot sign is worse than no
     // coordinate at all — it would place the photo somewhere confidently wrong.
-    let signed = match values.first()?.first()? {
-        b'N' | b'E' => magnitude,
-        b'S' | b'W' => -magnitude,
+    let signed = match (value_tag, values.first()?.as_slice()) {
+        (::exif::Tag::GPSLatitude, b"N") | (::exif::Tag::GPSLongitude, b"E") => magnitude,
+        (::exif::Tag::GPSLatitude, b"S") | (::exif::Tag::GPSLongitude, b"W") => -magnitude,
         _ => return None,
     };
 

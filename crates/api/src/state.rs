@@ -14,6 +14,7 @@ use crate::photos::worker::VariantQueue;
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
+    pub upload_limiter: Arc<crate::photos::rate_limit::UploadLimiter>,
     pub config: Arc<Config>,
     /// Built once at startup: OIDC discovery and JWKS are fetched here, not per
     /// sign-in. A discovery round trip on every authorization would add latency
@@ -36,6 +37,7 @@ impl AppState {
     ) -> Self {
         Self {
             pool,
+            upload_limiter: Arc::default(),
             config,
             providers: Arc::new(providers),
             variants,

@@ -16,3 +16,13 @@ unsafe_code = "forbid"
 todo = "warn"
 dbg_macro = "warn"
 unwrap_used = "warn"
+
+# Opt-in performance measurements only; normal development/test profiles stay unchanged.
+[profile.photo-perf]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+# Explicitly disable Cargo's implicit build-dependency debuginfo stripping:
+# LLVM 22 can produce proc-macro dylibs macOS 27 refuses to load (rust #157750).
+strip = "none"

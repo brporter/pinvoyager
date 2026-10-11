@@ -1,7 +1,5 @@
 //! Variant generation, off the request path.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the worker agent.
-//!
 //! Two properties this module exists to provide, both from D8:
 //!
 //! **Uploads return before variants exist.** A fifty-file batch must not hold a
@@ -14,15 +12,19 @@
 //! producer wait rather than dropping work or growing.
 //!
 //! And the rule that is easy to violate without noticing: **no pool connection
-//! is held across image processing.** Read what is needed, release, do the CPU
+//! is held across decoding and encoding.** Read what is needed, release, do the CPU
 //! work, reacquire to write the result. Holding one for the duration of a batch
 //! drains the pool and stalls every unrelated request in the service.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use sqlx::PgPool;
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{Semaphore, mpsc, watch};
+use tokio::task::{JoinHandle, JoinSet};
+use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::blocking::run_blocking;
@@ -39,34 +41,98 @@ pub const STATUS_PENDING: &str = "pending";
 pub const STATUS_READY: &str = "ready";
 pub const STATUS_FAILED: &str = "failed";
 
-/// How many stranded photos one startup sweep will pick up.
-///
-/// Bounded because the sweep runs before anything is known about how many rows
-/// are pending, and an unbounded fetch on a large backlog would be the first
-/// query a restarting process issues. If the cap is hit the rest are picked up
-/// by the next restart, and the log says so.
+/// Page size for each periodic pending-photo scan. Every page is visited.
 const RECOVERY_LIMIT: i64 = 1_000;
 
 /// One photo awaiting variants.
 #[derive(Debug, Clone)]
 pub struct VariantJob {
     pub photo_id: Uuid,
+    context: opentelemetry::Context,
+    voyage_id: Option<Uuid>,
+    queue_wait: tracing::Span,
+}
+
+impl VariantJob {
+    /// Keep only OpenTelemetry context: retaining the request's tracing span
+    /// would incorrectly extend its duration until background work finishes.
+    pub fn new(photo_id: Uuid) -> Self {
+        let context = tracing::Span::current().context();
+        let queue_wait = tracing::info_span!(parent: None, "photo.queue_wait",
+            photo.id = %photo_id, voyage.id = tracing::field::Empty);
+        let _ = queue_wait.set_parent(context.clone());
+        Self {
+            photo_id,
+            context,
+            voyage_id: None,
+            queue_wait,
+        }
+    }
+
+    pub fn with_voyage(mut self, voyage_id: Uuid) -> Self {
+        self.queue_wait.record("voyage.id", voyage_id.to_string());
+        self.voyage_id = Some(voyage_id);
+        self
+    }
 }
 
 /// Handle held in [`AppState`] so handlers can enqueue.
 #[derive(Clone)]
 pub struct VariantQueue {
-    pub sender: mpsc::Sender<VariantJob>,
+    sender: mpsc::Sender<VariantJob>,
+    lifecycle: Option<Arc<Lifecycle>>,
+}
+
+struct Lifecycle {
+    stop: watch::Sender<bool>,
+    task: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl VariantQueue {
+    /// Wrap an explicitly owned channel, used by embedded router tests.
+    pub fn from_sender(sender: mpsc::Sender<VariantJob>) -> Self {
+        Self {
+            sender,
+            lifecycle: None,
+        }
+    }
+
+    /// Stop maintenance and accept no further jobs, then drain accepted work.
+    pub async fn shutdown(&self, deadline: Duration) {
+        if let Some(lifecycle) = &self.lifecycle {
+            let _ = lifecycle.stop.send(true);
+            let task = lifecycle
+                .task
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(mut task) = task
+                && tokio::time::timeout(deadline, &mut task).await.is_err()
+            {
+                task.abort();
+                let _ = task.await;
+                tracing::warn!("worker drain deadline exceeded; pending rows will recover");
+            }
+        }
+    }
+
     /// Enqueues, applying backpressure when the queue is full.
     ///
     /// Returns an error only when the worker is gone, which means shutdown —
     /// the caller should surface that as a 503 rather than pretending the
     /// upload succeeded.
+    #[tracing::instrument(name = "photo.enqueue", skip_all, fields(photo.id = %job.photo_id), err)]
     pub async fn enqueue(&self, job: VariantJob) -> Result<(), mpsc::error::SendError<VariantJob>> {
         self.sender.send(job).await
+    }
+
+    /// Reserve acceptance before committing the photo row. Dropping an unused
+    /// permit returns capacity; sending with it is synchronous.
+    #[tracing::instrument(name = "photo.enqueue", skip_all, err)]
+    pub async fn reserve(
+        &self,
+    ) -> Result<mpsc::OwnedPermit<VariantJob>, mpsc::error::SendError<()>> {
+        self.sender.clone().reserve_owned().await
     }
 
     /// A queue with no worker behind it, for tests that exercise the router
@@ -78,7 +144,7 @@ impl VariantQueue {
     pub fn detached() -> Self {
         let (sender, receiver) = mpsc::channel(1);
         drop(receiver);
-        Self { sender }
+        Self::from_sender(sender)
     }
 }
 
@@ -95,31 +161,70 @@ impl VariantQueue {
 /// previous run: a process that died mid-batch would otherwise leave them
 /// stranded forever, visible in its voyage and never becoming viewable.
 pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
-    // `max(1)` on both: a configured zero would otherwise mean a channel that
-    // cannot be created (tokio panics on capacity 0) or a semaphore that never
-    // issues a permit, and "the service silently stops generating variants" is
-    // a worse answer to a bad config value than "it uses one".
-    let depth = config.photos.variant_queue_depth.max(1);
-    let concurrency = config.photos.variant_concurrency.max(1);
+    let (sender, receiver) = mpsc::channel(config.photos.variant_queue_depth.max(1));
+    let permits = Arc::new(Semaphore::new(config.photos.variant_concurrency.max(1)));
+    let (stop, stopped) = watch::channel(false);
+    let lifecycle = Arc::new(Lifecycle {
+        stop,
+        task: Mutex::new(None),
+    });
+    let maintenance_pool = pool.clone();
+    let maintenance_config = config.clone();
+    let maintenance_sender = sender.clone();
+    let mut maintenance_stop = stopped.clone();
+    let task = tokio::spawn(async move {
+        // Owning both tasks in a JoinSet ensures cancellation stops maintenance
+        // as well as dispatch; conversion futures are owned by dispatch below.
+        let mut tasks = JoinSet::new();
+        tasks.spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                tokio::select! {
+                    _ = maintenance_stop.changed() => break,
+                    _ = interval.tick() => {
+                        tokio::select! {
+                            _ = maintenance_stop.changed() => break,
+                            _ = maintain(&maintenance_pool, &maintenance_config, &maintenance_sender) => {}
+                        }
+                    }
+                }
+            }
+        });
+        tasks.spawn(dispatch_owned(pool, config, receiver, permits, stopped));
+        while tasks.join_next().await.is_some() {}
+    });
+    *lifecycle
+        .task
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(task);
+    VariantQueue {
+        sender,
+        lifecycle: Some(lifecycle),
+    }
+}
 
-    let (sender, receiver) = mpsc::channel(depth);
+async fn maintain(pool: &PgPool, config: &Config, sender: &mpsc::Sender<VariantJob>) {
+    recover(pool.clone(), sender.clone()).await;
+    if let Err(error) = crate::auth::session::sweep_expired(pool).await {
+        tracing::warn!(%error, "session cleanup will be retried");
+    }
+    if let Err(error) = crate::auth::attempt::sweep_expired(pool).await {
+        tracing::warn!(%error, "authorization cleanup will be retried");
+    }
+    if let Err(error) = super::cleanup::sweep(pool, &config.photos.storage_root).await {
+        tracing::warn!(%error, "file cleanup will be retried");
+    }
+}
 
-    tokio::spawn(dispatch(
-        pool.clone(),
-        config,
-        receiver,
-        Arc::new(Semaphore::new(concurrency)),
-    ));
-
-    // Separate task so that a slow or unavailable database at startup delays
-    // only the sweep, never the return of this function — `AppState` and the
-    // listener are built from it, and a service that will not start because a
-    // recovery query is slow is a worse outage than a late sweep.
-    tokio::spawn(recover(pool, sender.clone()));
-
-    tracing::info!(queue_depth = depth, concurrency, "variant worker started");
-
-    VariantQueue { sender }
+#[cfg(test)]
+async fn dispatch(
+    pool: PgPool,
+    config: Arc<Config>,
+    receiver: mpsc::Receiver<VariantJob>,
+    permits: Arc<Semaphore>,
+) {
+    let (_stop, stopped) = watch::channel(false);
+    dispatch_owned(pool, config, receiver, permits, stopped).await;
 }
 
 /// Pulls jobs off the queue and runs at most `permits` of them at once.
@@ -129,27 +234,41 @@ pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
 /// waiting for a permit would move the backlog out of the bounded channel and
 /// into an unbounded pile of spawned tasks, which is precisely the unbounded
 /// growth the bounded channel exists to prevent.
-async fn dispatch(
+async fn dispatch_owned(
     pool: PgPool,
     config: Arc<Config>,
     mut receiver: mpsc::Receiver<VariantJob>,
     permits: Arc<Semaphore>,
+    mut stopped: watch::Receiver<bool>,
 ) {
+    let mut jobs = JoinSet::new();
+    let mut draining = false;
     loop {
+        while jobs.try_join_next().is_some() {}
         let Ok(permit) = permits.clone().acquire_owned().await else {
             // The semaphore is only closed at shutdown.
             break;
         };
 
-        let Some(job) = receiver.recv().await else {
+        let next = tokio::select! {
+            _ = stopped.changed(), if !draining => {
+                receiver.close();
+                draining = true;
+                receiver.recv().await
+            },
+            job = receiver.recv() => job,
+        };
+        let Some(mut job) = next else {
             // Every sender is gone: the state holding the queue has been
             // dropped, which means the process is on its way out.
             break;
         };
 
+        // Queue wait ends when received, before scheduling actual conversion.
+        job.queue_wait = tracing::Span::none();
         let pool = pool.clone();
         let config = config.clone();
-        tokio::spawn(async move {
+        jobs.spawn(async move {
             if let Err(err) = process(&pool, &config, &job).await {
                 // `process` has already marked the row `failed`; this line is
                 // the *why*, which the row cannot carry.
@@ -164,6 +283,7 @@ async fn dispatch(
         });
     }
 
+    while jobs.join_next().await.is_some() {}
     tracing::info!("variant worker stopped");
 }
 
@@ -173,38 +293,24 @@ async fn dispatch(
 /// exists, the voyage shows it, and nothing will ever generate its variants
 /// because the only thing that ever enqueued it was the upload request that has
 /// long since returned.
+#[tracing::instrument(name = "photo.recover", skip_all)]
 async fn recover(pool: PgPool, sender: mpsc::Sender<VariantJob>) {
-    let pending = match photos::pending(&pool, RECOVERY_LIMIT).await {
-        Ok(pending) => pending,
-        Err(err) => {
-            // Not fatal. The sweep is a repair, and the next restart runs it
-            // again; refusing to serve because it failed would turn a stranded
-            // photo into a stranded service.
-            tracing::error!(error = %err, "could not sweep photos left pending");
-            return;
+    let mut after = None;
+    loop {
+        let pending: Vec<Uuid> = match sqlx::query_scalar("SELECT id FROM photos WHERE variant_status='pending' AND ($1::uuid IS NULL OR id > $1) ORDER BY id LIMIT $2")
+            .bind(after).bind(RECOVERY_LIMIT).fetch_all(&pool).await {
+            Ok(pending) => pending,
+            Err(error) => { tracing::warn!(%error, "pending scan will retry on the next maintenance pass"); return; }
+        };
+        let count = pending.len();
+        for id in pending {
+            after = Some(id);
+            if sender.send(VariantJob::new(id)).await.is_err() {
+                return;
+            }
         }
-    };
-
-    if pending.is_empty() {
-        return;
-    }
-
-    tracing::info!(
-        count = pending.len(),
-        "requeuing photos left pending by a previous run"
-    );
-    if pending.len() as i64 >= RECOVERY_LIMIT {
-        tracing::warn!(
-            limit = RECOVERY_LIMIT,
-            "pending sweep hit its limit; the remainder is picked up by the next restart"
-        );
-    }
-
-    for photo_id in pending {
-        // Awaits when the queue is full, which is the same backpressure an
-        // upload gets. A failure here means the worker is gone.
-        if sender.send(VariantJob { photo_id }).await.is_err() {
-            break;
+        if count < RECOVERY_LIMIT as usize {
+            return;
         }
     }
 }
@@ -220,26 +326,35 @@ pub async fn process(
     config: &Config,
     job: &VariantJob,
 ) -> Result<(), crate::error::AppError> {
-    let Err(err) = generate(pool, config, job).await else {
-        return Ok(());
-    };
-
-    // Deliberately a separate statement rather than part of a transaction: the
-    // work that failed is on the filesystem, not in the database, so there is
-    // nothing to roll back — and if *this* write also fails (the database is
-    // down, which is a plausible cause of the failure above) the row stays
-    // `pending` and the next startup sweep retries it. That is the right
-    // direction to fail in: a transient outage should not permanently poison a
-    // photo, and a genuinely undecodable file fails again immediately.
-    if let Err(mark) = photos::set_variant_status(pool, job.photo_id, STATUS_FAILED).await {
-        tracing::error!(
-            photo_id = %job.photo_id,
-            error = %mark,
-            "could not mark photo failed; it stays pending for the next sweep"
-        );
+    let span = tracing::info_span!(parent: None, "photo.process",
+        otel.name = %format!("photo.process {}", job.photo_id),
+        photo.id = %job.photo_id,
+        voyage.id = tracing::field::Empty,
+        photo.format = tracing::field::Empty,
+        photo.width = tracing::field::Empty,
+        photo.height = tracing::field::Empty,
+        photo.status = tracing::field::Empty,
+        otel.status_code = tracing::field::Empty);
+    let _ = span.set_parent(job.context.clone());
+    async {
+        let Err(err) = generate(pool, config, job, &span).await else {
+            return Ok(());
+        };
+        // Failure marking remains a separate statement, not a transaction.
+        // If it fails, the row stays pending for the next startup recovery.
+        span.record("photo.status", STATUS_FAILED);
+        span.record("otel.status_code", "ERROR");
+        if let Err(mark) = photos::set_variant_status(pool, job.photo_id, STATUS_FAILED)
+            .instrument(tracing::info_span!("photo.mark_failed"))
+            .await
+        {
+            tracing::error!(photo_id = %job.photo_id, error = %mark,
+                "could not mark photo failed; it stays pending for the next sweep");
+        }
+        Err(err)
     }
-
-    Err(err)
+    .instrument(span.clone())
+    .await
 }
 
 /// The fallible core of [`process`], split out so that every failure path goes
@@ -251,15 +366,30 @@ pub async fn process(
 /// is no connection held, no transaction open, and no guard alive — the CPU
 /// phase in the middle can take seconds without costing the rest of the service
 /// anything.
-async fn generate(pool: &PgPool, config: &Config, job: &VariantJob) -> AppResult<()> {
+#[tracing::instrument(name = "photo.generate", skip_all, fields(photo.id = %job.photo_id))]
+async fn generate(
+    pool: &PgPool,
+    config: &Config,
+    job: &VariantJob,
+    processing: &tracing::Span,
+) -> AppResult<()> {
     // ---- read: one statement, connection released before it returns --------
-    let Some(photo) = photos::find_by_id(pool, job.photo_id).await? else {
+    let Some(photo) = photos::find_by_id(pool, job.photo_id)
+        .instrument(tracing::info_span!("photo.load"))
+        .await?
+    else {
         // Deleted between enqueue and processing. Not an error: the files are
         // already gone, and marking a row that no longer exists is a no-op.
         tracing::debug!(photo_id = %job.photo_id, "photo deleted before variants were generated");
         return Ok(());
     };
 
+    if let Some(voyage_id) = job.voyage_id {
+        processing.record("voyage.id", voyage_id.to_string());
+    }
+    processing.record("photo.format", &photo.original_format);
+    processing.record("photo.width", photo.width);
+    processing.record("photo.height", photo.height);
     if photo.variant_status == STATUS_READY {
         // The startup sweep and a live enqueue can both name the same photo.
         // Re-encoding it would be correct but wasteful.
@@ -267,17 +397,39 @@ async fn generate(pool: &PgPool, config: &Config, job: &VariantJob) -> AppResult
     }
 
     let format = parse_format(&photo.original_format)?;
-    let hash = ContentHash(photo.content_hash);
+    let hash = ContentHash::try_from(photo.content_hash)?;
     let root = config.photos.storage_root.clone();
+    let encode_hash = hash.clone();
     let quality = config.photos.webp_quality;
 
     // ---- CPU: decode, resize, encode, write. No connection, no runtime
     //      worker thread (D8). One `run_blocking` around the whole sequence
     //      rather than one per file operation, per the note in `blocking`.
-    run_blocking(move || derive(&root, &hash, format, quality)).await?;
+    let encoded = run_blocking(move || encode(&root, &encode_hash, format, quality)).await?;
+
+    // Encoding holds no database connection. Only final filesystem writes are
+    // serialized with upload/deletion. A deletion during conversion wins: the
+    // worker must not recreate variants for a row that no longer exists.
+    let mut tx = pool.begin().await?;
+    photos::lock_content(&mut tx, hash.as_str()).await?;
+    if photos::find_by_id(&mut *tx, job.photo_id).await?.is_none() {
+        return Ok(());
+    }
+    let root = config.photos.storage_root.clone();
+    // The blocking task owns the transaction while writing. Canceling this
+    // future cannot release the content lock before those writes have stopped.
+    let mut tx = run_blocking(move || {
+        write_variants(&root, &hash, encoded)?;
+        Ok(tx)
+    })
+    .await?;
 
     // ---- write: reacquire, one statement, released again -------------------
-    photos::set_variant_status(pool, job.photo_id, STATUS_READY).await?;
+    photos::set_variant_status(&mut *tx, job.photo_id, STATUS_READY)
+        .instrument(tracing::info_span!("photo.mark_ready"))
+        .await?;
+    tx.commit().await?;
+    processing.record("photo.status", STATUS_READY);
 
     tracing::debug!(photo_id = %job.photo_id, "variants ready");
 
@@ -291,26 +443,65 @@ async fn generate(pool: &PgPool, config: &Config, job: &VariantJob) -> AppResult
 ///
 /// The original is decoded exactly once and the pixel buffer reused for all
 /// three variants — decode is the expensive half, and doing it per size would
-/// triple the cost of the phase's single most CPU-heavy operation.
+/// triple the cost of decoding the original.
+#[cfg(test)]
 fn derive(root: &Path, hash: &ContentHash, format: ImageFormat, quality: f32) -> AppResult<()> {
+    write_variants(root, hash, encode(root, hash, format, quality)?)
+}
+
+fn encode(
+    root: &Path,
+    hash: &ContentHash,
+    format: ImageFormat,
+    quality: f32,
+) -> AppResult<Vec<(VariantKind, Vec<u8>)>> {
     let original = storage::original_path(root, hash);
 
     // Read from the *original*: variants are stripped by design (D6), so
     // reading orientation off one would always yield nothing. Absent EXIF is
     // ordinary, and orientation 1 is "as stored".
-    let orientation = exif::extract(&original).orientation.unwrap_or(1);
+    let orientation = tracing::info_span!("photo.exif")
+        .in_scope(|| exif::extract(&original).orientation.unwrap_or(1));
 
-    let image = decode::decode(&original, format).map_err(internal)?;
+    let image = tracing::info_span!("photo.decode", photo.format = format.as_str())
+        .in_scope(|| decode::decode(&original, format))
+        .map_err(internal)?;
     // Baked into the pixels here, because the variant carries no tag for a
     // viewer to honor later. Skipping this is how every portrait photo in the
     // product ends up sideways.
-    let image = decode::apply_orientation(image, orientation);
+    let image = tracing::info_span!("photo.orient", photo.orientation = orientation)
+        .in_scope(|| decode::apply_orientation(image, orientation));
 
-    for kind in VariantKind::ALL {
-        let bytes = variants::encode_variant(&image, kind, quality).map_err(internal)?;
-        write_atomic(&storage::variant_path(root, hash, kind), &bytes)?;
+    VariantKind::ALL
+        .into_iter()
+        .map(|kind| {
+            let span = tracing::info_span!(
+                "photo.variant",
+                photo.variant = kind.as_str(),
+                photo.max_edge = kind.max_edge()
+            );
+            span.in_scope(|| {
+                variants::encode_variant(&image, kind, quality)
+                    .map(|bytes| (kind, bytes))
+                    .map_err(internal)
+            })
+        })
+        .collect()
+}
+
+fn write_variants(
+    root: &Path,
+    hash: &ContentHash,
+    encoded: Vec<(VariantKind, Vec<u8>)>,
+) -> AppResult<()> {
+    for (kind, bytes) in encoded {
+        tracing::info_span!(
+            "photo.write",
+            photo.variant = kind.as_str(),
+            photo.bytes = bytes.len()
+        )
+        .in_scope(|| write_atomic(&storage::variant_path(root, hash, kind), &bytes))?;
     }
-
     Ok(())
 }
 

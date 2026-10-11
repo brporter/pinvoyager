@@ -1,5 +1,6 @@
 use crate::photo_voyage;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::http::Request;
 use secrecy::SecretString;
@@ -19,25 +20,6 @@ async fn failed_upload_cleanup_logs_when_the_temporary_path_is_a_directory() {
     discard_failed_upload(&path).await;
 
     assert!(path.is_dir(), "cleanup does not remove a directory");
-}
-
-#[tokio::test]
-async fn multipart_frame_reader_skips_trailers_and_keeps_reading_data() {
-    use axum::body::{Body, Bytes};
-    use http_body::Frame;
-    use http_body_util::StreamBody;
-    use std::convert::Infallible;
-
-    let frames = tokio_stream::iter([
-        Ok::<_, Infallible>(Frame::trailers(HeaderMap::new())),
-        Ok(Frame::data(Bytes::from_static(b"after trailers"))),
-    ]);
-    let mut body = Body::new(StreamBody::new(frames));
-
-    assert_eq!(
-        next_frame(&mut body).await.unwrap().unwrap(),
-        Bytes::from_static(b"after trailers")
-    );
 }
 
 /// A state whose pool is lazy and never connects. Enough to prove routing
@@ -206,11 +188,13 @@ async fn upload_rejects_a_declared_size_over_the_limit_before_reading() {
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_LENGTH,
-        declared.to_string().parse().unwrap(),
+        declared.to_string().parse().expect("valid test fixture"),
     );
     headers.insert(
         header::CONTENT_TYPE,
-        "multipart/form-data; boundary=pv".parse().unwrap(),
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("valid test fixture"),
     );
 
     let error = upload(
@@ -242,15 +226,20 @@ async fn streaming_file_size_limit_cleans_up_the_partial_upload() {
         .await
         .expect("create upload temp directory");
     let body = multipart_body("pv", &[("files", Some("large.jpg"), b"ab")]);
-    let mut multipart = reader("pv", body, 1 << 20);
-    multipart.next_part().await.unwrap().expect("file part");
+    let mut multipart = reader("pv", body, 1 << 20).await;
+    let mut field = multipart
+        .next_field()
+        .await
+        .expect("valid test fixture")
+        .expect("file part");
 
     let error = ingest(
         &state,
         Uuid::now_v7(),
         Uuid::now_v7(),
-        &mut multipart,
+        &mut field,
         &temp_dir,
+        None,
     )
     .await
     .expect_err("file bytes over the per-file limit are refused");
@@ -260,7 +249,9 @@ async fn streaming_file_size_limit_cleans_up_the_partial_upload() {
         StatusCode::PAYLOAD_TOO_LARGE
     );
     assert_eq!(
-        std::fs::read_dir(&temp_dir).unwrap().count(),
+        std::fs::read_dir(&temp_dir)
+            .expect("valid test fixture")
+            .count(),
         0,
         "the rejected partial file is removed"
     );
@@ -314,7 +305,9 @@ async fn upload_rejects_a_multipart_form_without_any_files() {
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        "multipart/form-data; boundary=pv".parse().unwrap(),
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("valid test fixture"),
     );
 
     let error = upload(
@@ -345,7 +338,9 @@ async fn upload_rejects_unrecognized_file_bytes_and_removes_the_temporary_file()
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        "multipart/form-data; boundary=pv".parse().unwrap(),
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("valid test fixture"),
     );
 
     let error = upload(
@@ -392,7 +387,7 @@ async fn upload_persists_a_valid_photo_and_queues_variant_generation(pool: PgPoo
     let state = test_state_with(
         pool.clone(),
         scratch.path().to_path_buf(),
-        crate::photos::worker::VariantQueue { sender },
+        crate::photos::worker::VariantQueue::from_sender(sender),
     );
     let original = crate::photos::decode::testutil::write_jpeg(&scratch, "valid-upload", 32, 24);
     let bytes = std::fs::read(original).expect("read JPEG fixture");
@@ -400,7 +395,9 @@ async fn upload_persists_a_valid_photo_and_queues_variant_generation(pool: PgPoo
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        "multipart/form-data; boundary=pv".parse().unwrap(),
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("valid test fixture"),
     );
 
     let (status, Json(response)) = upload_to_voyage(
@@ -450,7 +447,7 @@ async fn unscoped_photo_library_routes_are_not_available() {
 }
 
 #[sqlx::test]
-async fn upload_reports_a_closed_worker_after_persisting_the_pending_photo(pool: PgPool) {
+async fn a_closed_worker_refuses_upload_before_persisting_a_photo(pool: PgPool) {
     let user = crate::db::repo::users::create(&pool, None, None)
         .await
         .expect("create owner");
@@ -466,7 +463,9 @@ async fn upload_reports_a_closed_worker_after_persisting_the_pending_photo(pool:
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        "multipart/form-data; boundary=pv".parse().unwrap(),
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("valid test fixture"),
     );
 
     let error = upload(
@@ -486,15 +485,7 @@ async fn upload_reports_a_closed_worker_after_persisting_the_pending_photo(pool:
     let photos = crate::db::repo::photos::list_for_owner(&pool, user.id, None, 10)
         .await
         .expect("the committed photo remains in its voyage");
-    assert_eq!(photos.len(), 1);
-    assert_eq!(photos[0].variant_status, STATUS_PENDING);
-    assert!(
-        crate::photos::storage::original_path(
-            &state.config.photos.storage_root,
-            &crate::photos::storage::ContentHash(photos[0].content_hash.clone()),
-        )
-        .is_file()
-    );
+    assert!(photos.is_empty());
 }
 
 #[sqlx::test]
@@ -589,9 +580,11 @@ async fn deleting_photos_removes_only_the_last_shared_content_file(pool: PgPool)
     );
     let unremovable_original = crate::photos::storage::original_path(
         &state.config.photos.storage_root,
-        &crate::photos::storage::ContentHash(unique.content_hash.clone()),
+        &crate::photos::storage::ContentHash::try_from(unique.content_hash.clone())
+            .expect("valid fixture hash"),
     );
-    std::fs::create_dir_all(unremovable_original.parent().unwrap()).expect("create original shard");
+    std::fs::create_dir_all(unremovable_original.parent().expect("valid test fixture"))
+        .expect("create original shard");
     std::fs::create_dir(&unremovable_original).expect("directory blocks original-file removal");
     std::fs::write(unremovable_original.join("keep"), b"still referenced")
         .expect("make the directory non-empty");
@@ -641,10 +634,12 @@ async fn image_serving_sets_headers_and_honors_a_matching_etag(pool: PgPool) {
     );
     let path = crate::photos::storage::variant_path(
         &state.config.photos.storage_root,
-        &crate::photos::storage::ContentHash(photo.content_hash.clone()),
+        &crate::photos::storage::ContentHash::try_from(photo.content_hash.clone())
+            .expect("valid fixture hash"),
         VariantKind::Thumb,
     );
-    std::fs::create_dir_all(path.parent().unwrap()).expect("create variant shard");
+    std::fs::create_dir_all(path.parent().expect("valid test fixture"))
+        .expect("create variant shard");
     std::fs::write(&path, b"webp variant bytes").expect("write variant fixture");
 
     assert!(matches!(
@@ -681,7 +676,10 @@ async fn image_serving_sets_headers_and_honors_a_matching_etag(pool: PgPool) {
 
     let tag = etag(&photo.content_hash, VariantKind::Thumb);
     let mut conditional = HeaderMap::new();
-    conditional.insert(header::IF_NONE_MATCH, tag.parse().unwrap());
+    conditional.insert(
+        header::IF_NONE_MATCH,
+        tag.parse().expect("valid test fixture"),
+    );
     let response = image(
         State(state.clone()),
         MaybeUser(Some(test_user(owner.id))),
@@ -752,7 +750,7 @@ fn a_served_image_carries_the_security_headers() {
     );
     assert_eq!(
         header_of(&headers, header::CACHE_CONTROL),
-        Some(IMAGE_CACHE_CONTROL)
+        Some("private, no-cache, must-revalidate")
     );
     assert_eq!(header_of(&headers, header::ETAG), Some(tag.as_str()));
     assert_eq!(header_of(&headers, header::CONTENT_LENGTH), Some("4096"));
@@ -833,6 +831,13 @@ fn domain_failures_keep_their_status() {
 /// 429 with a `Retry-After`, not a reset connection (T12).
 #[test]
 fn the_rate_limiter_refuses_with_a_retry_after() {
+    let limiter = crate::photos::rate_limit::UploadLimiter::default();
+    let now = Instant::now();
+    let take_upload_token = |user, rate| {
+        limiter
+            .take_at(user, rate, now)
+            .map_err(Rejection::rate_limited)
+    };
     let user = Uuid::now_v7();
 
     // Two per minute: two succeed, the third does not.
@@ -860,6 +865,13 @@ fn the_rate_limiter_refuses_with_a_retry_after() {
 /// anybody else's upload.
 #[test]
 fn the_rate_limiter_is_per_user() {
+    let limiter = crate::photos::rate_limit::UploadLimiter::default();
+    let now = Instant::now();
+    let take_upload_token = |user, rate| {
+        limiter
+            .take_at(user, rate, now)
+            .map_err(Rejection::rate_limited)
+    };
     let noisy = Uuid::now_v7();
     let quiet = Uuid::now_v7();
 
@@ -888,255 +900,100 @@ fn multipart_body(boundary: &str, parts: &[(&str, Option<&str>, &[u8])]) -> Vec<
     body
 }
 
-fn reader(boundary_value: &str, body: Vec<u8>, limit: u64) -> Multipart {
-    Multipart::new(
-        &format!("multipart/form-data; boundary={boundary_value}"),
-        Body::from(body),
-        limit,
-    )
-    .expect("a valid boundary")
+async fn reader(boundary: &str, body: Vec<u8>, limit: u64) -> Multipart {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        format!("multipart/form-data; boundary={boundary}")
+            .parse()
+            .expect("content type"),
+    );
+    read_multipart(headers, Body::from(body), limit)
+        .await
+        .expect("valid boundary")
 }
 
-/// The same body delivered `frame_size` bytes at a time, which is the shape
-/// a real network body has and an in-memory one never does.
-fn chunked_reader(boundary_value: &str, body: Vec<u8>, frame_size: usize) -> Multipart {
-    let frames: Vec<_> = body
-        .chunks(frame_size)
-        .map(Bytes::copy_from_slice)
-        .collect();
-
-    Multipart::new(
-        &format!("multipart/form-data; boundary={boundary_value}"),
-        Body::from_stream(tokio_stream::iter(
-            frames.into_iter().map(Ok::<_, std::convert::Infallible>),
-        )),
-        u64::MAX,
-    )
-    .expect("a valid boundary")
-}
-
-async fn collect(multipart: &mut Multipart) -> Vec<(Option<String>, Vec<u8>)> {
+async fn collect(multipart: &mut Multipart) -> Result<Vec<(Option<String>, Vec<u8>)>, Rejection> {
     let mut parts = Vec::new();
-    while let Some(part) = multipart.next_part().await.expect("a well-formed body") {
-        let mut content = Vec::new();
-        while let Some(chunk) = multipart.next_chunk().await.expect("a well-formed part") {
-            content.extend_from_slice(&chunk);
+    while let Some(mut part) = multipart.next_field().await.map_err(multipart_error)? {
+        check_part_headers(&part)?;
+        let filename = part.file_name().map(str::to_owned);
+        let mut bytes = Vec::new();
+        while let Some(chunk) = part.chunk().await.map_err(multipart_error)? {
+            bytes.extend_from_slice(&chunk);
         }
-        parts.push((part.filename, content));
+        parts.push((filename, bytes));
     }
-    parts
+    Ok(parts)
 }
 
 #[tokio::test]
-async fn several_files_in_one_request_are_read_in_order() {
-    let raw = multipart_body(
+async fn axum_multipart_preserves_files_across_every_chunk_boundary() {
+    use axum::body::Bytes;
+    let content = b"before--pv still data after";
+    let body = multipart_body(
         "pv",
         &[
-            ("caption", None, b"not a file"),
-            ("files", Some("one.jpg"), b"\xff\xd8\xff\xe0one"),
-            ("files", Some("two.png"), b"\x89PNGtwo"),
+            ("caption", None, b"caption"),
+            ("files", Some("one.jpg"), content),
+            ("files", Some("two.png"), b"second"),
         ],
     );
-
-    let parts = collect(&mut reader("pv", raw, 1 << 20)).await;
-
-    assert_eq!(parts.len(), 3);
-    assert_eq!(parts[0].0, None, "an ordinary field has no filename");
-    assert_eq!(parts[1].0.as_deref(), Some("one.jpg"));
-    assert_eq!(parts[1].1, b"\xff\xd8\xff\xe0one");
-    assert_eq!(parts[2].1, b"\x89PNGtwo");
-}
-
-/// The case a naive split on the boundary gets wrong: image bytes that
-/// happen to contain the boundary text without the CRLF that precedes a
-/// real delimiter.
-#[tokio::test]
-async fn a_boundary_inside_the_data_is_not_a_delimiter() {
-    let content = b"before--pv still the same file after".to_vec();
-    let raw = multipart_body("pv", &[("files", Some("a.bin"), &content)]);
-
-    let parts = collect(&mut reader("pv", raw, 1 << 20)).await;
-
-    assert_eq!(parts.len(), 1);
-    assert_eq!(parts[0].1, content);
-}
-
-/// Every delimiter, header line and part boundary can land across a frame
-/// boundary. Sweeping the frame size exercises all of those splits, and
-/// one-byte frames exercise every one of them at once.
-#[tokio::test]
-async fn a_delimiter_split_across_frames_still_matches() {
-    let content: Vec<u8> = (0u8..=255).cycle().take(3000).collect();
-    let raw = multipart_body(
-        "pv-boundary",
-        &[
-            ("files", Some("a.bin"), &content),
-            ("files", Some("b.bin"), b"second"),
-        ],
-    );
-
-    for frame_size in [1, 2, 3, 7, 13, 64, 1000] {
-        let parts = collect(&mut chunked_reader("pv-boundary", raw.clone(), frame_size)).await;
-
-        assert_eq!(parts.len(), 2, "frame size {frame_size}");
-        assert_eq!(parts[0].0.as_deref(), Some("a.bin"), "{frame_size}");
-        assert_eq!(parts[0].1, content, "frame size {frame_size}");
-        assert_eq!(parts[1].1, b"second", "frame size {frame_size}");
+    for size in [1, 2, 3, 7, 13, 64, 1000] {
+        let chunks: Vec<_> = body.chunks(size).map(Bytes::copy_from_slice).collect();
+        let stream = Body::from_stream(tokio_stream::iter(
+            chunks.into_iter().map(Ok::<_, std::convert::Infallible>),
+        ));
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONTENT_TYPE,
+            "multipart/form-data; boundary=pv".parse().expect("header"),
+        );
+        let mut multipart = read_multipart(headers, stream, 1 << 20)
+            .await
+            .expect("parser");
+        let parts = collect(&mut multipart).await.expect("well-formed body");
+        assert_eq!(
+            parts,
+            vec![
+                (None, b"caption".to_vec()),
+                (Some("one.jpg".into()), content.to_vec()),
+                (Some("two.png".into()), b"second".to_vec())
+            ]
+        );
     }
 }
 
-/// T12's mid-stream half: a body that exceeds the cap is refused with a 413
-/// even though nothing declared a `Content-Length`.
 #[tokio::test]
-async fn an_oversized_body_is_refused_with_413() {
-    let raw = multipart_body("pv", &[("files", Some("a.bin"), &vec![0u8; 4096])]);
-    let mut multipart = reader("pv", raw, 512);
-
-    let status = loop {
-        match multipart.next_part().await {
-            Ok(Some(_)) => while let Ok(Some(_)) = multipart.next_chunk().await {},
-            Ok(None) => panic!("the whole body was accepted"),
-            Err(rejection) => break rejection.into_response().status(),
-        }
-    };
-
-    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-}
-
-/// A truncated upload must not be stored as though it were whole.
-#[tokio::test]
-async fn a_body_with_no_closing_delimiter_is_refused() {
-    let mut raw = multipart_body("pv", &[("files", Some("a.bin"), b"0123456789")]);
-    raw.truncate(raw.len() - 12);
-
-    let mut multipart = reader("pv", raw, 1 << 20);
-    multipart.next_part().await.expect("headers are intact");
-
-    let result = loop {
-        match multipart.next_chunk().await {
-            Ok(Some(_)) => continue,
-            other => break other,
-        }
-    };
-
-    assert!(result.is_err(), "a truncated body was accepted as complete");
-}
-
-#[tokio::test]
-async fn a_body_without_any_delimiter_is_malformed() {
-    let mut multipart = reader("pv", b"not multipart".to_vec(), 1 << 20);
-
-    let error = multipart
-        .next_part()
-        .await
-        .expect_err("a body without a delimiter is malformed");
-
-    assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn a_delimiter_line_with_unexpected_text_is_malformed() {
-    let body = b"--pv\r\nunexpected\r\n".to_vec();
-    let mut multipart = reader("pv", body, 1 << 20);
-
-    let error = multipart
-        .next_part()
-        .await
-        .expect_err("the delimiter line only permits closing marks or whitespace");
-
-    assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn a_header_line_without_a_colon_is_malformed() {
-    let body = b"--pv\r\nnot-a-header\r\n\r\n".to_vec();
-    let mut multipart = reader("pv", body, 1 << 20);
-
-    let error = multipart
-        .next_part()
-        .await
-        .expect_err("part headers must have a name and value");
-
-    assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn a_body_stream_error_becomes_a_bad_request() {
-    let body = Body::from_stream(tokio_stream::iter([Err::<Bytes, _>(
-        std::io::Error::other("synthetic body failure"),
-    )]));
-    let mut multipart =
-        Multipart::new("multipart/form-data; boundary=pv", body, 1 << 20).expect("valid boundary");
-
-    let error = multipart
-        .next_part()
-        .await
-        .expect_err("failed body frames are rejected");
-
-    assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn invalid_utf8_headers_are_ignored_and_parsing_continues() {
-    let body = b"--pv\r\n\xff: value\r\n\r\ncontent\r\n--pv--\r\n".to_vec();
-    let mut multipart = reader("pv", body, 1 << 20);
-
-    let part = multipart
-        .next_part()
-        .await
-        .expect("valid multipart structure")
-        .expect("part follows delimiter");
-    assert_eq!(part.filename, None);
-    assert_eq!(
-        multipart.next_chunk().await.unwrap().as_deref(),
-        Some(&b"content"[..])
-    );
-}
-
-#[tokio::test]
-async fn multipart_reader_remains_finished_after_the_closing_delimiter() {
-    let body = multipart_body("pv", &[("caption", None, b"text")]);
-    let mut multipart = reader("pv", body, 1 << 20);
-
-    assert!(multipart.next_part().await.unwrap().is_some());
-    assert!(multipart.next_part().await.unwrap().is_none());
-    assert!(multipart.next_part().await.unwrap().is_none());
-}
-
-#[tokio::test]
-async fn multipart_rejects_an_overlong_header_line_and_header_block() {
-    let mut line = b"--pv\r\nX:".to_vec();
-    line.extend(std::iter::repeat_n(b'a', MAX_HEADER_LINE + 1));
-    line.extend_from_slice(b"\r\n\r\n");
-
-    let mut block = b"--pv\r\nX: ".to_vec();
-    block.extend(std::iter::repeat_n(b'a', MAX_HEADER_LINE / 2));
-    block.extend_from_slice(b"\r\nY: ");
-    block.extend(std::iter::repeat_n(b'b', MAX_HEADER_LINE / 2));
-    block.extend_from_slice(b"\r\n\r\n");
-
-    for body in [line, block] {
-        let mut multipart = reader("pv", body, 1 << 20);
-        let error = multipart
-            .next_part()
+async fn axum_multipart_rejects_malformed_truncated_and_oversized_bodies() {
+    let valid = multipart_body("pv", &[("files", Some("one.jpg"), b"payload")]);
+    for body in [
+        b"not multipart".to_vec(),
+        b"--pv\r\nnot-a-header\r\n\r\n".to_vec(),
+        b"--pv\r\n\xff: value\r\n\r\n".to_vec(),
+        valid[..valid.len() - 10].to_vec(),
+    ] {
+        let error = collect(&mut reader("pv", body, 1 << 20).await)
             .await
-            .expect_err("header limits are enforced");
+            .expect_err("malformed request");
         assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
     }
-}
-
-#[tokio::test]
-async fn multipart_rejects_an_overlong_unterminated_header_line() {
-    let mut body = b"--pv\r\n".to_vec();
-    body.extend(std::iter::repeat_n(b'a', MAX_HEADER_LINE + 1));
-    let mut multipart = reader("pv", body, 1 << 20);
-
-    let error = multipart
-        .next_part()
+    let error = collect(&mut reader("pv", valid, 16).await)
         .await
-        .expect_err("unterminated header lines have a fixed size limit");
-
-    assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
+        .expect_err("framing counts against limit");
+    assert_eq!(
+        error.into_response().status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+    let large_header = multipart_body("pv", &[("files", Some(&"x".repeat(4096)), b"data")]);
+    assert_eq!(
+        collect(&mut reader("pv", large_header, 1 << 20).await)
+            .await
+            .expect_err("headers bounded")
+            .into_response()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
 }
 
 #[test]
@@ -1144,15 +1001,21 @@ fn content_length_ignores_invalid_values() {
     let mut headers = HeaderMap::new();
     assert_eq!(content_length(&headers), None);
 
-    headers.insert(header::CONTENT_LENGTH, "123".parse().unwrap());
+    headers.insert(
+        header::CONTENT_LENGTH,
+        "123".parse().expect("valid test fixture"),
+    );
     assert_eq!(content_length(&headers), Some(123));
 
-    headers.insert(header::CONTENT_LENGTH, "not-a-number".parse().unwrap());
+    headers.insert(
+        header::CONTENT_LENGTH,
+        "not-a-number".parse().expect("valid test fixture"),
+    );
     assert_eq!(content_length(&headers), None);
 
     headers.insert(
         header::CONTENT_LENGTH,
-        HeaderValue::from_bytes(b"\xff").unwrap(),
+        HeaderValue::from_bytes(b"\xff").expect("valid test fixture"),
     );
     assert_eq!(content_length(&headers), None);
 }
@@ -1164,55 +1027,6 @@ fn database_errors_become_database_rejections() {
         rejection.into_response().status(),
         StatusCode::SERVICE_UNAVAILABLE
     );
-}
-
-#[test]
-fn idle_upload_buckets_are_swept_after_the_map_grows_large() {
-    let stale = Instant::now() - BUCKET_IDLE;
-    {
-        let mut buckets = UPLOAD_BUCKETS.lock().unwrap();
-        buckets.clear();
-        for index in 0..=BUCKET_SWEEP_AT {
-            buckets.insert(
-                Uuid::from_u128(index as u128 + 1),
-                Bucket {
-                    tokens: 1.0,
-                    updated: stale,
-                },
-            );
-        }
-    }
-
-    assert!(take_upload_token(Uuid::from_u128(u128::MAX), 2).is_ok());
-    assert_eq!(UPLOAD_BUCKETS.lock().unwrap().len(), 1);
-}
-
-#[test]
-fn only_a_multipart_content_type_is_accepted() {
-    assert_eq!(
-        boundary("multipart/form-data; boundary=abc").as_deref(),
-        Some("abc")
-    );
-    assert_eq!(
-        boundary("multipart/form-data; charset=utf-8; boundary=\"a b\"").as_deref(),
-        Some("a b")
-    );
-    assert_eq!(boundary("application/json"), None);
-    assert_eq!(boundary("multipart/form-data"), None);
-    assert_eq!(boundary("multipart/form-data; boundary="), None);
-    assert_eq!(
-        boundary(&format!("multipart/form-data; boundary={}", "x".repeat(71))),
-        None
-    );
-}
-
-#[test]
-fn find_locates_a_needle_only_where_it_is() {
-    assert_eq!(find(b"hello world", b"world"), Some(6));
-    assert_eq!(find(b"aaab", b"aab"), Some(1));
-    assert_eq!(find(b"abc", b"abcd"), None);
-    assert_eq!(find(b"", b"a"), None);
-    assert_eq!(find(b"abc", b""), None);
 }
 
 #[sqlx::test]
@@ -1274,10 +1088,11 @@ async fn a_voyage_deleted_before_ingest_cannot_leave_an_unattached_photo(pool: P
         header::CONTENT_TYPE,
         "multipart/form-data; boundary=pv".parse().expect("header"),
     );
+    let (sender, _receiver) = tokio::sync::mpsc::channel(1);
     let state = test_state_with(
         pool.clone(),
         scratch.path().to_path_buf(),
-        crate::photos::worker::VariantQueue::detached(),
+        crate::photos::worker::VariantQueue::from_sender(sender),
     );
     let error = upload(
         State(state),
@@ -1315,7 +1130,7 @@ async fn heic_upload_generates_and_serves_every_variant(pool: PgPool) {
     let state = test_state_with(
         pool.clone(),
         scratch.path().to_path_buf(),
-        crate::photos::worker::VariantQueue { sender },
+        crate::photos::worker::VariantQueue::from_sender(sender),
     );
     let bytes = include_bytes!("../../tests/fixtures/upload-regression.heic");
     let body = multipart_body("pv", &[("files", Some("photo.heic"), bytes)]);
@@ -1397,7 +1212,7 @@ async fn corrupt_heic_upload_is_rejected_without_a_photo_or_job(pool: PgPool) {
     let state = test_state_with(
         pool.clone(),
         scratch.path().to_path_buf(),
-        crate::photos::worker::VariantQueue { sender },
+        crate::photos::worker::VariantQueue::from_sender(sender),
     );
     // Keep a real HEIC signature but truncate before the image payload.
     let fixture = include_bytes!("../../tests/fixtures/upload-regression.heic");
@@ -1448,7 +1263,7 @@ async fn heic_conversion_failure_marks_the_photo_failed(pool: PgPool) {
     let state = test_state_with(
         pool.clone(),
         scratch.path().to_path_buf(),
-        crate::photos::worker::VariantQueue { sender },
+        crate::photos::worker::VariantQueue::from_sender(sender),
     );
     let fixture = include_bytes!("../../tests/fixtures/upload-regression.heic");
     let body = multipart_body("pv", &[("files", Some("photo.heic"), fixture)]);
@@ -1472,8 +1287,10 @@ async fn heic_conversion_failure_marks_the_photo_failed(pool: PgPool) {
         .await
         .expect("photo lookup")
         .expect("photo");
-    let original =
-        crate::photos::storage::original_path(scratch.path(), &ContentHash(photo.content_hash));
+    let original = crate::photos::storage::original_path(
+        scratch.path(),
+        &ContentHash::try_from(photo.content_hash).expect("valid fixture hash"),
+    );
     std::fs::write(original, &fixture[..32])
         .expect("simulate original corruption before conversion");
     let job = receiver.recv().await.expect("queued job");
@@ -1500,4 +1317,129 @@ async fn heic_conversion_failure_marks_the_photo_failed(pool: PgPool) {
     .expect_err("failed conversion never serves an original")
     .into_response();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn failed_delete_commit_keeps_referenced_files(pool: PgPool) {
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("delete-commit");
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let photo = create_photo_for_test(&pool, owner.id, &"a".repeat(64)).await;
+    let path = storage::original_path(
+        scratch.path(),
+        &ContentHash::try_from(photo.content_hash.clone()).expect("valid fixture hash"),
+    );
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("directory");
+    std::fs::write(&path, b"original").expect("original");
+    sqlx::raw_sql(sqlx::AssertSqlSafe("CREATE FUNCTION refuse_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'commit refused'; END $$; CREATE CONSTRAINT TRIGGER refuse_delete AFTER DELETE ON photos DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION refuse_delete();"))
+        .execute(&pool).await.expect("deferred failure");
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue::detached(),
+    );
+    assert!(
+        destroy(State(state), test_user(owner.id), Path(photo.id))
+            .await
+            .is_err()
+    );
+    assert!(
+        photos::find_by_id(&pool, photo.id)
+            .await
+            .expect("read")
+            .is_some()
+    );
+    assert!(
+        path.exists(),
+        "failed commit must preserve referenced original"
+    );
+}
+
+#[sqlx::test]
+async fn retrying_an_upload_key_returns_the_same_photo(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage = photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("idempotent-upload");
+    let original = crate::photos::decode::testutil::write_jpeg(&scratch, "photo", 16, 12);
+    let bytes = std::fs::read(original).expect("JPEG bytes");
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(2);
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_path_buf(),
+        crate::photos::worker::VariantQueue::from_sender(sender),
+    );
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "multipart/form-data; boundary=pv"
+            .parse()
+            .expect("content type"),
+    );
+    headers.insert(
+        "idempotency-key",
+        Uuid::new_v4().to_string().parse().expect("upload key"),
+    );
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let body = multipart_body("pv", &[("files", Some("photo.jpg"), &bytes)]);
+        let (_, Json(response)) = upload(
+            State(state.clone()),
+            test_user(owner.id),
+            voyage,
+            headers.clone(),
+            Body::from(body),
+        )
+        .await
+        .expect("accepted upload");
+        ids.push(response.photos[0].id);
+    }
+    let changed = crate::photos::decode::testutil::write_jpeg(&scratch, "different", 20, 16);
+    let changed = std::fs::read(changed).expect("different JPEG");
+    let error = upload(
+        State(state.clone()),
+        test_user(owner.id),
+        voyage,
+        headers.clone(),
+        Body::from(multipart_body(
+            "pv",
+            &[("files", Some("different.jpg"), &changed)],
+        )),
+    )
+    .await
+    .expect_err("a retry key cannot represent different content");
+    assert_eq!(error.into_response().status(), StatusCode::CONFLICT);
+    for invalid in [
+        HeaderValue::from_static("invalid"),
+        HeaderValue::from_bytes(&[0xff]).expect("opaque header"),
+    ] {
+        headers.insert("idempotency-key", invalid);
+        let error = upload(
+            State(state.clone()),
+            test_user(owner.id),
+            voyage,
+            headers.clone(),
+            Body::from(multipart_body(
+                "pv",
+                &[("files", Some("photo.jpg"), &bytes)],
+            )),
+        )
+        .await
+        .expect_err("key must be a UUID");
+        assert_eq!(error.into_response().status(), StatusCode::BAD_REQUEST);
+    }
+    assert_eq!(ids[0], ids[1]);
+    assert!(receiver.try_recv().is_ok());
+    assert!(receiver.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn a_variant_path_must_be_a_regular_file() {
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("variant-directory");
+    let error = variant_body(scratch.path())
+        .await
+        .expect_err("directory is not an image");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
 }

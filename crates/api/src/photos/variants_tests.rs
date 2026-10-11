@@ -74,7 +74,7 @@ fn photo_with_everything(dir: &ScratchDir, name: &str) -> std::path::PathBuf {
     path
 }
 
-/// **The single most important check in the phase (T5).**
+/// Every public image must strip original metadata.
 ///
 /// Every variant of a photograph that carried GPS, a timestamp, a camera
 /// identity and an XMP packet is run through exiftool, and none of it may
@@ -351,4 +351,15 @@ fn variant_kinds_round_trip_through_their_path_segment() {
     }
     assert_eq!(VariantKind::parse("original"), None);
     assert_eq!(VariantKind::parse("../../etc/passwd"), None);
+}
+
+#[test]
+fn native_encoder_rejection_is_a_photo_error() {
+    // VP8 permits at most 16383 pixels per dimension, even when total memory
+    // is small. A native rejection must not panic on the worker thread.
+    let image = DynamicImage::new_rgb8(16384, 1);
+    assert!(matches!(
+        encode_webp(&image, QUALITY),
+        Err(PhotoError::Unencodable(_))
+    ));
 }

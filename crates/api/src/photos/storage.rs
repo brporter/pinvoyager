@@ -1,7 +1,5 @@
 //! Content-addressed storage on disk.
 //!
-//! CONTRACT — signatures are fixed; implementation owned by the upload agent.
-//!
 //! Paths are derived from a SHA-256 of the content, sharded two levels so no
 //! directory grows unbounded:
 //!
@@ -46,7 +44,21 @@ const HASH_CHUNK_BYTES: usize = 64 * 1024;
 
 /// Hex-encoded SHA-256 of the original bytes. The dedup key and the path stem.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ContentHash(pub String);
+pub struct ContentHash(String);
+
+impl TryFrom<String> for ContentHash {
+    type Error = crate::AppError;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.len() != HASH_HEX_LEN
+            || !value
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(crate::AppError::Internal("invalid stored SHA-256".into()));
+        }
+        Ok(Self(value))
+    }
+}
 
 impl ContentHash {
     /// Hashes a file's contents. CPU-bound on large files — call under
@@ -77,28 +89,11 @@ impl ContentHash {
     }
 }
 
-/// Splits a hash into its two shard components.
-///
-/// The `debug_assert` states the invariant the module header claims: the field
-/// is public, so nothing in the type system stops a caller constructing a
-/// `ContentHash` from an arbitrary string, and if one ever does, the traversal
-/// guarantee is gone. Hashes reaching here come from [`ContentHash::of_file`]
-/// or from the `content_hash` column, both of which are hex by construction.
+/// Construction guarantees ASCII hex, so these byte offsets are valid UTF-8 boundaries.
 fn shards(hash: &ContentHash) -> (&str, &str) {
-    let hex = hash.as_str();
-
-    debug_assert!(
-        hex.len() == HASH_HEX_LEN && hex.bytes().all(|b| b.is_ascii_hexdigit()),
-        "a ContentHash must be {HASH_HEX_LEN} hex characters; \
-         a path derived from anything else is a traversal waiting to happen"
-    );
-
-    // `get` rather than slicing: a malformed hash must not panic in a release
-    // build. The fallback shard is a dead end, which is the right failure —
-    // the file will not be found and nothing outside the root is touched.
     (
-        hex.get(0..SHARD_WIDTH).unwrap_or("__"),
-        hex.get(SHARD_WIDTH..SHARD_WIDTH * 2).unwrap_or("__"),
+        &hash.0[..SHARD_WIDTH],
+        &hash.0[SHARD_WIDTH..SHARD_WIDTH * 2],
     )
 }
 
@@ -128,6 +123,7 @@ pub fn variant_path(root: &Path, hash: &ContentHash, kind: VariantKind) -> PathB
 /// construction, so the temporary file is simply discarded. That is the dedup
 /// path, and it must not be an error — two users uploading the same photograph
 /// is ordinary.
+#[tracing::instrument(name = "photo.store", skip_all, err)]
 pub async fn commit_original(
     root: &Path,
     temp_path: &Path,
@@ -228,15 +224,15 @@ async fn copy_across_filesystems(temp_path: &Path, destination: &Path) -> Result
 /// means two users can share one file; an unqualified unlink here would delete
 /// another user's photograph. The reference check belongs to the caller, in the
 /// same transaction as the row delete.
-pub async fn remove_content(root: &Path, hash: &ContentHash) -> Result<(), PhotoError> {
+pub fn remove_content(root: &Path, hash: &ContentHash) -> Result<(), PhotoError> {
     // Variants first. If the process dies between the two, what is left is an
     // original with no variants — which the worker can regenerate — rather than
     // variants with no original, which nothing can.
     for kind in VariantKind::ALL {
-        remove_if_present(&variant_path(root, hash, kind)).await?;
+        remove_if_present(&variant_path(root, hash, kind))?;
     }
 
-    remove_if_present(&original_path(root, hash)).await?;
+    remove_if_present(&original_path(root, hash))?;
 
     // The shard directories are deliberately left behind. There are only 65,536
     // of them, they cost an inode each, and removing one races with a
@@ -250,8 +246,8 @@ pub async fn remove_content(root: &Path, hash: &ContentHash) -> Result<(), Photo
 /// A photo deleted before its variants were generated has none, and a delete
 /// retried after a partial failure finds some of them missing. Both are
 /// ordinary, and neither should stop the rest of the removal.
-async fn remove_if_present(path: &Path) -> Result<(), PhotoError> {
-    match tokio::fs::remove_file(path).await {
+fn remove_if_present(path: &Path) -> Result<(), PhotoError> {
+    match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(PhotoError::Storage(err)),
