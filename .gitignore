@@ -27,3 +27,9 @@ dist/
 # Frontend build output and dependencies
 /web/dist/
 /web/node_modules/
+
+# Generated coverage reports
+**/coverage/
+
+# CI coverage export
+/backend-coverage.lcov

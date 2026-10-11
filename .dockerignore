@@ -24,10 +24,10 @@ dist/
 **/dist/
 .vite/
 
-# Design system — browser-only previews, not build inputs
+# Browser styles — not used by the API image
 design/
 
-# Docs and plans
+# Documentation
 docs/
 README.md
 
@@ -55,3 +55,9 @@ docker-compose.*.yml
 **/.DS_Store
 .idea/
 .vscode/
+
+# Generated coverage reports
+**/coverage/
+
+# CI coverage export
+backend-coverage.lcov

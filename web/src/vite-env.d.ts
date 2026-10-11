@@ -12,7 +12,7 @@ interface ImportMetaEnv {
   /**
    * Where map tiles come from. Absent in development, in which case
    * `src/map/style.ts` falls back to openstreetmap.org's tile server — see
-   * decision D4a in `docs/decisions.md`.
+   * D4a in `docs/architecture/constraints.md`.
    */
   readonly VITE_TILE_URL?: string;
 }

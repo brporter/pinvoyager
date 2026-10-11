@@ -1,0 +1,4 @@
+node_modules
+coverage
+dist
+src/api/__fixtures__

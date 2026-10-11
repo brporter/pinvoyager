@@ -11,7 +11,9 @@
     "typecheck": "tsc -b --force",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:regression": "vitest run src/screens/__tests__/Upload.test.tsx src/screens/__tests__/VoyageUploadFlow.test.tsx src/api/__tests__/hooks.test.tsx src/components/__tests__/upload.test.tsx"
+    "test:regression": "vitest run src/screens/__tests__/Upload.test.tsx src/screens/__tests__/VoyageUploadFlow.test.tsx src/api/__tests__/hooks.test.tsx src/components/__tests__/upload.test.tsx",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
@@ -29,11 +31,12 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^30.0.1",
     "oxlint": "^1.75.0",
+    "prettier": "^3.9.10",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

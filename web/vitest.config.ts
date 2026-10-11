@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from "vitest/config";
-import viteConfig from "./vite.config";
+import viteConfig from "./vite.config.ts";
 
 // Separate from vite.config.ts because `test` is vitest's key, not vite's —
 // putting it in the vite config typechecks against the wrong option type and

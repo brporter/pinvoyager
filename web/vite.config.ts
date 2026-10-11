@@ -7,12 +7,12 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "src"),
+      "@": path.resolve(import.meta.dirname, "src"),
       // The design system is imported from its own directory rather than
       // copied into the app. That is what makes editing a token change the
       // running application instead of changing a snapshot of it — see
       // src/styles/index.css.
-      "@design": path.resolve(__dirname, "..", "design"),
+      "@design": path.resolve(import.meta.dirname, "..", "design"),
     },
   },
 
