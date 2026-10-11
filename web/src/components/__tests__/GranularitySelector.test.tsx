@@ -3,25 +3,35 @@ import "@testing-library/jest-dom/vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Granularity } from "../../api/types";
+import { __resetMaps } from "../../../__mocks__/maplibre-gl";
+
 import { GranularitySelector } from "../GranularitySelector";
 
 const GUARANTEE = /Location data is removed from the files themselves/;
 
+afterEach(__resetMaps);
+
 describe("GranularitySelector", () => {
+  it("shows no selected precision until the user chooses one", async () => {
+    render(<GranularitySelector value={null} onChange={vi.fn()} />);
+    for (const name of ["Exact", "~1 km", "~10 km", "~50 km"]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "false");
+    }
+    expect(screen.getByText("Select a precision to preview its effect.")).toBeInTheDocument();
+    expect(screen.getByText(GUARANTEE)).toBeInTheDocument();
+    await screen.findByRole("region", {
+      name: "Location precision example — St. Louis, Missouri",
+      busy: false,
+    });
+  });
   it("reports which precision is in force", () => {
     render(<GranularitySelector value="km10" onChange={() => {}} />);
 
-    expect(screen.getByRole("button", { name: "~10 km" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Exact" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(screen.getByRole("button", { name: "~10 km" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Exact" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("reports the chosen step", async () => {
@@ -42,7 +52,7 @@ describe("GranularitySelector", () => {
 
     // Exact draws a pin — the coordinate is claimed to be the real one.
     expect(
-      screen.getByRole("img", { name: "A photograph at its exact recorded position" }),
+      screen.getByRole("img", { name: "Example photo location in St. Louis" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/precise spot each was taken/)).toBeInTheDocument();
 
@@ -51,10 +61,10 @@ describe("GranularitySelector", () => {
     // Coarse draws an area, because a sharp pin at the center of a rounding
     // makes a precision claim the data cannot support.
     expect(
-      screen.queryByRole("img", { name: "A photograph at its exact recorded position" }),
+      screen.queryByRole("img", { name: "Example photo location in St. Louis" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: "The area a viewer could infer at ~10 km" }),
+      screen.getByRole("img", { name: "Example location area around St. Louis" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/roughly the town or district, not the street/)).toBeInTheDocument();
   });
@@ -84,10 +94,7 @@ describe("GranularitySelector", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "≈1 km" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "≈1 km" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("goes inert, with a reason, when there is nothing to coarsen", async () => {

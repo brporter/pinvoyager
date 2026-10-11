@@ -9,7 +9,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router";
@@ -28,6 +28,7 @@ function marker(overrides: Partial<MapCluster> = {}): MapCluster {
   return {
     coordinate: { latitude: 43.06, longitude: 141.35 },
     count: 1,
+    voyages: [{ id: "v1", title: "Voyage" }],
     photo_id: "01a00000-0000-7000-8000-000000000001",
     voyage_id: "01b00000-0000-7000-8000-000000000001",
     thumbnail_url: "/api/photos/01a00000-0000-7000-8000-000000000001/thumb",
@@ -219,4 +220,39 @@ describe("DiscoverMap — following a marker", () => {
     expect(__maps[0].camera.at(-1)?.kind).toBe("easeTo");
     expect(__maps[0].getZoom()).toBeGreaterThan(before);
   });
+});
+
+it("shows a failed map query and lets the reader retry", async () => {
+  const refetch = vi.fn();
+  vi.mocked(useDiscoverMap).mockReturnValue({
+    isError: true,
+    refetch,
+  } as unknown as UseQueryResult<DiscoverMapPayload>);
+  renderMap();
+  expect(screen.getByRole("alert")).toHaveTextContent("Map photographs could not be loaded");
+  await userEvent.click(screen.getByRole("button", { name: "Retry map" }));
+  expect(refetch).toHaveBeenCalledOnce();
+});
+
+it("offers every voyage when a cluster cannot zoom further", async () => {
+  answer({
+    clusters: [
+      marker({
+        count: 2,
+        voyages: [
+          { id: "v1", title: "Fiji" },
+          { id: "v2", title: "Samoa" },
+        ],
+      }),
+    ],
+  });
+  renderMap();
+  act(() => {
+    __maps[0].setZoom(20);
+  });
+  await userEvent.click(clusters()[0]);
+  expect(screen.getByRole("link", { name: "Fiji" })).toHaveAttribute("href", "/voyages/v1");
+  expect(screen.getByRole("link", { name: "Samoa" })).toHaveAttribute("href", "/voyages/v2");
+  await userEvent.click(screen.getByRole("button", { name: "Close voyage list" }));
+  expect(screen.queryByRole("link", { name: "Fiji" })).not.toBeInTheDocument();
 });

@@ -66,9 +66,7 @@ describe("MapCanvas", () => {
 
   it("keeps the current visible bounds when a movement settles at the same bounds", () => {
     const { container } = render(
-      <MapCanvas label="Test map">
-        {(view) => <span>{view.window?.west}</span>}
-      </MapCanvas>,
+      <MapCanvas label="Test map">{(view) => <span>{view.window?.west}</span>}</MapCanvas>,
     );
     const map = __maps[0];
 

@@ -1,40 +1,4 @@
-/**
- * The basemap style — the single place the tile source is decided.
- *
- * ## Why this file exists at all
- *
- * Phase 7 target 4 asks that swapping the tile source later be a change to one
- * style definition rather than to the map code. Nothing outside this file names
- * a tile URL, a tile scheme, or a source id. `MapCanvas` asks for
- * {@link basemapStyle} and does not know whether it got raster or vector tiles
- * back.
- *
- * ## What it currently returns, and why that is temporary
- *
- * `https://tile.openstreetmap.org/{z}/{x}/{y}.png` — raster tiles, straight
- * from openstreetmap.org, which is a development-only arrangement recorded as
- * decision D4a in `docs/decisions.md`. OSM permits normal interactive viewing
- * subject to attribution, identification, caching, and no bulk/offline fetching:
- * https://operations.osmfoundation.org/policies/tiles/
- * Released and commercial applications are not categorically prohibited.
- * Self-hosting before release is our project decision because this service has
- * no availability guarantee and access may be withdrawn.
- *
- * The consequence that shows up visually: raster tiles arrive already drawn.
- * There is no way to recolor them, so the dark basemap in
- * `design/components/map-primitives.html` is unreachable until the self-hosted
- * vector archive that decision D4 describes is in place. The map is a
- * light-colored OpenStreetMap render regardless of the page theme, and the
- * pins and clusters sit on top of it.
- *
- * ## Switching to vector tiles later
- *
- * Replace the body of {@link basemapStyle} with a style whose sources are
- * `{ type: "vector", tiles: [...] }` and whose layers draw land, water, roads
- * and labels from the design tokens. The exported name, its signature, and
- * {@link BASEMAP_IS_DARK} are the whole contract; everything else in
- * `src/map/` is written against those.
- */
+/** Development raster basemap, attribution, and MapLibre camera limits. */
 
 import type { StyleSpecification } from "@maplibre/maplibre-gl-style-spec";
 

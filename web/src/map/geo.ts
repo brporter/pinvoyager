@@ -12,7 +12,7 @@
  * ## The projection
  *
  * Web Mercator, the same projection MapLibre uses, expressed in **world
- * pixels**: the whole world is `256 * 2^zoom` pixels across at a given zoom.
+ * pixels**: the whole world is `512 * 2^zoom` pixels across at a given zoom.
  * Working in world pixels rather than screen pixels has one property that
  * matters a great deal here — the distance in pixels between two fixed
  * coordinates depends only on the zoom, never on where the camera is pointing.
@@ -22,7 +22,7 @@
  */
 
 /** Web Mercator tile edge, in pixels, at zoom 0. */
-const TILE_SIZE = 256;
+const TILE_SIZE = 512;
 
 /**
  * WGS84 equatorial circumference, in meters.
@@ -116,14 +116,12 @@ export function metersPerPixel(latitude: number, zoom: number): number {
 /**
  * The on-screen diameter, in pixels, of a granularity area.
  *
- * `precisionM` is the radius the server reports for the voyage's rounding —
- * `Coordinate.precision_m`, present only when the voyage is not at exact
- * precision — so the drawn circle is twice it. This is target 10: a voyage
- * rounded to ~10 km draws a circle 20 km across, and a viewer can see that the
- * photograph was taken somewhere inside it rather than at its center.
+ * `precisionM` is half the rounding cell width on each axis. The circle uses
+ * the half-diagonal so it covers the cell corners, approximately in ground
+ * meters. This is a visual indication of rounding, not a geodetic error bound.
  */
 export function areaDiameterPx(precisionM: number, latitude: number, zoom: number): number {
-  return (2 * precisionM) / metersPerPixel(latitude, zoom);
+  return (2 * Math.SQRT2 * precisionM) / metersPerPixel(latitude, zoom);
 }
 
 /**
@@ -137,8 +135,8 @@ export function areaDiameterPx(precisionM: number, latitude: number, zoom: numbe
  * reasonable part of the viewport keeps the picture honest.
  *
  * Derived from {@link metersPerPixel}: given
- * `mpp = C·cos(lat) / (256·2^z)` and a wanted `mpp = 2·precision / target`,
- * `z = log2( C·cos(lat)·target / (256·2·precision) )`.
+ * `mpp = C·cos(lat) / (512·2^z)` and `mpp = 2·sqrt(2)·precision / target`,
+ * `z = log2( C·cos(lat)·target / (512·2·sqrt(2)·precision) )`.
  */
 export function zoomForPrecision(
   latitude: number,
@@ -147,7 +145,7 @@ export function zoomForPrecision(
 ): number {
   const clamped = clamp(latitude, -MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE);
   const numerator = EARTH_CIRCUMFERENCE_M * Math.cos((clamped * Math.PI) / 180) * targetDiameterPx;
-  return Math.log2(numerator / (TILE_SIZE * 2 * precisionM));
+  return Math.log2(numerator / (TILE_SIZE * 2 * Math.SQRT2 * precisionM));
 }
 
 /**
@@ -158,35 +156,48 @@ export function zoomForPrecision(
  * treat them differently — the first wants the world view, the second wants to
  * fly somewhere.
  *
- * No antimeridian handling: a voyage with photographs in both Fiji and Samoa
- * produces a rectangle spanning the long way round the planet, so the map shows
- * the whole world instead of the Pacific. That is a wrong-looking camera rather
- * than a wrong-looking pin, every pin is still in its correct place, and fixing
- * it properly means choosing between two legitimate readings of the same list.
  */
+/** Normalize a camera viewport, including repeated worlds and wrapped bounds. */
+export function normalizeBounds(bounds: Bounds): Bounds {
+  const width = bounds.east - bounds.west;
+  return {
+    west: width >= 360 ? -180 : wrapLongitude(bounds.west),
+    east: width >= 360 ? 180 : wrapLongitude(bounds.east),
+    south: Math.max(-90, bounds.south),
+    north: Math.min(90, bounds.north),
+  };
+}
+
+export function wrapLongitude(longitude: number): number {
+  if (longitude >= -180 && longitude < 180) return longitude;
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
 export function boundsOf(coordinates: readonly LngLat[]): Bounds | null {
-  if (coordinates.length === 0) return null;
-
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-
-  for (const { latitude, longitude } of coordinates) {
-    // A non-finite coordinate would poison every comparison and produce a
-    // camera that cannot be fitted. Nothing currently rejects one at ingest,
-    // which is recorded as an open issue against phase 4, so the map declines
-    // to trust the data rather than assuming it.
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
-
-    west = Math.min(west, longitude);
-    east = Math.max(east, longitude);
-    south = Math.min(south, latitude);
-    north = Math.max(north, latitude);
+  const valid = coordinates.filter(
+    ({ latitude, longitude }) => Number.isFinite(latitude) && Number.isFinite(longitude),
+  );
+  if (valid.length === 0) return null;
+  const longitudes = valid.map((point) => wrapLongitude(point.longitude)).sort((a, b) => a - b);
+  // Omit the largest empty arc. An east edge beyond 180 tells MapLibre to fit
+  // the short arc across the antimeridian rather than the rest of the world.
+  let gap = -1;
+  let start = 0;
+  for (let i = 0; i < longitudes.length; i++) {
+    const next = i + 1 === longitudes.length ? longitudes[0] + 360 : longitudes[i + 1];
+    if (next - longitudes[i] > gap) {
+      gap = next - longitudes[i];
+      start = (i + 1) % longitudes.length;
+    }
   }
-
-  if (west === Infinity) return null;
-  return { west, south, east, north };
+  const west = longitudes[start];
+  const end = longitudes[(start + longitudes.length - 1) % longitudes.length];
+  return {
+    west,
+    east: end < west ? end + 360 : end,
+    south: Math.min(...valid.map((point) => point.latitude)),
+    north: Math.max(...valid.map((point) => point.latitude)),
+  };
 }
 
 /* ==========================================================================
@@ -241,69 +252,76 @@ export const CLUSTER_RADIUS_PX = 44;
  * between two fixed coordinates in world pixels does not depend on where the
  * camera is.
  *
- * Cost is quadratic in the number of pins. A voyage is a bounded collection —
- * tens to low hundreds of photographs — so this runs in well under a
- * millisecond, and it is recomputed only when the zoom changes, not on every
- * pan frame.
+ * A spatial grid limits searches to neighboring cells. Consumed points are
+ * removed so a dense cluster is visited once rather than once per seed.
  */
 export function clusterPins<T extends Clusterable>(
   pins: readonly T[],
   zoom: number,
   radiusPx: number = CLUSTER_RADIUS_PX,
 ): MapCluster<T>[] {
-  const points = pins.map((pin) => ({ pin, world: project(pin.coordinate, zoom) }));
-  const taken = new Array<boolean>(points.length).fill(false);
+  const size = worldSize(zoom);
+  const cellSize = Math.max(radiusPx, Number.EPSILON);
+  const points = pins.map((pin) => ({
+    pin,
+    world: project({ ...pin.coordinate, longitude: wrapLongitude(pin.coordinate.longitude) }, zoom),
+  }));
+  const cells = new Map<string, Set<number>>();
+  const key = (x: number, y: number) => `${Math.floor(x / cellSize)},${Math.floor(y / cellSize)}`;
+  const keys = points.map(({ world }) =>
+    [-size, 0, size].map((offset) => key(world.x + offset, world.y)),
+  );
+  keys.forEach((pointKeys, index) =>
+    pointKeys.forEach((cell) => {
+      const members = cells.get(cell) ?? new Set<number>();
+      members.add(index);
+      cells.set(cell, members);
+    }),
+  );
+  const taken = new Set<number>();
   const clusters: MapCluster<T>[] = [];
   const radiusSquared = radiusPx * radiusPx;
-
-  for (let i = 0; i < points.length; i += 1) {
-    if (taken[i]) continue;
-
+  for (let i = 0; i < points.length; i++) {
+    if (taken.has(i)) continue;
     const seed = points[i];
-    taken[i] = true;
-
-    const members = [seed.pin];
-    let sumX = seed.world.x;
-    let sumY = seed.world.y;
-
-    for (let j = i + 1; j < points.length; j += 1) {
-      if (taken[j]) continue;
-
-      const dx = points[j].world.x - seed.world.x;
-      const dy = points[j].world.y - seed.world.y;
-      if (dx * dx + dy * dy > radiusSquared) continue;
-
-      taken[j] = true;
-      members.push(points[j].pin);
-      sumX += points[j].world.x;
-      sumY += points[j].world.y;
+    const nearby = new Set<number>();
+    for (const dx of [-cellSize, 0, cellSize]) {
+      for (const dy of [-cellSize, 0, cellSize]) {
+        for (const index of cells.get(key(seed.world.x + dx, seed.world.y + dy)) ?? [])
+          nearby.add(index);
+      }
     }
-
+    const members: T[] = [];
+    let sumX = 0;
+    let sumY = 0;
+    // Sort only nearby candidates, preserving the original voyage order.
+    for (const index of [...nearby].sort((a, b) => a - b)) {
+      const point = points[index];
+      const rawDx = point.world.x - seed.world.x;
+      const dx = rawDx - Math.round(rawDx / size) * size;
+      const dy = point.world.y - seed.world.y;
+      if (dx * dx + dy * dy > radiusSquared) continue;
+      taken.add(index);
+      for (const cell of keys[index]) cells.get(cell)!.delete(index);
+      members.push(point.pin);
+      sumX += seed.world.x + dx;
+      sumY += point.world.y;
+    }
+    const center = unproject({ x: sumX / members.length, y: sumY / members.length }, zoom);
     clusters.push({
       id: seed.pin.id,
-      // Averaged in world pixels and projected back, not averaged as latitude
-      // and longitude. Mercator is not linear in latitude, so a bubble placed
-      // by averaging degrees would sit visibly off-center from the pins it
-      // stands for at high latitudes.
+      members,
       coordinate:
         members.length === 1
           ? seed.pin.coordinate
-          : unproject({ x: sumX / members.length, y: sumY / members.length }, zoom),
-      members,
+          : { ...center, longitude: wrapLongitude(center.longitude) },
     });
   }
 
   return clusters;
 }
 
-/**
- * Which of the design's three bubble sizes a count gets.
- *
- * `design/components/map-primitives.html` draws the tiers with 7, 24 and 156,
- * so the boundaries are the powers of ten those examples sit either side of.
- * The purpose is that a glance distinguishes "a handful" from "a lot" without
- * reading the number.
- */
+/** Bubble size by count: single digits, tens, or hundreds and above. */
 export function clusterTier(count: number): "sm" | "md" | "lg" {
   if (count >= 100) return "lg";
   if (count >= 10) return "md";

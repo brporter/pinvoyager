@@ -1,39 +1,6 @@
-/**
- * The world map on the discovery screen.
- *
- * Everything published, everywhere, grouped by the server. It is the same
- * primitives as the voyage map — the same pins, the same bubbles, the same
- * attribution — and a different data flow, for a reason worth being explicit
- * about:
- *
- *  * A **voyage** is a bounded collection. `GET /api/voyages/{id}/map` returns
- *    every pin in it in one response, and the browser groups them as the camera
- *    moves. No request is made for a pan or a zoom.
- *  * The **world** is not bounded. At a world view the rectangle covers every
- *    published photograph there is, so the grouping has to happen where the
- *    photographs are. `GET /api/map` takes the rectangle and the zoom and
- *    answers with markers.
- *
- * This is what the phase 7 goal means by "clustering is always server-side",
- * and here it genuinely has to be.
- *
- * ## What a marker does
- *
- * A marker standing for one photograph goes to its voyage. A marker standing
- * for several zooms in until it comes apart — there is nothing sensible to
- * navigate to when the photographs behind it belong to different people's
- * voyages, and picking one of them arbitrarily would be a link that goes
- * somewhere unrelated to what was clicked.
- *
- * ## A note on the design
- *
- * `design/screens/discover.html` draws no map. The phase 7 goal asks for one,
- * so this places it between the hero and the voyage grid using only components
- * the design system already defines. **Where it belongs, and how tall it is,
- * are open visual questions** that the design file should settle.
- */
-
-import { useNavigate } from "react-router";
+/** Server-clustered discovery with visible query status and selectable destinations. */
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 
 import { useDiscoverMap } from "../api/hooks";
 import { Cluster, Pin } from "../components";
@@ -63,6 +30,7 @@ const CLUSTER_EXPAND_STEPS = 2;
 
 function DiscoverMarkers({ view }: { view: MapView }) {
   const navigate = useNavigate();
+  const [selected, setSelected] = useState<string | null>(null);
 
   // The zoom is rounded before it becomes part of the question. A fractional
   // zoom would make every frame of a pinch a different cache key and a
@@ -73,6 +41,7 @@ function DiscoverMarkers({ view }: { view: MapView }) {
   const query = useDiscoverMap({ ...view.window!, zoom: Math.round(view.zoom) });
 
   const clusters = query.data?.clusters ?? [];
+  const selectedCluster = clusters.find((cluster) => cluster.photo_id === selected);
 
   return (
     <>
@@ -93,11 +62,13 @@ function DiscoverMarkers({ view }: { view: MapView }) {
               left={0}
               top={0}
               size={clusterTier(cluster.count)}
-              onClick={() =>
-                view.moveTo(cluster.coordinate, {
-                  zoom: Math.min(MAX_ZOOM, view.zoom + CLUSTER_EXPAND_STEPS),
-                })
-              }
+              onClick={() => {
+                if (view.zoom >= MAX_ZOOM) setSelected(cluster.photo_id);
+                else
+                  view.moveTo(cluster.coordinate, {
+                    zoom: Math.min(MAX_ZOOM, view.zoom + CLUSTER_EXPAND_STEPS),
+                  });
+              }}
             />
           </MapMarker>
         ),
@@ -107,10 +78,32 @@ function DiscoverMarkers({ view }: { view: MapView }) {
           half a continent looks exactly like a map of a continent with fewer
           photographs on it, and a reader has no way to tell which they are
           looking at. */}
+      {query.isError && (
+        <div className="pv-map-notice" role="alert">
+          Map photographs could not be loaded.{" "}
+          <button className="pv-btn pv-btn--secondary" onClick={() => void query.refetch()}>
+            Retry map
+          </button>
+        </div>
+      )}
+      {selectedCluster && (
+        <div className="pv-map-notice" aria-label="Voyages at this location">
+          <p>Voyages at this location</p>
+          <ul>
+            {selectedCluster.voyages.map((voyage) => (
+              <li key={voyage.id}>
+                <Link to={`/voyages/${voyage.id}`}>{voyage.title}</Link>
+              </li>
+            ))}
+          </ul>
+          <button className="pv-btn pv-btn--ghost" onClick={() => setSelected(null)}>
+            Close voyage list
+          </button>
+        </div>
+      )}
       {query.data?.truncated === true && (
-        <div className="pv-sr" role="status">
-          There are more photographs here than the map can show. Zoom in to see
-          them all.
+        <div className="pv-map-notice" role="status">
+          There are more photographs here than the map can show. Zoom in to see them all.
         </div>
       )}
     </>

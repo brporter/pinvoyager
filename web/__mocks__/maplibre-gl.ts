@@ -75,13 +75,13 @@ export function __resetMaps(): void {
  *  every element measures zero and a real figure has to be assumed. */
 const ASSUMED_VIEWPORT = { width: 800, height: 600 };
 
-/** Web Mercator northing at zoom 0, in the 0–256 range. Written out rather than
+/** Web Mercator northing at zoom 0, in the 0–512 range. Written out rather than
  *  imported from `src/map/geo.ts` on purpose: a test double that shares the
  *  implementation's arithmetic agrees with it even when the arithmetic is
  *  wrong. */
 function mercatorY(latitude: number): number {
   const sin = Math.sin((latitude * Math.PI) / 180);
-  return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 256;
+  return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 512;
 }
 
 type BoundsPair = [[number, number], [number, number]];
@@ -107,7 +107,7 @@ function zoomForBounds(bounds: BoundsPair, options: Record<string, unknown>): nu
   const width = Math.max(1, ASSUMED_VIEWPORT.width - 2 * padding);
   const height = Math.max(1, ASSUMED_VIEWPORT.height - 2 * padding);
 
-  const spanX = (Math.abs(east - west) / 360) * 256;
+  const spanX = (Math.abs(east - west) / 360) * 512;
   const spanY = Math.abs(mercatorY(north) - mercatorY(south));
 
   const zoomX = spanX === 0 ? Infinity : Math.log2(width / spanX);
@@ -202,9 +202,9 @@ export class FakeMap {
    * the area it is looking at rather than about some other one.
    */
   getBounds() {
-    const scale = 256 * 2 ** this.zoom;
-    const halfLng = ((ASSUMED_VIEWPORT.width / 2) / scale) * 360;
-    const halfLat = ((ASSUMED_VIEWPORT.height / 2) / scale) * 360;
+    const scale = 512 * 2 ** this.zoom;
+    const halfLng = (ASSUMED_VIEWPORT.width / 2 / scale) * 360;
+    const halfLat = (ASSUMED_VIEWPORT.height / 2 / scale) * 360;
 
     const [centerLng, centerLat] = this.center;
 

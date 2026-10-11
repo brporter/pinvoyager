@@ -169,7 +169,14 @@ interface VoyageMarkersProps {
  *  losing the surrounding context in one jump. */
 const CLUSTER_EXPAND_STEPS = 2;
 
-function VoyageMarkers({ view, pins, precisionM, selection, onSelectPin, onOpenGallery }: VoyageMarkersProps) {
+function VoyageMarkers({
+  view,
+  pins,
+  precisionM,
+  selection,
+  onSelectPin,
+  onOpenGallery,
+}: VoyageMarkersProps) {
   const selectedId = selection?.photoId ?? null;
 
   /**
@@ -224,13 +231,20 @@ function VoyageMarkers({ view, pins, precisionM, selection, onSelectPin, onOpenG
 
       {selectedPin !== null && (
         <MapMarker coordinate={selectedPin.coordinate}>
-          <GranularityArea precisionM={precisionM} latitude={selectedPin.coordinate.latitude} zoom={view.zoom} />
+          <GranularityArea
+            precisionM={precisionM}
+            latitude={selectedPin.coordinate.latitude}
+            zoom={view.zoom}
+          />
           <Pin
             label={selectedPin.label}
             left={0}
             top={0}
             selected
-            onClick={() => { onSelectPin(selectedPin.id); onOpenGallery?.([selectedPin.id]); }}
+            onClick={() => {
+              onSelectPin(selectedPin.id);
+              onOpenGallery?.([selectedPin.id]);
+            }}
           />
         </MapMarker>
       )}
@@ -256,16 +270,19 @@ interface ClusterMarkerProps {
  * photos. Other map consumers expand the bubble by zooming. Both interactions
  * remain available to keyboard users through native button activation.
  */
-function ClusterMarker({ cluster, precisionM, zoom, onSelectPin, onOpenGallery, onExpand }: ClusterMarkerProps) {
+function ClusterMarker({
+  cluster,
+  precisionM,
+  zoom,
+  onSelectPin,
+  onOpenGallery,
+  onExpand,
+}: ClusterMarkerProps) {
   const single = cluster.members.length === 1 ? cluster.members[0] : null;
 
   return (
     <MapMarker coordinate={cluster.coordinate}>
-      <GranularityArea
-        precisionM={precisionM}
-        latitude={cluster.coordinate.latitude}
-        zoom={zoom}
-      />
+      <GranularityArea precisionM={precisionM} latitude={cluster.coordinate.latitude} zoom={zoom} />
 
       {single === null ? (
         <Cluster
@@ -273,41 +290,31 @@ function ClusterMarker({ cluster, precisionM, zoom, onSelectPin, onOpenGallery, 
           left={0}
           top={0}
           size={clusterTier(cluster.members.length)}
-          onClick={onOpenGallery ? () => onOpenGallery(cluster.members.map(member => member.id)) : onExpand}
+          onClick={
+            onOpenGallery
+              ? () => onOpenGallery(cluster.members.map((member) => member.id))
+              : onExpand
+          }
         />
       ) : (
-        <Pin label={single.label} left={0} top={0} onClick={() => { onSelectPin(single.id); onOpenGallery?.([single.id]); }} />
+        <Pin
+          label={single.label}
+          left={0}
+          top={0}
+          onClick={() => {
+            onSelectPin(single.id);
+            onOpenGallery?.([single.id]);
+          }}
+        />
       )}
     </MapMarker>
   );
 }
 
 /**
- * The circle that says how precisely the position is known.
- *
- * Drawn behind the marker, at the true ground radius for the current zoom, so
- * it grows and shrinks with the basemap exactly as a real distance would. A
- * voyage at ~10 km draws a circle 20 km across, and the photograph was taken
- * somewhere inside it.
- *
- * ## Why a pin is drawn inside it, where the design draws the circle alone
- *
- * `design/components/map-primitives.html` shows a coarse position as a circle
- * with no pin. That treatment cannot be selected: `.pv-map-area` sets
- * `pointer-events: none`, it is not a button, and it is not in the tab order —
- * so a circle-only voyage would have no way to reach a photograph from the map,
- * and bidirectional selection is the interaction the whole screen exists for.
- * The circle plus a pin at its center is the ordinary cartographic convention
- * for a position with an uncertainty, and a pin ringed by a dashed 20 km circle
- * does not read as an exact claim. **This is a deviation from the design file
- * and the design file should be updated to settle it.**
- *
- * ## Why it disappears at low zoom
- *
- * Below a few pixels the circle is a smudge under the marker that carries no
- * information — the reader cannot judge a radius they cannot see — and dozens
- * of them make the map look dirty. It reappears as soon as it is large enough
- * to mean something.
+ * Draw the cell's approximate enclosing circle behind its selectable marker.
+ * The radius is sqrt(2) times the per-axis precision. Hide circles below a few
+ * pixels because they convey no useful distance at that zoom.
  */
 function GranularityArea({
   precisionM,

@@ -1,42 +1,4 @@
-/**
- * The MapLibre instance, and everything that has to touch it.
- *
- * This is the only file in the application that imports `maplibre-gl`. It is
- * loaded lazily — see `VoyageMap.tsx` — so MapLibre and its stylesheet are a
- * separate bundle that no route pays for until a map is actually on screen
- * (target 12). MapLibre plus a style is a substantial download, and putting it
- * in the entry chunk would delay first paint on every screen including the ones
- * with no map at all.
- *
- * ## What it does and does not own
- *
- * It owns the camera, the tile source, the zoom controls and the attribution.
- * It owns no knowledge of voyages, photographs, pins or selection; those are
- * `VoyageMap.tsx`. The two are separated because the camera and the tile source
- * are the parts that change when the basemap is swapped for self-hosted vector
- * tiles, and the pin behavior is the part that must not have to change with
- * it.
- *
- * ## Markers rather than a symbol layer
- *
- * Pins and clusters are real DOM elements positioned by {@link MapMarker},
- * not features drawn into the WebGL canvas by a MapLibre style layer. The
- * canvas approach is faster for tens of thousands of points, and it is the
- * wrong choice here for two reasons:
- *
- *  * A pin drawn on a canvas is not a button. It cannot be tabbed to, it has no
- *    accessible name, and it cannot carry the 44px hit area that
- *    `design/components/map-primitives.html` insists on. Every one of those is
- *    a requirement the design states outright.
- *  * The pin, cluster and area treatments already exist as CSS in
- *    `design/components.css`. Re-expressing them as MapLibre paint properties
- *    would make the design system a description of the map rather than its
- *    source, which is the exact drift phase 6 target 2 exists to prevent.
- *
- * A voyage holds tens to low hundreds of photographs, which is comfortably
- * inside what DOM markers handle, and clustering keeps the count on screen
- * lower still.
- */
+/** Owns MapLibre lifecycle, camera state, marker portals, and visible attribution. */
 
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker } from "maplibre-gl";
@@ -57,7 +19,7 @@ import { createPortal } from "react-dom";
 
 import { Attribution, cx } from "../components";
 import { cameraDuration } from "../shell/motion";
-import type { Bounds, LngLat } from "./geo";
+import { normalizeBounds, type Bounds, type LngLat } from "./geo";
 import { BASEMAP_IS_DARK, MAX_ZOOM, basemapStyle } from "./style";
 
 /* ==========================================================================
@@ -233,12 +195,12 @@ export function MapCanvas({
 
     const onSettled = () => {
       const bounds = instance.getBounds();
-      const next: Bounds = {
+      const next = normalizeBounds({
         west: bounds.getWest(),
         south: bounds.getSouth(),
         east: bounds.getEast(),
         north: bounds.getNorth(),
-      };
+      });
 
       // Compared by value. A camera movement that ends where it began still
       // fires `moveend`, and handing React a new-but-equal object each time
@@ -290,8 +252,7 @@ export function MapCanvas({
   }, [map, boundsKey, maxFitZoom]);
 
   /**
-   * Stable for the lifetime of the map instance, and that is load-bearing
-   * rather than tidy.
+   * Stable for the lifetime of the map instance to avoid repeated camera effects.
    *
    * Callers put `moveTo` in an effect's dependency list — panning to a
    * photograph chosen in the list is exactly that shape. If its identity
@@ -312,10 +273,7 @@ export function MapCanvas({
     [map],
   );
 
-  const view = useMemo<MapView>(
-    () => ({ zoom, window: visible, moveTo }),
-    [zoom, visible, moveTo],
-  );
+  const view = useMemo<MapView>(() => ({ zoom, window: visible, moveTo }), [zoom, visible, moveTo]);
 
   return (
     <div className={cx("pv-map", className)} style={style} role="region" aria-label={label}>

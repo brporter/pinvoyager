@@ -30,15 +30,15 @@ import {
    ========================================================================== */
 
 describe("project", () => {
-  /** At zoom 0 the whole world is one 256px tile, so the null island is at its
+  /** At zoom 0 the whole world is one 512px world, so the null island is at its
    *  center. Every other projected figure is a scaling of this one. */
   it("puts 0°, 0° at the center of the zoom-0 world", () => {
-    expect(project({ latitude: 0, longitude: 0 }, 0)).toEqual({ x: 128, y: 128 });
+    expect(project({ latitude: 0, longitude: 0 }, 0)).toEqual({ x: 256, y: 256 });
   });
 
   it("puts the antimeridian at the two edges", () => {
     expect(project({ latitude: 0, longitude: -180 }, 0).x).toBeCloseTo(0, 6);
-    expect(project({ latitude: 0, longitude: 180 }, 0).x).toBeCloseTo(256, 6);
+    expect(project({ latitude: 0, longitude: 180 }, 0).x).toBeCloseTo(512, 6);
   });
 
   /** The world doubles in each direction per zoom level. Getting this wrong
@@ -96,11 +96,11 @@ describe("unproject", () => {
 
 describe("metersPerPixel", () => {
   /**
-   * 40075016.686 m / 256 px. This is the published Web Mercator figure, and
+   * 40075016.686 m / 512 px. This is the published Web Mercator figure, and
    * quoting it here is the point — it is not derived from the implementation.
    */
-  it("is 156543.03 m/px at the equator at zoom 0", () => {
-    expect(metersPerPixel(0, 0)).toBeCloseTo(156543.03392, 4);
+  it("is 78271.52 m/px at the equator at zoom 0", () => {
+    expect(metersPerPixel(0, 0)).toBeCloseTo(78271.51696, 4);
   });
 
   it("halves with each zoom level", () => {
@@ -136,7 +136,7 @@ describe("areaDiameterPx", () => {
     const latitude = 0;
     const meters = metersPerPixel(latitude, zoom);
 
-    expect(areaDiameterPx(1000, latitude, zoom)).toBeCloseTo(2000 / meters, 6);
+    expect(areaDiameterPx(1000, latitude, zoom)).toBeCloseTo(Math.hypot(2000, 2000) / meters, 6);
   });
 
   it("grows as the camera zooms in", () => {
@@ -208,8 +208,7 @@ describe("boundsOf", () => {
   });
 
   /**
-   * Nothing currently rejects a non-finite coordinate at ingest — that is a
-   * known gap recorded against phase 4 — and a single NaN in the list would
+   * A malformed payload containing a single NaN in the list would
    * otherwise make every comparison false and leave the camera unable to fit
    * anything at all. Every other pin in the voyage would disappear along with
    * the bad one.
@@ -274,7 +273,7 @@ describe("clusterPins", () => {
    * and that bubble would be drawn somewhere none of them were taken.
    */
   it("does not let an absorbed pin drag in its own neighbors", () => {
-    const clusters = clusterPins([pin("a", 0, 0), pin("b", 0, 0.05), pin("c", 0, 0.1)], 10);
+    const clusters = clusterPins([pin("a", 0, 0), pin("b", 0, 0.025), pin("c", 0, 0.05)], 10);
 
     expect(clusters).toHaveLength(2);
     expect(clusters[0].members.map((member) => member.id)).toEqual(["a", "b"]);
@@ -282,11 +281,10 @@ describe("clusterPins", () => {
   });
 
   it("skips a pin already absorbed by an earlier cluster", () => {
-    const clusters = clusterPins([
-      pin("seed", 0, 0),
-      pin("separate", 0, 0.1),
-      pin("absorbed", 0, 0.01),
-    ], 10);
+    const clusters = clusterPins(
+      [pin("seed", 0, 0), pin("separate", 0, 0.1), pin("absorbed", 0, 0.01)],
+      10,
+    );
 
     expect(clusters).toHaveLength(2);
     expect(clusters[0].members.map(({ id }) => id)).toEqual(["seed", "absorbed"]);
@@ -327,8 +325,14 @@ describe("clusterPins", () => {
 
     const middleInWorldPixels = unproject(
       {
-        x: (project({ latitude: 60, longitude: 0 }, 8).x + project({ latitude: 60.02, longitude: 0 }, 8).x) / 2,
-        y: (project({ latitude: 60, longitude: 0 }, 8).y + project({ latitude: 60.02, longitude: 0 }, 8).y) / 2,
+        x:
+          (project({ latitude: 60, longitude: 0 }, 8).x +
+            project({ latitude: 60.02, longitude: 0 }, 8).x) /
+          2,
+        y:
+          (project({ latitude: 60, longitude: 0 }, 8).y +
+            project({ latitude: 60.02, longitude: 0 }, 8).y) /
+          2,
       },
       8,
     );
@@ -385,4 +389,26 @@ describe("clusterTier", () => {
     expect(clusterTier(99)).toBe("md");
     expect(clusterTier(100)).toBe("lg");
   });
+});
+
+it("fits the short arc across the antimeridian", () => {
+  const bounds = boundsOf([
+    { latitude: -15, longitude: 179 },
+    { latitude: -17, longitude: -179 },
+  ])!;
+  expect(bounds.east - bounds.west).toBe(2);
+});
+
+it("clusters neighboring pins across the antimeridian", () => {
+  const pins = [
+    { id: "east", coordinate: { latitude: 0, longitude: 179.99 } },
+    { id: "west", coordinate: { latitude: 0, longitude: -179.99 } },
+  ];
+  const clusters = clusterPins(pins, 8);
+  expect(clusters).toHaveLength(1);
+  expect(Math.abs(clusters[0].coordinate.longitude)).toBeCloseTo(180);
+});
+it("shows the diagonal extent of a rounding cell", () => {
+  const diameterM = areaDiameterPx(500, 0, 12) * metersPerPixel(0, 12);
+  expect(diameterM).toBeCloseTo(Math.hypot(1000, 1000));
 });

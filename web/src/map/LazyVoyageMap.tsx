@@ -3,8 +3,8 @@
  *
  * This is target 12. MapLibre plus its stylesheet is a substantial download,
  * and every module reachable from the entry chunk is downloaded, parsed and
- * executed before first paint — including on the discovery feed, the upload
- * screen and the settings screen, none of which draw a map. The dynamic
+ * executed before first paint — including on the discovery feed, the upload details/picker
+ * steps, and the settings screen, none of which draw a map. The dynamic
  * `import()` below is what puts it in its own chunk instead.
  *
  * The fallback is the design system's own `.pv-map` surface at the exact

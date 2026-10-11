@@ -2,7 +2,7 @@
  * Discover — behavior, not appearance.
  *
  * The four things worth pinning down are the ones that are easy to get wrong
- * and invisible when they are: the precision label on every card, the empty
+ * and invisible when they are: the absence of precision labels on cards, the empty
  * state instead of a bare grid, an error rendered rather than thrown, and the
  * cursor pagination actually asking for the next page.
  */
@@ -14,7 +14,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useVoyages } from "../../api/hooks";
-import { Discover, monthYear, referenceOf, VoyageGridSkeleton } from "../Discover";
+import { Discover } from "../Discover";
+import { VoyageGridSkeleton } from "../../components/VoyageCards";
+import { monthYear, referenceOf } from "../../components/voyagePresentation";
 import { useIsDesktop } from "../../shell/useIsDesktop";
 import {
   ADA,
@@ -76,9 +78,7 @@ describe("Discover", () => {
     expect(
       screen.getByRole("heading", { name: /photographs, placed where they were taken/i, level: 1 }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/reads the location your camera recorded/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/reads the location your camera recorded/i)).toBeInTheDocument();
   });
 
   it("uses the desktop hero and three-column layout when the viewport is wide", () => {
@@ -90,14 +90,14 @@ describe("Discover", () => {
       "href",
       "#pv-discover-recent",
     );
-    expect(screen.getByRole("heading", { name: "Everywhere people have been" })
-      .parentElement?.getAttribute("style"))
-      .toContain("var(--pv-space-6)");
+    expect(
+      screen
+        .getByRole("heading", { name: "Everywhere people have been" })
+        .parentElement?.getAttribute("style"),
+    ).toContain("var(--pv-space-6)");
   });
 
-  it("shows each voyage's precision label on its card", () => {
-    // The design's annotation 1: a browser scanning the grid should see how
-    // precise a creator publishes before the map loads.
+  it("omits precision labels from voyage cards", () => {
     mockedUseVoyages.mockReturnValue(
       loadedFeed([
         voyage({ id: "a", title: "Coastal, in fog", granularity_label: "~10 km" }),
@@ -113,10 +113,10 @@ describe("Discover", () => {
     renderScreen(<Discover />);
 
     const fog = screen.getByRole("link", { name: /coastal, in fog/i });
-    expect(within(fog).getByText("~10 km")).toBeInTheDocument();
+    expect(within(fog).queryByText("~10 km")).not.toBeInTheDocument();
 
     const islands = screen.getByRole("link", { name: /islands, slowly/i });
-    expect(within(islands).getByText("Exact")).toBeInTheDocument();
+    expect(within(islands).queryByText("Exact")).not.toBeInTheDocument();
   });
 
   it("links each card to that voyage", () => {
@@ -214,4 +214,12 @@ describe("Discover", () => {
       "/upload",
     );
   });
+});
+
+it("uses the creation date when a card has no publication date", async () => {
+  const { VoyageCard } = await import("../../components/VoyageCards");
+  renderScreen(
+    <VoyageCard voyage={voyage({ published: false, published_at: null })} desktop={false} />,
+  );
+  expect(screen.getByText(monthYear("2026-08-01T10:00:00Z"))).toBeInTheDocument();
 });

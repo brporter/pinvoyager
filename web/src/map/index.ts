@@ -7,10 +7,12 @@
  * | `geo.ts`              | projection, clustering, area sizing, camera fitting    |
  * | `MapCanvas.tsx`       | the MapLibre instance, camera, controls, attribution   |
  * | `VoyageMap.tsx`       | one voyage: pins, clusters, areas, selection           |
+ * | `UploadReviewMap.tsx`  | upload batch: exact-coordinate pins and camera fitting |
+ * | `PrecisionPreview.tsx` | St. Louis tiles and geographic precision examples |
  * | `DiscoverMap.tsx`     | every voyage: markers grouped by the server            |
  * | `Lazy*.tsx`           | the code-splitting boundaries                          |
  *
- * Screens import the two `Lazy` components and nothing else. Importing
+ * Screens import the `Lazy` components and nothing else. Importing
  * `VoyageMap` or `DiscoverMap` directly would compile, and would quietly pull
  * MapLibre into the entry chunk for every route in the application.
  *
@@ -20,12 +22,8 @@
  * pan is a request.
  */
 
+export { LazyUploadReviewMap } from "./LazyUploadReviewMap";
 export { LazyVoyageMap } from "./LazyVoyageMap";
 export { LazyDiscoverMap } from "./LazyDiscoverMap";
 export type { DiscoverMapProps } from "./DiscoverMap";
-export type {
-  MapSelection,
-  MapSelectionSource,
-  VoyageMapProps,
-  VoyagePin,
-} from "./VoyageMap";
+export type { MapSelection, MapSelectionSource, VoyageMapProps, VoyagePin } from "./VoyageMap";

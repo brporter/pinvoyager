@@ -232,9 +232,7 @@ describe("VoyageMap — granularity", () => {
   it("draws a larger area for a coarser voyage", () => {
     const sizeAt = (precision: number): number => {
       const { unmount } = renderMap({ pins: [SPREAD[0]], precisionM: precision });
-      const width = Number.parseFloat(
-        (areas()[0] as HTMLElement).style.width.replace("px", ""),
-      );
+      const width = Number.parseFloat((areas()[0] as HTMLElement).style.width.replace("px", ""));
       unmount();
       __resetMaps();
       return width;
@@ -291,8 +289,9 @@ describe("VoyageMap — selection", () => {
     renderMap({ selection: { photoId: "missing-photo", source: "photo" } });
 
     expect(camera().camera.filter((call) => call.kind === "easeTo")).toHaveLength(0);
-    expect(within(mapRegion()).queryByRole("button", { name: "Photograph missing-photo" }))
-      .not.toBeInTheDocument();
+    expect(
+      within(mapRegion()).queryByRole("button", { name: "Photograph missing-photo" }),
+    ).not.toBeInTheDocument();
   });
 
   it("reports activation of the already selected pin", async () => {
@@ -346,8 +345,7 @@ describe("VoyageMap — reduced motion", () => {
   /**
    * MapLibre animates its camera in JavaScript against its own clock, outside
    * CSS, so the design system's `prefers-reduced-motion` rules do not reach it.
-   * The preference has to be passed into every camera call by hand, and
-   * `design/components/map-primitives.html` says so explicitly. Without this the
+   * The preference has to be passed into every camera call. Without this the
    * map keeps flying across continents for exactly the users who asked it not
    * to.
    */
@@ -371,7 +369,6 @@ describe("VoyageMap — reduced motion", () => {
   });
 });
 
-
 describe("VoyageMap — location gallery", () => {
   it("passes every member of a clicked cluster to the gallery without zooming", async () => {
     const onOpenGallery = vi.fn();
@@ -385,9 +382,18 @@ describe("VoyageMap — location gallery", () => {
   it("opens a one-photo gallery from an ordinary and a selected pin", async () => {
     const onOpenGallery = vi.fn();
     renderMap({ onOpenGallery, selection: { photoId: "a", source: "photo" } });
-    await userEvent.click(pins().find(pin => pin.getAttribute("aria-pressed") === "true")!);
+    await userEvent.click(pins().find((pin) => pin.getAttribute("aria-pressed") === "true")!);
     expect(onOpenGallery).toHaveBeenLastCalledWith(["a"]);
-    await userEvent.click(pins().find(pin => pin.getAttribute("aria-pressed") !== "true")!);
+    await userEvent.click(pins().find((pin) => pin.getAttribute("aria-pressed") !== "true")!);
     expect(onOpenGallery).toHaveBeenLastCalledWith(["b"]);
   });
+});
+
+it("hides rounding areas too small to see at a world view", async () => {
+  const { act } = await import("@testing-library/react");
+  renderMap({ precisionM: 500 });
+  act(() => {
+    camera().setZoom(0);
+  });
+  expect(areas()).toHaveLength(0);
 });
