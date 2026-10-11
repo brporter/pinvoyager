@@ -1,20 +1,10 @@
+import { useAuth } from "../auth/useAuth";
 /**
- * Voyage edit — implements `design/screens/voyage-edit.html`.
+ * Owner editing with field-level validation and explicit publication.
  *
- * Metadata on the left, publishing decisions on the right; one column at 390px
- * with the same DOM order, so there is one set of controls at every width
- * rather than two with one hidden.
- *
- * ## Why the precision control sits directly above Publish
- *
- * Adjacency is the argument. Every voyage is world-readable once published
- * (decision D6), so the last thing the user sees before making that decision is
- * the precision it will be published at — and the EXIF-stripping guarantee is
- * stated there, beside the choice, because without stripping the control is
- * decorative: a served JPEG carrying its original GPS tags hands out the exact
- * coordinates to anyone who downloads it, whatever the setting says. That
- * guarantee comes with `GranularitySelector` and there is no prop to turn it
- * off.
+ * Metadata on the left, precision and deletion on the right; one column on
+ * mobile with the same DOM order. Discard, Publish/Unpublish, and Save share
+ * the header. The precision control retains its EXIF-stripping guarantee.
  *
  * ## Where validation goes
  *
@@ -35,6 +25,7 @@ import { isApiError } from "../api/client";
 import { useDeleteVoyage, useUpdateVoyage, useVoyage } from "../api/hooks";
 import type { Granularity, Voyage, VoyagePhoto } from "../api/types";
 import {
+  ArrowLeftIcon,
   Badge,
   Button,
   EmptyState,
@@ -51,10 +42,14 @@ import {
 import { useIsDesktop } from "../shell/useIsDesktop";
 
 export function VoyageEdit() {
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const query = useVoyage(id);
 
-  if (id === undefined || (query.isError && isApiError(query.error) && query.error.status === 404)) {
+  if (
+    id === undefined ||
+    (query.isError && isApiError(query.error) && query.error.status === 404)
+  ) {
     return (
       <Screen>
         <EmptyState
@@ -94,11 +89,7 @@ export function VoyageEdit() {
           icon={<WarningTriangleIcon size={40} />}
           title="This voyage could not be loaded"
           action={
-            <Button
-              variant="secondary"
-              style={TOUCH}
-              onClick={() => void query.refetch()}
-            >
+            <Button variant="secondary" style={TOUCH} onClick={() => void query.refetch()}>
               Try again
             </Button>
           }
@@ -109,6 +100,13 @@ export function VoyageEdit() {
       </Screen>
     );
   }
+
+  if (query.data.owner_id !== user?.id)
+    return (
+      <Screen>
+        <EmptyState title="Only the owner can edit this voyage" />
+      </Screen>
+    );
 
   // Keyed so that navigating between two voyages re-seeds the form from the
   // one now on screen instead of leaving the previous voyage's text in the
@@ -138,15 +136,14 @@ function EditForm({ voyage }: { voyage: Voyage }) {
     description: voyage.description ?? "",
     granularity: voyage.granularity,
   });
-  const [saved, setSaved] = useState<"draft" | "published" | "unpublished" | null>(null);
+  const [saved, setSaved] = useState<"saved" | "published" | "unpublished" | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const failure = update.error;
   const titleError = isApiError(failure) ? failure.fieldError("title") : undefined;
   // A failure the server did not attribute to an input. There is nothing to
   // put it beside, so it becomes a toast rather than being dropped.
-  const generalError =
-    failure !== null && titleError === undefined ? messageOf(failure) : null;
+  const generalError = failure !== null && titleError === undefined ? messageOf(failure) : null;
 
   const patch = () => ({
     title: form.title,
@@ -160,28 +157,42 @@ function EditForm({ voyage }: { voyage: Voyage }) {
     setSaved(null);
     update.mutate(published === undefined ? patch() : { ...patch(), published }, {
       onSuccess: () => {
-        setSaved(published === undefined ? "draft" : published ? "published" : "unpublished");
+        setSaved(published === undefined ? "saved" : published ? "published" : "unpublished");
       },
     });
   };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     // Enter in a text input submits the form, and the safe meaning of that on
-    // this screen is "save the draft", never "publish".
+    // this screen is "save changes", never "publish".
     event.preventDefault();
     save();
   };
 
   const unplacedCount = voyage.photos.filter((photo) => !photo.placed).length;
+  const discard = () => void navigate(`/voyages/${voyage.id}`);
 
   return (
     <Screen>
       <form onSubmit={onSubmit} noValidate>
         <header
           className="pv-inline-2"
-          style={{ justifyContent: "space-between", gap: "var(--pv-space-4)", marginBottom: "var(--pv-space-6)" }}
+          style={{
+            justifyContent: "space-between",
+            gap: "var(--pv-space-4)",
+            marginBottom: "var(--pv-space-6)",
+          }}
         >
           <div className="pv-inline-2">
+            <Button
+              variant="ghost"
+              size="lg"
+              iconOnly
+              aria-label="Back to voyage"
+              onClick={discard}
+            >
+              <ArrowLeftIcon size={20} />
+            </Button>
             <h1 className="pv-h2">Edit voyage</h1>
             {/* Persistent, in the header at both widths, rather than inferred
                 from the position of a toggle further down the page. */}
@@ -190,29 +201,51 @@ function EditForm({ voyage }: { voyage: Voyage }) {
             </Badge>
           </div>
 
-          <div className="pv-inline-2">
-            <Button
-              variant="ghost"
-              size="lg"
-              onClick={() => void navigate(`/voyages/${voyage.id}`)}
-            >
+          <div
+            className="pv-inline-2"
+            role="group"
+            aria-label="Voyage actions"
+            style={{ flexWrap: "wrap" }}
+          >
+            <Button variant="ghost" size="lg" onClick={discard}>
               Discard
+            </Button>
+            <Button
+              variant={voyage.published ? "secondary" : "primary"}
+              size="lg"
+              loading={update.isPending}
+              disabled={update.isPending}
+              onClick={() => save(!voyage.published)}
+            >
+              {voyage.published ? "Unpublish" : "Publish"}
             </Button>
             <Button
               variant="secondary"
               size="lg"
               loading={update.isPending}
+              disabled={update.isPending}
               onClick={() => save()}
             >
-              Save draft
+              Save
             </Button>
-            {!voyage.published && (
-              <Button variant="primary" size="lg" loading={update.isPending} onClick={() => save(true)}>
-                Publish voyage
-              </Button>
-            )}
           </div>
         </header>
+
+        {generalError !== null && (
+          <div style={{ marginBottom: "var(--pv-space-3)" }}>
+            <Toast tone="error" title="That did not save">
+              {generalError}
+            </Toast>
+          </div>
+        )}
+
+        {saved !== null && (
+          <div style={{ marginBottom: "var(--pv-space-3)" }}>
+            <Toast tone="success" title={SAVED_TITLE[saved]} onDismiss={() => setSaved(null)}>
+              {saved === "published" ? "Your voyage is now public." : "Your changes are saved."}
+            </Toast>
+          </div>
+        )}
 
         <div
           style={{
@@ -246,7 +279,11 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                 <h2 className="pv-field-label" style={{ margin: 0 }}>
                   Photos · {voyage.photo_count}
                 </h2>
-                <Link className="pv-btn pv-btn--secondary pv-btn--sm" to={`/upload?voyage=${voyage.id}`} style={TOUCH}>
+                <Link
+                  className="pv-btn pv-btn--secondary pv-btn--sm"
+                  to={`/upload?voyage=${voyage.id}`}
+                  style={TOUCH}
+                >
                   Add photos
                 </Link>
               </div>
@@ -256,7 +293,11 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                   icon={<ImageIcon size={40} />}
                   title="No photographs yet"
                   action={
-                    <Link className="pv-btn pv-btn--secondary" to={`/upload?voyage=${voyage.id}`} style={TOUCH}>
+                    <Link
+                      className="pv-btn pv-btn--secondary"
+                      to={`/upload?voyage=${voyage.id}`}
+                      style={TOUCH}
+                    >
                       Upload photos
                     </Link>
                   }
@@ -286,8 +327,8 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                     // pins gets its explanation on the same screen.
                     <p className="pv-xs pv-muted" style={{ marginTop: "var(--pv-space-3)" }}>
                       Dashed outlines mark the {unplacedCount}{" "}
-                      {unplacedCount === 1 ? "photo" : "photos"} with no location data. They
-                      belong to the voyage but will not appear on the map.
+                      {unplacedCount === 1 ? "photo" : "photos"} with no location data. They belong
+                      to the voyage but will not appear on the map.
                     </p>
                   )}
                 </>
@@ -307,47 +348,6 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                 disabled={voyage.placed_count === 0}
                 disabledReason="None of the photos in this voyage have location data, so there is nothing to coarsen yet."
               />
-            </div>
-
-            {/* Directly below the precision, at both widths. */}
-            <div className="pv-card" style={CARD}>
-              <h2 className="pv-h3" style={{ ...CARD_TITLE, marginBottom: "var(--pv-space-2)" }}>
-                {voyage.published ? "Published" : "Publish"}
-              </h2>
-              <p className="pv-xs pv-muted" style={{ marginBottom: "var(--pv-space-4)" }}>
-                {voyage.published
-                  ? "This voyage is visible to everyone, including people who are not signed in."
-                  : "Publishing makes this voyage visible to everyone, including people who are not signed in. You can unpublish it later."}
-              </p>
-
-              {generalError !== null && (
-                <div style={{ marginBottom: "var(--pv-space-3)" }}>
-                  <Toast tone="error" title="That did not save">
-                    {generalError}
-                  </Toast>
-                </div>
-              )}
-
-              {saved !== null && (
-                <div style={{ marginBottom: "var(--pv-space-3)" }}>
-                  <Toast tone="success" title={SAVED_TITLE[saved]} onDismiss={() => setSaved(null)}>
-                    {saved === "published"
-                      ? `Locations are shown at ${voyage.granularity_label}.`
-                      : "Your changes are saved."}
-                  </Toast>
-                </div>
-              )}
-
-              {voyage.published ? (
-                <Button
-                  variant="secondary"
-                  style={{ ...TOUCH, width: "100%" }}
-                  loading={update.isPending}
-                  onClick={() => save(false)}
-                >
-                  Unpublish voyage
-                </Button>
-              ) : null}
             </div>
 
             <div className="pv-card" style={{ ...CARD, borderColor: "var(--pv-danger-bg)" }}>
@@ -428,8 +428,8 @@ const CARD_TITLE: CSSProperties = {
  *  in the stylesheet, which this screen does not own. */
 const TOUCH: CSSProperties = { minHeight: "var(--pv-touch-min)" };
 
-const SAVED_TITLE: Record<"draft" | "published" | "unpublished", string> = {
-  draft: "Draft saved",
+const SAVED_TITLE: Record<"saved" | "published" | "unpublished", string> = {
+  saved: "Changes saved",
   published: "Voyage published",
   unpublished: "Voyage unpublished",
 };

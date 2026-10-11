@@ -61,7 +61,13 @@ const PLACED_B = photo({
   captured_at: "2025-02-15T14:40:00Z",
   coordinate: { latitude: 43.21, longitude: 141.5, precision_m: 1000 },
 });
-const UNPLACED = photo({ id: "p3", position: 3, captured_at: null, coordinate: null, placed: false });
+const UNPLACED = photo({
+  id: "p3",
+  position: 3,
+  captured_at: null,
+  coordinate: null,
+  placed: false,
+});
 
 function voyage(overrides: Partial<Voyage> = {}): Voyage {
   return {
@@ -141,7 +147,9 @@ function renderWithoutVoyageId() {
   return render(
     <AuthContext.Provider value={ANONYMOUS}>
       <MemoryRouter initialEntries={["/not-a-voyage"]}>
-        <Routes><Route path="*" element={<VoyageDetail />} /></Routes>
+        <Routes>
+          <Route path="*" element={<VoyageDetail />} />
+        </Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
   );
@@ -177,7 +185,11 @@ function mapPins(): HTMLElement[] {
 }
 
 beforeEach(() => {
-  vi.mocked(useUpdateVoyage).mockReturnValue({ mutate: vi.fn(), isPending: false, error: null } as unknown as ReturnType<typeof useUpdateVoyage>);
+  vi.mocked(useUpdateVoyage).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  } as unknown as ReturnType<typeof useUpdateVoyage>);
   // jsdom has no layout, so no scrolling either. The screen guards the call;
   // these tests need to observe it.
   Element.prototype.scrollIntoView = vi.fn();
@@ -248,10 +260,17 @@ describe("VoyageDetail — selection", () => {
   });
 
   it("shows the selected photo state when it has no coordinate", async () => {
-    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({
-      photos: [photo({ ...PLACED_A, coordinate: null })], photo_count: 1, placed_count: 1,
-      place_count: 1, unplaced_count: 0,
-    }) }));
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({
+        data: voyage({
+          photos: [photo({ ...PLACED_A, coordinate: null })],
+          photo_count: 1,
+          placed_count: 1,
+          place_count: 1,
+          unplaced_count: 0,
+        }),
+      }),
+    );
     renderScreen();
     await mapReady();
 
@@ -298,25 +317,46 @@ describe("VoyageDetail — selection", () => {
 });
 
 describe("VoyageDetail — precision", () => {
-  it("states the precision in the header, so the pins are not read as exact", async () => {
+  it.each([false, true])(
+    "omits precision from photo captions and accessible names at desktop=%s",
+    async (desktop) => {
+      stubViewport(desktop);
+      vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+      const view = renderScreen();
+      await mapReady();
+      const labelsAbsent = () => {
+        expect(view.container.textContent).not.toMatch(/Exact|~1 km|~10 km|~50 km/);
+        for (const node of view.container.querySelectorAll("[aria-label], [alt]")) {
+          expect(`${node.getAttribute("aria-label")} ${node.getAttribute("alt")}`).not.toMatch(
+            /Exact|~1 km|~10 km|~50 km/,
+          );
+        }
+      };
+      labelsAbsent();
+      fireEvent.click(view.container.querySelector<HTMLElement>('.pv-photo[role="button"]')!);
+      labelsAbsent();
+    },
+  );
+
+  it("omits precision from the mobile voyage header", async () => {
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
     await mapReady();
 
-    // Mobile: the floating header carries the badge.
+    // Mobile floating header keeps the voyage title without a precision badge.
     const header = screen.getByRole("heading", { level: 1 }).closest("div")?.parentElement;
     expect(header).not.toBeNull();
-    expect(within(header as HTMLElement).getByText("~1 km")).toBeInTheDocument();
+    expect(within(header as HTMLElement).queryByText("~1 km")).not.toBeInTheDocument();
   });
 
-  it("states the precision in the desktop rail header", async () => {
+  it("omits precision from the desktop rail header", async () => {
     stubViewport(true);
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
     renderScreen();
     await mapReady();
 
     const rail = screen.getByRole("complementary", { name: "Photos in this voyage" });
-    expect(within(rail).getByText("~1 km")).toBeInTheDocument();
+    expect(within(rail).queryByText("~1 km")).not.toBeInTheDocument();
     expect(within(rail).getByRole("heading", { level: 1 })).toHaveTextContent(
       "Three weeks in Hokkaido",
     );
@@ -326,13 +366,20 @@ describe("VoyageDetail — precision", () => {
 describe("VoyageDetail — date groups", () => {
   it("groups photos from the same capture date under one heading", async () => {
     stubViewport(true);
-    vi.mocked(useVoyage).mockReturnValue(queryResult({
-      data: voyage({ photos: [PLACED_A, photo({
-        ...PLACED_B,
-        id: "same-day",
-        captured_at: "2025-02-14T18:30:00Z",
-      })] }),
-    }));
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({
+        data: voyage({
+          photos: [
+            PLACED_A,
+            photo({
+              ...PLACED_B,
+              id: "same-day",
+              captured_at: "2025-02-14T18:30:00Z",
+            }),
+          ],
+        }),
+      }),
+    );
     renderScreen();
     await mapReady();
 
@@ -342,9 +389,11 @@ describe("VoyageDetail — date groups", () => {
   it("keeps photos with missing or invalid capture dates in an unknown-date group", async () => {
     const missingDate = photo({ id: "no-date", position: 1, captured_at: null });
     const invalidDate = photo({ id: "bad-date", position: 2, captured_at: "not-a-date" });
-    vi.mocked(useVoyage).mockReturnValue(queryResult({
-      data: voyage({ photos: [missingDate, invalidDate], photo_count: 2, placed_count: 2 }),
-    }));
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({
+        data: voyage({ photos: [missingDate, invalidDate], photo_count: 2, placed_count: 2 }),
+      }),
+    );
     stubViewport(true);
     const desktop = renderScreen();
     await mapReady();
@@ -391,12 +440,26 @@ describe("VoyageDetail — unplaced photographs", () => {
   });
 
   it("uses the plural count when several photographs have no location", async () => {
-    const unplaced = [UNPLACED, photo({
-      id: "p4", position: 4, coordinate: null, placed: false, captured_at: null,
-    })];
-    vi.mocked(useVoyage).mockReturnValue(queryResult({
-      data: voyage({ photos: [PLACED_A, ...unplaced], photo_count: 3, placed_count: 1, unplaced_count: 2 }),
-    }));
+    const unplaced = [
+      UNPLACED,
+      photo({
+        id: "p4",
+        position: 4,
+        coordinate: null,
+        placed: false,
+        captured_at: null,
+      }),
+    ];
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({
+        data: voyage({
+          photos: [PLACED_A, ...unplaced],
+          photo_count: 3,
+          placed_count: 1,
+          unplaced_count: 2,
+        }),
+      }),
+    );
     renderScreen();
     await mapReady();
 
@@ -490,9 +553,11 @@ describe("VoyageDetail — states", () => {
   });
 
   it("labels a draft in the mobile sheet", async () => {
-    vi.mocked(useVoyage).mockReturnValue(queryResult({
-      data: voyage({ published: false }),
-    }));
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({
+        data: voyage({ published: false }),
+      }),
+    );
     renderScreen();
     await mapReady();
 
@@ -501,9 +566,17 @@ describe("VoyageDetail — states", () => {
 
   it("shows an empty photo rail on desktop and labels an unpublished voyage as a draft", async () => {
     stubViewport(true);
-    vi.mocked(useVoyage).mockReturnValue(queryResult({
-      data: voyage({ photos: [], published: false, photo_count: 0, placed_count: 0, unplaced_count: 0 }),
-    }));
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({
+        data: voyage({
+          photos: [],
+          published: false,
+          photo_count: 0,
+          placed_count: 0,
+          unplaced_count: 0,
+        }),
+      }),
+    );
     renderScreen();
     await mapReady();
 
@@ -612,33 +685,65 @@ describe("VoyageDetail — ownership", () => {
   it("keeps the publish action visible and explains a failed publish", () => {
     stubViewport(true);
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ published: false }) }));
-    vi.mocked(useUpdateVoyage).mockReturnValue({ mutate: vi.fn(), isPending: false, error: new Error("A voyage name is required") } as unknown as ReturnType<typeof useUpdateVoyage>);
-    renderScreen({ ...ANONYMOUS, status: "authenticated", user: {
-      id: "u1", display_name: "Owner", avatar_url: null, created_at: "2026-01-01T00:00:00Z",
-    } });
+    vi.mocked(useUpdateVoyage).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      error: new Error("A voyage name is required"),
+    } as unknown as ReturnType<typeof useUpdateVoyage>);
+    renderScreen({
+      ...ANONYMOUS,
+      status: "authenticated",
+      user: {
+        id: "u1",
+        display_name: "Owner",
+        avatar_url: null,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    });
     expect(screen.getByText("A voyage name is required")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish voyage" })).toBeInTheDocument();
   });
 
-  it.each([true, false])("offers a prominent publish action for an owner's draft (desktop=%s)", async (desktop) => {
-    stubViewport(desktop);
-    const mutate = vi.fn();
-    vi.mocked(useUpdateVoyage).mockReturnValue({ mutate, isPending: false, error: null } as unknown as ReturnType<typeof useUpdateVoyage>);
-    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ published: false }) }));
-    renderScreen({ ...ANONYMOUS, status: "authenticated", user: {
-      id: "u1", display_name: "Owner", avatar_url: null, created_at: "2026-01-01T00:00:00Z",
-    } });
-    const button = await screen.findByRole("button", { name: "Publish voyage" });
-    expect(button).toHaveClass("pv-btn--primary");
-    await userEvent.setup().click(button);
-    expect(mutate).toHaveBeenCalledWith({ published: true });
-  });
+  it.each([true, false])(
+    "offers a prominent publish action for an owner's draft (desktop=%s)",
+    async (desktop) => {
+      stubViewport(desktop);
+      const mutate = vi.fn();
+      vi.mocked(useUpdateVoyage).mockReturnValue({
+        mutate,
+        isPending: false,
+        error: null,
+      } as unknown as ReturnType<typeof useUpdateVoyage>);
+      vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ published: false }) }));
+      renderScreen({
+        ...ANONYMOUS,
+        status: "authenticated",
+        user: {
+          id: "u1",
+          display_name: "Owner",
+          avatar_url: null,
+          created_at: "2026-01-01T00:00:00Z",
+        },
+      });
+      const button = await screen.findByRole("button", { name: "Publish voyage" });
+      expect(button).toHaveClass("pv-btn--primary");
+      await userEvent.setup().click(button);
+      expect(mutate).toHaveBeenCalledWith({ published: true });
+    },
+  );
   it("shows the edit action to the voyage owner", async () => {
     stubViewport(true);
     vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
-    const view = renderScreen({ ...ANONYMOUS, status: "authenticated", user: {
-      id: "u1", display_name: "Owner", avatar_url: null, created_at: "2026-01-01T00:00:00Z",
-    } });
+    const view = renderScreen({
+      ...ANONYMOUS,
+      status: "authenticated",
+      user: {
+        id: "u1",
+        display_name: "Owner",
+        avatar_url: null,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    });
 
     await mapReady();
     expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/voyages/v1/edit");
@@ -646,28 +751,88 @@ describe("VoyageDetail — ownership", () => {
   });
 });
 
-
 describe("VoyageDetail — location gallery", () => {
-  it.each([false, true])("opens only clustered photos in voyage order (desktop=%s)", async desktop => {
-    stubViewport(desktop);
-    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({
-      photos: [PLACED_B, { ...PLACED_A, coordinate: PLACED_B.coordinate }, UNPLACED],
-    }) }));
-    renderScreen();
-    await mapReady();
-    const marker = mapRegion().querySelector<HTMLButtonElement>(".pv-cluster")!;
-    await userEvent.click(marker);
-    const dialog = screen.getByRole("dialog", { name: "Photos at this location" });
-    expect(within(dialog).getByRole("img")).toHaveAttribute("src", PLACED_B.display_url);
-    expect(within(dialog).getByText("1 of 2")).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Next photo" }));
-    expect(within(dialog).getByRole("img")).toHaveAttribute("src", PLACED_A.display_url);
-    await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(marker).toHaveFocus();
-  });
+  it.each([false, true])(
+    "opens only clustered photos in voyage order (desktop=%s)",
+    async (desktop) => {
+      stubViewport(desktop);
+      vi.mocked(useVoyage).mockReturnValue(
+        queryResult({
+          data: voyage({
+            photos: [PLACED_B, { ...PLACED_A, coordinate: PLACED_B.coordinate }, UNPLACED],
+          }),
+        }),
+      );
+      renderScreen();
+      await mapReady();
+      const marker = mapRegion().querySelector<HTMLButtonElement>(".pv-cluster")!;
+      await userEvent.click(marker);
+      const dialog = screen.getByRole("dialog", { name: "Photos at this location" });
+      expect(within(dialog).getByRole("img")).toHaveAttribute("src", PLACED_B.display_url);
+      expect(within(dialog).getByText("1 of 2")).toBeInTheDocument();
+      await userEvent.click(within(dialog).getByRole("button", { name: "Next photo" }));
+      expect(within(dialog).getByRole("img")).toHaveAttribute("src", PLACED_A.display_url);
+      await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(marker).toHaveFocus();
+    },
+  );
 });
 
+it.each([false, true])(
+  "opens a share dialog for anonymous visitors and returns focus on close (desktop=%s)",
+  async (desktop) => {
+    stubViewport(desktop);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
+    renderScreen();
+    const share = screen.getByRole("button", { name: "Share voyage" });
+    await userEvent.click(share);
+    const dialog = screen.getByRole("dialog", { name: "Share voyage" });
+    expect(within(dialog).getByRole("textbox", { name: "Voyage URL" })).toHaveValue(
+      `${window.location.origin}/voyages/v1`,
+    );
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close share dialog" }));
+    expect(screen.queryByRole("dialog", { name: "Share voyage" })).not.toBeInTheDocument();
+    expect(share).toHaveFocus();
+  },
+);
+
+it.each(["u1", "another-user"])(
+  "offers draft publication only to its owner when sharing as %s",
+  async (userId) => {
+    stubViewport(true);
+    const owner = userId === "u1";
+    const mutate = vi.fn((_patch, options) => options?.onSuccess());
+    vi.mocked(useUpdateVoyage).mockReturnValue({
+      mutate,
+      isPending: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateVoyage>);
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ published: !owner }) }));
+    renderScreen({
+      ...ANONYMOUS,
+      status: "authenticated",
+      user: {
+        id: userId,
+        display_name: "Visitor",
+        avatar_url: null,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Share voyage" }));
+    const dialog = screen.getByRole("dialog", { name: "Share voyage" });
+    if (owner) {
+      expect(within(dialog).queryByRole("textbox", { name: "Voyage URL" })).not.toBeInTheDocument();
+      await userEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+      expect(mutate).toHaveBeenCalledWith({ published: true }, expect.any(Object));
+    } else {
+      expect(within(dialog).queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
+    }
+    expect(within(dialog).getByRole("textbox", { name: "Voyage URL" })).toHaveValue(
+      `${window.location.origin}/voyages/v1`,
+    );
+  },
+);
 
 it("restores focus to the selected pin after closing its gallery", async () => {
   vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage() }));
@@ -679,7 +844,9 @@ it("restores focus to the selected pin after closing its gallery", async () => {
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).getAllByRole("img")).toHaveLength(1);
   await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
-  expect(mapPins().find(candidate => candidate.getAttribute("aria-label") === label)).toHaveFocus();
+  expect(
+    mapPins().find((candidate) => candidate.getAttribute("aria-label") === label),
+  ).toHaveFocus();
 });
 
 it("can close the gallery if a refreshed voyage no longer contains its photo", async () => {
@@ -687,7 +854,9 @@ it("can close the gallery if a refreshed voyage no longer contains its photo", a
   const view = renderScreen();
   await mapReady();
   await userEvent.click(mapPins()[1]);
-  vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ photos: [], photo_count: 0 }) }));
+  vi.mocked(useVoyage).mockReturnValue(
+    queryResult({ data: voyage({ photos: [], photo_count: 0 }) }),
+  );
   view.rerender(screenTree());
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).getByText("0 photos")).toBeInTheDocument();

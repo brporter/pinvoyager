@@ -12,7 +12,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "../../api/client";
@@ -20,6 +20,8 @@ import type { UpdateVoyageInput } from "../../api/client";
 import { useDeleteVoyage, useUpdateVoyage, useVoyage } from "../../api/hooks";
 import type { Voyage, VoyagePhoto } from "../../api/types";
 import { VoyageEdit } from "../VoyageEdit";
+
+vi.mock("../../auth/useAuth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
 
 vi.mock("../../api/hooks", () => ({
   useVoyage: vi.fn(),
@@ -104,19 +106,26 @@ interface Setup {
   removeError?: Error | null;
 }
 
+function Destination() {
+  return <span data-location={useLocation().pathname}>elsewhere</span>;
+}
+
 function setup({ data = voyage(), update = {}, remove = vi.fn(), removeError = null }: Setup = {}) {
   const mutate = update.mutate ?? vi.fn();
   vi.mocked(useVoyage).mockReturnValue(queryResult({ data }));
   vi.mocked(useUpdateVoyage).mockReturnValue(mutationResult({ ...update, mutate }));
   vi.mocked(useDeleteVoyage).mockReturnValue(
-    mutationResult({ mutate: remove as UpdateResult["mutate"], error: removeError }) as unknown as ReturnType<typeof useDeleteVoyage>,
+    mutationResult({
+      mutate: remove as UpdateResult["mutate"],
+      error: removeError,
+    }) as unknown as ReturnType<typeof useDeleteVoyage>,
   );
 
   const view = render(
     <MemoryRouter initialEntries={["/voyages/v1/edit"]}>
       <Routes>
         <Route path="/voyages/:id/edit" element={<VoyageEdit />} />
-        <Route path="*" element={<span>elsewhere</span>} />
+        <Route path="*" element={<Destination />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -145,10 +154,15 @@ afterEach(() => {
 describe("VoyageEdit — validation", () => {
   it("puts a prominent draft publish action in the page header", async () => {
     const { mutate, view } = setup();
-    const button = within(view.container.querySelector("header")!).getByRole("button", { name: "Publish voyage" });
+    const button = within(view.container.querySelector("header")!).getByRole("button", {
+      name: "Publish",
+    });
     expect(button).toHaveClass("pv-btn--primary");
     await userEvent.setup().click(button);
-    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ published: true }), expect.any(Object));
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ published: true }),
+      expect.any(Object),
+    );
   });
   it("puts a field error beside the input it names, not in a banner", () => {
     setup({
@@ -224,7 +238,7 @@ describe("VoyageEdit — precision", () => {
       "false",
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({ granularity: "km1" }),
@@ -244,17 +258,18 @@ describe("VoyageEdit — precision", () => {
     setup();
 
     const steps = screen.getByRole("group", { name: "Location precision" });
-    const publish = screen.getByRole("button", { name: "Publish voyage" });
+    const publish = screen.getByRole("button", { name: "Publish" });
 
     // Publishing is now prominent in the header; precision remains editable.
-    expect(
-      steps.compareDocumentPosition(publish) & Node.DOCUMENT_POSITION_PRECEDING,
-    ).toBeTruthy();
+    expect(steps.compareDocumentPosition(publish) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("is inert when there is nothing to coarsen", () => {
     setup({
-      data: voyage({ placed_count: 0, photos: [photo({ id: "p2", coordinate: null, placed: false })] }),
+      data: voyage({
+        placed_count: 0,
+        photos: [photo({ id: "p2", coordinate: null, placed: false })],
+      }),
     });
 
     expect(screen.getByRole("button", { name: "~10 km" })).toBeDisabled();
@@ -263,30 +278,91 @@ describe("VoyageEdit — precision", () => {
 });
 
 describe("VoyageEdit — publishing", () => {
+  it.each([false, true])("groups the editor actions in order for published=%s", (published) => {
+    const { view } = setup({ data: voyage({ published }) });
+    const header = within(view.container.querySelector("header")!);
+    const actions = within(header.getByRole("group", { name: "Voyage actions" }));
+    expect(actions.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Discard",
+      published ? "Unpublish" : "Publish",
+      "Save",
+    ]);
+    expect(screen.queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Published" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Publish" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Location precision" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("returns from the back button beside the title without saving edits", async () => {
+    const { mutate, view } = setup();
+    const heading = screen.getByRole("heading", { name: "Edit voyage" });
+    const back = screen.getByRole("button", { name: "Back to voyage" });
+    expect(back.parentElement).toBe(heading.parentElement);
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.clear(screen.getByLabelText(/Title/));
+    await userEvent.type(screen.getByLabelText(/Title/), "Unsaved title");
+    await userEvent.click(back);
+    expect(screen.getByText("elsewhere")).toHaveAttribute("data-location", "/voyages/v1");
+    expect(mutate).not.toHaveBeenCalled();
+    expect(view.container.querySelector("header")).toBeNull();
+  });
+
+  it.each([false, true])(
+    "disables saving and publication changes while pending for published=%s",
+    (published) => {
+      setup({ data: voyage({ published }), update: { isPending: true } });
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: published ? "Unpublish" : "Publish" }),
+      ).toBeDisabled();
+    },
+  );
+
+  it("saves published voyage changes without changing publication state or calling them a draft", async () => {
+    const mutate = vi.fn((_input, options) =>
+      options?.onSuccess?.(voyage({ published: true }), undefined, undefined),
+    );
+    setup({ data: voyage({ published: true }), update: { mutate } });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.calls[0][0]).not.toHaveProperty("published");
+    expect(screen.getByRole("status")).toHaveTextContent("Changes saved");
+  });
+
   it("publishes with the metadata on screen", async () => {
     const { mutate } = setup();
 
     await userEvent.clear(screen.getByLabelText(/Title/));
     await userEvent.type(screen.getByLabelText(/Title/), "Hokkaido");
-    await userEvent.click(screen.getByRole("button", { name: "Publish voyage" }));
+    await userEvent.clear(screen.getByLabelText("Description"));
+    await userEvent.type(screen.getByLabelText("Description"), "Unsaved trip notes");
+    await userEvent.click(screen.getByRole("button", { name: "~50 km" }));
+    await userEvent.click(screen.getByRole("button", { name: "Publish" }));
 
+    expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Hokkaido", published: true }),
+      {
+        title: "Hokkaido",
+        description: "Unsaved trip notes",
+        granularity: "km50",
+        published: true,
+      },
       expect.anything(),
     );
   });
 
   it("discards changes and returns to the voyage", async () => {
-    setup();
+    const { mutate } = setup();
     await userEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(screen.getByText("elsewhere")).toBeInTheDocument();
+    expect(screen.getByText("elsewhere")).toHaveAttribute("data-location", "/voyages/v1");
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("clears the description rather than leaving it alone when it is emptied", async () => {
     const { mutate } = setup();
 
     await userEvent.clear(screen.getByLabelText("Description"));
-    await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({ description: null }),
@@ -301,14 +377,17 @@ describe("VoyageEdit — publishing", () => {
 
   it("unpublishes a public voyage", async () => {
     const { mutate } = setup({ data: voyage({ published: true }) });
-    await userEvent.click(screen.getByRole("button", { name: "Unpublish voyage" }));
-    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ published: false }), expect.anything());
+    await userEvent.click(screen.getByRole("button", { name: "Unpublish" }));
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ published: false }),
+      expect.anything(),
+    );
   });
 
   it("offers to unpublish an already public voyage", () => {
     setup({ data: voyage({ published: true, published_at: "2026-02-02T10:00:00Z" }) });
 
-    expect(screen.getByRole("button", { name: "Unpublish voyage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unpublish" })).toBeInTheDocument();
     expect(screen.getByText("Public")).toBeInTheDocument();
   });
 });
@@ -348,8 +427,9 @@ describe("VoyageEdit — photographs", () => {
       removeEventListener: () => {},
     }));
     setup();
-    expect(document.querySelector('div[style*="grid-template-columns"]'))
-      .toHaveStyle({ gridTemplateColumns: "1fr 360px" });
+    expect(document.querySelector('div[style*="grid-template-columns"]')).toHaveStyle({
+      gridTemplateColumns: "1fr 360px",
+    });
   });
 });
 
@@ -363,9 +443,16 @@ describe("VoyageEdit — states", () => {
 
   it("shows the unavailable state for a missing voyage", () => {
     vi.mocked(useVoyage).mockReturnValue(
-      queryResult({ isSuccess: false, isError: true, error: new ApiRequestError({
-        status: 404, code: "not_found", message: "Missing", requestId: null,
-      }) }),
+      queryResult({
+        isSuccess: false,
+        isError: true,
+        error: new ApiRequestError({
+          status: 404,
+          code: "not_found",
+          message: "Missing",
+          requestId: null,
+        }),
+      }),
     );
     renderAt("/voyages/v1/edit");
 
@@ -441,8 +528,12 @@ describe("VoyageEdit — states", () => {
   });
 
   it("shows successful save feedback and allows it to be dismissed", async () => {
-    const { mutate } = setup({ update: { mutate: vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined)) } });
-    await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    const { mutate } = setup({
+      update: {
+        mutate: vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined)),
+      },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mutate).toHaveBeenCalled();
     expect(screen.getByText("Your changes are saved.")).toBeInTheDocument();
@@ -454,13 +545,15 @@ describe("VoyageEdit — states", () => {
     const mutate = vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined));
     const { view } = setup({ update: { mutate } });
 
-    await userEvent.click(screen.getByRole("button", { name: "Publish voyage" }));
-    expect(screen.getByText(/Locations are shown at ~10 km/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("Your voyage is now public.")).toBeInTheDocument();
     view.unmount();
 
-    const unpublish = vi.fn((_input, options) => options?.onSuccess?.(voyage(), undefined, undefined));
+    const unpublish = vi.fn((_input, options) =>
+      options?.onSuccess?.(voyage(), undefined, undefined),
+    );
     setup({ data: voyage({ published: true }), update: { mutate: unpublish } });
-    await userEvent.click(screen.getByRole("button", { name: "Unpublish voyage" }));
+    await userEvent.click(screen.getByRole("button", { name: "Unpublish" }));
     expect(screen.getByText("Your changes are saved.")).toBeInTheDocument();
   });
 
@@ -490,10 +583,19 @@ describe("VoyageEdit — states", () => {
   it("submits Enter as a draft save", async () => {
     const { mutate } = setup();
     fireEvent.submit(screen.getByLabelText(/Title/).closest("form") as HTMLFormElement);
-    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
-      title: "Three weeks in Hokkaido",
-      description: "Late winter, mostly on foot.",
-      granularity: "km10",
-    }), expect.anything());
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Three weeks in Hokkaido",
+        description: "Late winter, mostly on foot.",
+        granularity: "km10",
+      }),
+      expect.anything(),
+    );
   });
+});
+
+it("withholds editor controls from a different owner", () => {
+  setup({ data: voyage({ owner_id: "another-owner", published: true }) });
+  expect(screen.getByText("Only the owner can edit this voyage")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: /title/i })).not.toBeInTheDocument();
 });
