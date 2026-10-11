@@ -1,7 +1,7 @@
 /**
- * 404 and error states — implements `design/screens/not-found.html`.
+ * Missing-resource and server-error screens.
  *
- * The design draws three situations that look similar and are not:
+ * These screens keep three outcomes distinct:
  *
  *  * **An address that never existed.** {@link NotFound} — the `*` route.
  *  * **A voyage that is gone.** {@link VoyageUnavailable} — and the copy is
@@ -63,7 +63,7 @@ function ErrorPage({ children }: { children: ReactNode }) {
   );
 }
 
-/** The struck-out pin from `design/screens/not-found.html`. */
+/** Missing voyage icon. */
 function BrokenPinIcon({ size = 44 }: { size?: number }) {
   return (
     <svg
@@ -85,7 +85,7 @@ function BrokenPinIcon({ size = 44 }: { size?: number }) {
   );
 }
 
-/** The struck-out photograph from `design/screens/not-found.html`. */
+/** Missing photograph icon. */
 function BrokenImageIcon({ size = 44 }: { size?: number }) {
   return (
     <svg
@@ -126,8 +126,8 @@ export function NotFound() {
           </Link>
         }
       >
-        This page does not exist. It may have been a mistyped address, or a link that has
-        since moved.
+        This page does not exist. It may have been a mistyped address, or a link that has since
+        moved.
       </EmptyState>
     </ErrorPage>
   );

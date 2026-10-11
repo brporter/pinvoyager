@@ -6,7 +6,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
-import { Avatar, initialsOf } from "../Avatar";
+import { Avatar } from "../Avatar";
+import { initialsOf } from "../initials";
 import { TabBar } from "../TabBar";
 import { TopNav } from "../TopNav";
 
@@ -18,8 +19,8 @@ describe("TopNav", () => {
   it("offers a signed-out visitor a way in without demanding it", () => {
     at("/", <TopNav />);
 
-    // Discover is still reachable — every voyage is public, so this is a
-    // first-class user rather than someone at a gate.
+    // Discover is still reachable — published voyages are public, so this is an
+    // anonymous browsing route.
     expect(screen.getByRole("link", { name: "Discover" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/signin");
   });
@@ -60,10 +61,7 @@ describe("TopNav", () => {
       />,
     );
 
-    expect(screen.getByRole("link", { name: "Upload" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.getByRole("link", { name: "Upload" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Discover" })).not.toHaveAttribute("aria-current");
   });
 
@@ -92,10 +90,7 @@ describe("TabBar", () => {
   it("marks the current tab", () => {
     at("/upload", <TabBar />);
 
-    expect(screen.getByRole("link", { name: "Upload" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.getByRole("link", { name: "Upload" })).toHaveAttribute("aria-current", "page");
   });
 
   it("reaches every tab by keyboard", async () => {

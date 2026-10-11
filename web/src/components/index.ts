@@ -1,32 +1,10 @@
-/**
- * The PinVoyager component library.
- *
- * Every component here implements a file in `design/components/` and carries
- * the same name as it, so a design file and its implementation are findable
- * from each other:
- *
- * | design file                          | components                                  |
- * |--------------------------------------|---------------------------------------------|
- * | `buttons.html`                       | `Button`, `Spinner`                         |
- * | `provider-buttons.html`              | `ProviderButton`                            |
- * | `forms.html`                         | `TextField`, `TextArea`, `Select`, `Checkbox`, `Switch` |
- * | `navigation.html`                    | `TopNav`, `TabBar`, `Avatar`                |
- * | `photo-primitives.html`              | `Photo`, `PhotoGrid`, `Filmstrip`           |
- * | `map-primitives.html`                | `Pin`, `Cluster`, `MapArea`, `Attribution`  |
- * | `upload.html`                        | `Dropzone`, `UploadRow`                     |
- * | `granularity.html`                   | `GranularitySelector`                       |
- * | `feedback.html`                      | `Badge`, `Toast`, `EmptyState`, `Skeleton`  |
- *
- * None of them define their own styles. They apply the class names in
- * `design/components.css`, which the application imports directly from the
- * design directory — so editing the design system changes the running
- * application rather than a copy of it. See `src/styles/index.css`.
- */
+/** Shared UI controls styled by design/tokens.css and design/components.css. */
 
 export { Button, Spinner } from "./Button";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
 
-export { PROVIDERS, ProviderButton } from "./ProviderButton";
+export { ProviderButton } from "./ProviderButton";
+export { PROVIDERS } from "./providers";
 export type { Provider, ProviderButtonProps } from "./ProviderButton";
 
 export { TextField } from "./TextField";
@@ -43,9 +21,10 @@ export type { FieldChrome } from "./Field";
 
 export { TopNav } from "./TopNav";
 export type { NavItem, NavUser, TopNavProps } from "./TopNav";
-export { DEFAULT_TABS, TabBar } from "./TabBar";
+export { TabBar } from "./TabBar";
 export type { TabBarProps, TabItem } from "./TabBar";
-export { Avatar, initialsOf } from "./Avatar";
+export { Avatar } from "./Avatar";
+export { initialsOf } from "./initials";
 export type { AvatarProps } from "./Avatar";
 
 export { Photo } from "./Photo";
@@ -70,11 +49,8 @@ export type { DropzoneProps, DropzoneState } from "./Dropzone";
 export { UploadRow } from "./UploadRow";
 export type { UploadRowProps, UploadStatus } from "./UploadRow";
 
-export {
-  GRANULARITIES,
-  GRANULARITY_LABEL,
-  GranularitySelector,
-} from "./GranularitySelector";
+export { GranularitySelector } from "./GranularitySelector";
+export { GRANULARITIES, GRANULARITY_LABEL } from "./granularity";
 export type { GranularitySelectorProps } from "./GranularitySelector";
 
 export { Badge } from "./Badge";

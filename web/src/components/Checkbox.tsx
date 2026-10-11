@@ -1,23 +1,14 @@
-/**
- * Checkbox — from `design/components/forms.html`.
- *
- * A real `<input type="checkbox">` visually hidden with `.pv-sr`, beside a
- * `.pv-check-box` that draws the state. The input stays in the accessibility
- * tree and stays focusable, so keyboard operation, form participation and
- * screen-reader announcement are all the platform's rather than ours; only the
- * appearance is borrowed from the design system.
- *
- * State is signalled by a shape change (the tick) as well as a fill color, so
- * it survives without color perception.
- */
+/** Checkbox uses the shared runtime styles and accessible native controls. */
 
 import { useId, useState } from "react";
 import type { ChangeEvent, InputHTMLAttributes, ReactNode } from "react";
 
 import { CheckIcon } from "./icons";
 
-export interface CheckboxProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "type" | "children"> {
+export interface CheckboxProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "className" | "type" | "children"
+> {
   /** Visible label text. */
   children: ReactNode;
 }
@@ -58,9 +49,7 @@ export function Checkbox({
         {/* The design file hardcodes `stroke="#fff"`. The token is used instead
             because `--pv-text-on-accent` flips to near-black in dark mode,
             where the accent fill is light — a white tick would disappear. */}
-        {isChecked && (
-          <CheckIcon size={12} stroke="var(--pv-text-on-accent)" strokeWidth={3.5} />
-        )}
+        {isChecked && <CheckIcon size={12} stroke="var(--pv-text-on-accent)" strokeWidth={3.5} />}
       </span>
       <span className="pv-check-text">{children}</span>
     </label>

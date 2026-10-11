@@ -11,9 +11,7 @@ describe("Pin", () => {
     const onClick = vi.fn();
     render(<Pin label="Photo taken 14 February, 09:12" onClick={onClick} left="20%" top="30%" />);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Photo taken 14 February, 09:12" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Photo taken 14 February, 09:12" }));
 
     expect(onClick).toHaveBeenCalledOnce();
   });

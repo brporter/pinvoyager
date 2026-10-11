@@ -174,7 +174,12 @@ describe("Dropzone", () => {
 describe("UploadRow", () => {
   it("exposes upload progress rather than only drawing it", () => {
     render(
-      <UploadRow name="IMG_4821.jpg" status="uploading" progress={68} detail="4.2 MB · uploading" />,
+      <UploadRow
+        name="IMG_4821.jpg"
+        status="uploading"
+        progress={68}
+        detail="4.2 MB · uploading"
+      />,
     );
 
     const bar = screen.getByRole("progressbar", { name: "Upload progress for IMG_4821.jpg" });
@@ -185,13 +190,9 @@ describe("UploadRow", () => {
     // "Cancel" repeated down a list of six rows tells a screen-reader user
     // nothing about which upload they are about to stop.
     const onCancel = vi.fn();
-    render(
-      <UploadRow name="IMG_4821.jpg" status="uploading" progress={30} onCancel={onCancel} />,
-    );
+    render(<UploadRow name="IMG_4821.jpg" status="uploading" progress={30} onCancel={onCancel} />);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Cancel upload of IMG_4821.jpg" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancel upload of IMG_4821.jpg" }));
 
     expect(onCancel).toHaveBeenCalledOnce();
   });

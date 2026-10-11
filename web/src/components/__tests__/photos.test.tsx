@@ -33,7 +33,11 @@ describe("Photo", () => {
 
   it("accounts for an unplaced photograph visibly rather than dropping it", () => {
     const { container } = render(
-      <Photo src="https://example.test/1.jpg" unplaced badge={<Badge tone="unplaced">No location</Badge>} />,
+      <Photo
+        src="https://example.test/1.jpg"
+        unplaced
+        badge={<Badge tone="unplaced">No location</Badge>}
+      />,
     );
 
     expect(screen.getByText("No location")).toBeInTheDocument();
@@ -127,7 +131,11 @@ describe("Filmstrip", () => {
   });
 
   it("omits the group role when no accessible label is provided", () => {
-    const { container } = render(<Filmstrip><Photo ratio="1:1" gradient={2} /></Filmstrip>);
+    const { container } = render(
+      <Filmstrip>
+        <Photo ratio="1:1" gradient={2} />
+      </Filmstrip>,
+    );
 
     expect(container.querySelector(".pv-filmstrip")).not.toHaveAttribute("role");
   });

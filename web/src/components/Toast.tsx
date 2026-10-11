@@ -1,14 +1,4 @@
-/**
- * Toast — from `design/components/feedback.html`.
- *
- * A left border in a status color, an icon, and a text title: three signals,
- * none of which is color alone.
- *
- * The role is chosen by tone and it is the load-bearing part of this component.
- * Success and info are `status`, announced politely when the screen reader
- * next pauses. Errors and warnings are `alert`, which interrupts — a failed
- * upload the user does not hear about is a failed upload they will not retry.
- */
+/** Toast uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 

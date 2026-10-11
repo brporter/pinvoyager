@@ -32,7 +32,7 @@ HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
   this.open = false;
   this.dispatchEvent(new Event("close"));
 });
-document.addEventListener("submit", event => {
+document.addEventListener("submit", (event) => {
   const form = event.target as HTMLFormElement;
   if (form.getAttribute("method") !== "dialog") return;
   event.preventDefault();

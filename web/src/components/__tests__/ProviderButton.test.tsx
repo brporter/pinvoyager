@@ -4,7 +4,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { PROVIDERS, ProviderButton } from "../ProviderButton";
+import { ProviderButton } from "../ProviderButton";
+import { PROVIDERS } from "../providers";
 
 describe("ProviderButton", () => {
   it("gives all four providers the shared label grammar", () => {
@@ -17,9 +18,7 @@ describe("ProviderButton", () => {
     );
 
     for (const name of ["Google", "Apple", "Microsoft", "Facebook"]) {
-      expect(
-        screen.getByRole("button", { name: `Continue with ${name}` }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `Continue with ${name}` })).toBeInTheDocument();
     }
   });
 

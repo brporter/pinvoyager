@@ -1,33 +1,4 @@
-/**
- * Photo — from `design/components/photo-primitives.html`.
- *
- * Photographs are the content of this product, so the frame stays out of the
- * way: a fixed aspect ratio, a scrim only where text sits on top, and a
- * selection treatment that survives being drawn over an arbitrary image.
- *
- * Two states are worth reading the design note about:
- *
- *  - **Selected** is an outline with an offset rather than a color overlay,
- *    because it has to remain visible against a photograph of any color —
- *    including a photograph that happens to be teal.
- *  - **Unplaced** is normal, not exceptional. Screenshots, scans and anything
- *    shot with location services off carry no GPS EXIF at all, which is a large
- *    fraction of real uploads. They get a dashed warning border and an
- *    explicit badge so they are visibly accounted for rather than silently
- *    dropped from the map.
- *
- * The frame is a `<div>` because the design never draws an interactive photo —
- * selection arrives from a map pin. When a call site does need one to be
- * activatable, `onSelect` turns it into a `role="button"` with keyboard
- * handling, the same pattern `.pv-sheet-grip` uses in the voyage-detail screen.
- * A real `<button>` is not an option: `.pv-photo` carries none of the resets a
- * button needs.
- *
- * Known design-system gap: `.pv-photo-img` positions its child but does not set
- * `object-fit`, because the design mocks photographs with CSS gradients and
- * never renders an `<img>`. Until `object-fit: cover` is added to that rule, a
- * real photograph whose aspect ratio differs from the frame will stretch.
- */
+/** Photo uses the shared runtime styles and accessible native controls. */
 
 import type { KeyboardEvent, ReactNode } from "react";
 
@@ -84,12 +55,7 @@ export function Photo({
 }: PhotoProps) {
   const interactive = onSelect != null;
 
-  const frameClass = cx(
-    "pv-photo",
-    RATIO_CLASS[ratio],
-    loading && "pv-skeleton",
-    className,
-  );
+  const frameClass = cx("pv-photo", RATIO_CLASS[ratio], loading && "pv-skeleton", className);
 
   const activation = interactive
     ? {

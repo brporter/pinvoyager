@@ -1,13 +1,8 @@
 /* ==========================================================================
    PinVoyager component layer
 
-   These are PRODUCT styles, not documentation styles. Phase 6 implements
-   React components against these class names, and the screen mockups in
-   design/screens compose from this same file — so a screen and the real
-   application are built from one definition, not two that drift.
-
-   Everything here consumes tokens.css. No literal color, spacing, radius,
-   or duration values appear below.
+   Shared runtime styles used by the React application. Most values come from
+   tokens.css; decorative map backgrounds below use local gradients.
    ========================================================================== */
 
 @import url("tokens.css");
@@ -512,8 +507,7 @@
    Map primitives
    ========================================================================== */
 
-/* Static basemap stand-in. Phase 7 replaces this with MapLibre; the shape
-   and dimensions here are what that map has to fit into. */
+/* Map surface background, visible while tiles load or when they are absent. */
 .pv-map {
   position: relative;
   background:

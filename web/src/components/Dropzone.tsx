@@ -1,30 +1,4 @@
-/**
- * Dropzone — from `design/components/upload.html`.
- *
- * Three states, all drawn in the design file: idle, dragover, and rejecting.
- *
- * The rejecting state fires on `dragover`, before the drop. Telling someone
- * their file is unsupported *while they are still holding it* is meaningfully
- * better than accepting the drop and then failing.
- *
- * ## Two things this component deliberately does not do
- *
- * **It does not filter the drop.** Every file the user let go of is handed to
- * `onFiles`, including the ones it just warned about, because the design's
- * per-file result list shows "Not an image file — skipped" as an outcome rather
- * than hiding it. A batch that quietly loses two files is worse than one that
- * reports them.
- *
- * **Its type checking is a courtesy, never a control.** The browser reports
- * what a file claims to be. The server decides what it actually is by
- * inspecting magic bytes, and it must reject a `.jpg` whose contents are HTML
- * regardless of what this dropzone allowed through.
- *
- * Divergence from the design file: the "choose files" affordance is drawn there
- * as `<a href="#">`, which is not a control — it cannot be activated
- * meaningfully and it lies to assistive technology about being a link. It is a
- * real `<button>` here, wearing `.pv-btn--ghost --sm` from the design system.
- */
+/** Dropzone uses the shared runtime styles and accessible native controls. */
 
 import { useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
@@ -137,7 +111,11 @@ export function Dropzone({
       onDrop={handleDrop}
     >
       <div className="pv-dropzone-icon">
-        {state === "reject" ? <CircleXIcon size={34} strokeWidth={1.75} /> : <UploadIcon size={34} strokeWidth={1.75} />}
+        {state === "reject" ? (
+          <CircleXIcon size={34} strokeWidth={1.75} />
+        ) : (
+          <UploadIcon size={34} strokeWidth={1.75} />
+        )}
       </div>
 
       <p className="pv-dropzone-title">
@@ -149,26 +127,24 @@ export function Dropzone({
       </p>
 
       <p className="pv-dropzone-hint">
-        {state === "reject" ? (
-          `${nonImages} of these ${total} files are not images`
-        ) : state === "dragover" ? (
-          "They will be uploaded to your voyage"
-        ) : (
-          (hint ?? (
-            <>
-              or{" "}
-              <button
-                type="button"
-                className="pv-btn pv-btn--ghost pv-btn--sm"
-                disabled={disabled}
-                onClick={() => inputRef.current?.click()}
-              >
-                choose files
-              </button>{" "}
-              · {formatsLabel} · up to {maxSizeLabel} each
-            </>
-          ))
-        )}
+        {state === "reject"
+          ? `${nonImages} of these ${total} files are not images`
+          : state === "dragover"
+            ? "They will be uploaded to your voyage"
+            : (hint ?? (
+                <>
+                  or{" "}
+                  <button
+                    type="button"
+                    className="pv-btn pv-btn--ghost pv-btn--sm"
+                    disabled={disabled}
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    choose files
+                  </button>{" "}
+                  · {formatsLabel} · up to {maxSizeLabel} each
+                </>
+              ))}
       </p>
 
       {/* `hidden` rather than `.pv-sr`: a visually-hidden-but-focusable input

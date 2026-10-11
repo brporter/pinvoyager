@@ -114,7 +114,9 @@ describe("EmptyState", () => {
     );
 
     expect(screen.getByText("7f3a-2b91")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "This voyage could not be loaded" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "This voyage could not be loaded" }),
+    ).toBeInTheDocument();
   });
 });
 

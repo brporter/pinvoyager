@@ -1,22 +1,4 @@
-/**
- * TopNav — the desktop bar from `design/components/navigation.html`.
- *
- * Every voyage on PinVoyager is public, so a signed-out visitor is a
- * first-class user rather than someone being held at a gate. The bar offers a
- * way in without demanding one: signed out it shows Discover and a Sign in
- * button, signed in it adds the user's own destinations, a New voyage action
- * and their avatar.
- *
- * Pairs with `TabBar`, which is the same navigation at the mobile breakpoint.
- * The responsive shell renders one or the other, not both — they share the
- * `aria-label="Main"` landmark name, and two landmarks with the same name in
- * one document is a navigation trap.
- *
- * Active state comes from react-router's `NavLink`, which sets
- * `aria-current="page"` — the same attribute `.pv-navlink[aria-current="page"]`
- * styles. One source of truth for "which page am I on", used by both the
- * screen reader and the stylesheet.
- */
+/** TopNav uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router";
@@ -94,11 +76,7 @@ export function TopNav({
             <Avatar
               name={user.displayName}
               src={user.avatarUrl}
-              label={
-                user.displayName != null
-                  ? `Signed in as ${user.displayName}`
-                  : "Signed in"
-              }
+              label={user.displayName != null ? `Signed in as ${user.displayName}` : "Signed in"}
             />
           </>
         ) : onSignIn != null ? (

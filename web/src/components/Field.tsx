@@ -1,20 +1,4 @@
-/**
- * The shared scaffolding behind TextField, TextArea and Select — the label,
- * help text and error row drawn in `design/components/forms.html`.
- *
- * The interesting part is the error wiring. An error is three things at once:
- *
- *  1. `aria-invalid="true"` on the control, which the design system turns into
- *     a red border.
- *  2. A visible message carrying an icon as well as color, because color
- *     alone is never the only signal.
- *  3. `aria-describedby` pointing at that message, so a screen reader announces
- *     it when the control takes focus rather than leaving someone to discover a
- *     validation failure by trial.
- *
- * (3) is the one that gets forgotten, so it is done here once rather than at
- * every call site.
- */
+/** Field uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 
@@ -39,21 +23,6 @@ export interface FieldIds {
   describedBy: string | undefined;
   helpId: string;
   errorId: string;
-}
-
-export function fieldIds(baseId: string, chrome: FieldChrome): FieldIds {
-  const helpId = `${baseId}-help`;
-  const errorId = `${baseId}-error`;
-  const described = [chrome.error != null && errorId, chrome.help != null && helpId]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ");
-
-  return {
-    controlId: baseId,
-    describedBy: described === "" ? undefined : described,
-    helpId,
-    errorId,
-  };
 }
 
 export function FieldShell({

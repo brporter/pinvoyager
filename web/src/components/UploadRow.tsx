@@ -1,34 +1,13 @@
-/**
- * UploadRow — from `design/components/upload.html`.
- *
- * One file, one row, one outcome. Uploads are batches and batches partially
- * fail, so the row's job is making a mixed result legible rather than
- * pretending the batch succeeds or fails as a unit.
- *
- * Note the two distinct post-upload states the design draws: a photo with
- * coordinates shows them, and one without shows the "No location" badge and the
- * words "needs placing". The difference is visible in the list rather than
- * discovered later on an empty map — which is why `unplaced` is a separate flag
- * from `status`, not a kind of failure.
- *
- * The progress bar is a real `progressbar` with `aria-valuenow`. The design
- * draws a bare div, but a progress indicator that only exists visually tells a
- * screen-reader user nothing about whether their upload is moving.
- */
+/** UploadRow uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 
 import { Badge } from "./Badge";
 import { Button, Spinner } from "./Button";
 import { cx } from "./cx";
-import { CheckIcon, CloseIcon, ErrorCircleIcon } from "./icons";
+import { CheckIcon, CloseIcon } from "./icons";
 
-export type UploadStatus =
-  | "queued"
-  | "uploading"
-  | "processing"
-  | "uploaded"
-  | "error";
+export type UploadStatus = "queued" | "uploading" | "processing" | "uploaded" | "error";
 
 export interface UploadRowProps {
   /** The file name, as the user knows it. */
@@ -43,9 +22,6 @@ export interface UploadRowProps {
   error?: string;
   /** Uploaded, but with no GPS EXIF. Adds the "No location" badge. */
   unplaced?: boolean;
-  /** Local object URL or a server thumbnail. Absent for a failed file, which
-   *  gets the error glyph in the thumbnail slot instead. */
-  thumbnailUrl?: string;
   onCancel?: () => void;
   onRemove?: () => void;
   onRetry?: () => void;
@@ -59,7 +35,6 @@ export function UploadRow({
   detail,
   error,
   unplaced = false,
-  thumbnailUrl,
   onCancel,
   onRemove,
   onRetry,
@@ -71,14 +46,6 @@ export function UploadRow({
 
   return (
     <div className={cx("pv-upload-row", className)}>
-      <div className="pv-upload-thumb">
-        {failed ? (
-          <ErrorCircleIcon size={18} strokeWidth={2} />
-        ) : thumbnailUrl != null ? (
-          <img className="pv-photo-img" src={thumbnailUrl} alt="" />
-        ) : null}
-      </div>
-
       <div className="pv-upload-info">
         <div className="pv-upload-name">{name}</div>
 
@@ -132,13 +99,7 @@ export function UploadRow({
       )}
 
       {failed && onRemove != null && (
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          aria-label={`Remove ${name}`}
-          onClick={onRemove}
-        >
+        <Button variant="ghost" size="sm" iconOnly aria-label={`Remove ${name}`} onClick={onRemove}>
           <CloseIcon size={14} />
         </Button>
       )}

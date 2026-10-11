@@ -1,18 +1,5 @@
-/* The application's entire stylesheet.
- *
- * Both files are imported from ../../design, NOT copied into this project.
- * That is deliberate and it is the point of phase 6's target T2: editing a
- * value in design/tokens.css must change the running application. A copy would
- * be a snapshot that starts drifting the moment someone touches either side,
- * and the design system would quietly become documentation of what the app used
- * to look like.
- *
- * tokens.css     color, type, spacing, radii, elevation, motion
- * components.css the product's component styles — .pv-btn, .pv-card, .pv-pin
- *                and the rest. React components in src/components apply these
- *                class names rather than redefining the same rules in CSS
- *                modules, so there is one definition of what a button looks
- *                like rather than two that have to be kept in step.
+/* Shared tokens and component styles are runtime dependencies. Import them
+ * directly so the app has one definition of its visual primitives.
  */
 
 @import "../../../design/tokens.css";
@@ -51,6 +38,21 @@ body {
   outline-offset: 2px;
 }
 
+.pv-share-dialog {
+  width: min(520px, calc(100vw - 2 * var(--pv-space-4)));
+  max-height: calc(100dvh - 2 * var(--pv-space-4));
+  box-sizing: border-box;
+  padding: var(--pv-space-5);
+  color: var(--pv-text);
+  background: var(--pv-bg);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-xl);
+  box-shadow: var(--pv-shadow-4);
+}
+.pv-share-dialog::backdrop {
+  background: var(--pv-overlay);
+}
+
 /* D12: a native modal extends the voyage reference using shared visual tokens. */
 .pv-location-gallery {
   width: min(960px, calc(100vw - 2 * var(--pv-space-4)));
@@ -64,8 +66,13 @@ body {
   box-shadow: var(--pv-shadow-4);
   overflow: hidden;
 }
-.pv-location-gallery[open] { display: flex; flex-direction: column; }
-.pv-location-gallery::backdrop { background: var(--pv-overlay); }
+.pv-location-gallery[open] {
+  display: flex;
+  flex-direction: column;
+}
+.pv-location-gallery::backdrop {
+  background: var(--pv-overlay);
+}
 .pv-location-gallery-header {
   position: relative;
   flex: none;
@@ -75,7 +82,11 @@ body {
   padding-right: calc(48px + 2 * var(--pv-space-4));
   border-bottom: 1px solid var(--pv-border);
 }
-.pv-location-gallery-close { position: absolute; top: var(--pv-space-2); right: var(--pv-space-2); }
+.pv-location-gallery-close {
+  position: absolute;
+  top: var(--pv-space-2);
+  right: var(--pv-space-2);
+}
 .pv-location-gallery-body {
   flex: 1;
   min-height: 0;
@@ -85,7 +96,11 @@ body {
   gap: var(--pv-space-2);
   padding: var(--pv-space-3);
 }
-.pv-location-gallery-stage { height: 100%; min-height: 0; min-width: 0; }
+.pv-location-gallery-stage {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
 .pv-location-gallery-stage figure {
   height: 100%;
   margin: 0;
@@ -101,8 +116,14 @@ body {
   object-fit: contain;
   border-radius: var(--pv-radius-md);
 }
-.pv-location-gallery-stage figcaption { text-align: center; }
-.pv-location-gallery-footer { flex: none; padding: var(--pv-space-3); text-align: center; }
+.pv-location-gallery-stage figcaption {
+  text-align: center;
+}
+.pv-location-gallery-footer {
+  flex: none;
+  padding: var(--pv-space-3);
+  text-align: center;
+}
 .pv-location-gallery-placeholder {
   display: grid;
   place-items: center;
@@ -112,5 +133,20 @@ body {
   padding: var(--pv-space-3);
   text-align: center;
   background: var(--pv-bg-subtle);
+  border-radius: var(--pv-radius-md);
+}
+
+/* Map messages stay visible above the canvas and keyboard-accessible. */
+.pv-map-notice {
+  position: absolute;
+  z-index: 2;
+  top: var(--pv-space-3);
+  left: var(--pv-space-3);
+  max-width: calc(100% - 2 * var(--pv-space-3));
+  max-height: 70%;
+  overflow: auto;
+  padding: var(--pv-space-3);
+  background: var(--pv-bg);
+  border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-md);
 }

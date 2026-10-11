@@ -1,18 +1,4 @@
-/**
- * EmptyState — from `design/components/feedback.html`.
- *
- * Empty and error states are the components most often left until last and most
- * often improvised into a spinner. The design specifies four of them — no
- * voyages, no located photos, nothing to discover, and a load failure — and
- * they all share this shape: icon, title, a sentence explaining what happened,
- * and one action.
- *
- * On the error variant, note what the design's body text does and does not say.
- * It quotes a request reference and nothing else. That pairing is deliberate:
- * it gives the user something concrete to report while keeping stack traces and
- * internal messages on the server, where the service's error type logs the real
- * cause against the same `x-request-id`.
- */
+/** EmptyState uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 

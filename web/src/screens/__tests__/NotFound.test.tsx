@@ -61,10 +61,7 @@ describe("VoyageUnavailable", () => {
     // Nor does it name the two cases it is covering for. "Draft" here would
     // tell a prober they had found one.
     expect(screen.queryByText(/\bdraft\b|\bunpublished\b/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Browse other voyages" })).toHaveAttribute(
-      "href",
-      "/",
-    );
+    expect(screen.getByRole("link", { name: "Browse other voyages" })).toHaveAttribute("href", "/");
   });
 });
 

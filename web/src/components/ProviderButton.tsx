@@ -1,23 +1,4 @@
-/**
- * ProviderButton — implements `design/components/provider-buttons.html`.
- *
- * The only way into PinVoyager. Four providers, one shared geometry, four
- * mandated skins.
- *
- * ## Do not restyle or redraw these
- *
- * Google and Apple both publish binding branding requirements: exact wordmark,
- * minimum size, permitted color variants, required clear space.
- * Non-compliance is grounds for rejection during provider app review, which
- * blocks launch. The four SVGs below are copied verbatim from the design file —
- * treat any change as a correctness question rather than a taste question, and
- * check the current published guidelines first.
- *
- * The skins live in `.pv-provider--*` in `design/components.css`, including the
- * per-provider hex values the guidelines mandate. Those are the one place in
- * the design system where literal colors are permitted, precisely because they
- * are not ours to tokenize.
- */
+/** ProviderButton uses the shared runtime styles and accessible native controls. */
 
 import type { ButtonHTMLAttributes, ReactElement } from "react";
 
@@ -33,8 +14,10 @@ const PROVIDER_NAME: Record<Provider, string> = {
   facebook: "Facebook",
 };
 
-export interface ProviderButtonProps
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {
+export interface ProviderButtonProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "className"
+> {
   provider: Provider;
   /** The redirect has been initiated. Swaps the logo for a spinner and blocks
    *  a second activation, because two OAuth redirects race each other. */
@@ -90,7 +73,7 @@ export function ProviderButton({
 }
 
 /* ==========================================================================
-   Provider logos — copied verbatim from design/components/provider-buttons.html
+   Provider logos used by sign-in and account-linking buttons
    ========================================================================== */
 
 function GoogleLogo() {
@@ -164,9 +147,3 @@ const PROVIDER_LOGO: Record<Provider, () => ReactElement> = {
 
 /** The four providers in the order the sign-in screen shows them — by expected
  *  usage, as the design file specifies. */
-export const PROVIDERS: readonly Provider[] = [
-  "google",
-  "apple",
-  "microsoft",
-  "facebook",
-];

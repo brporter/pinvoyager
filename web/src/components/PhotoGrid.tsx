@@ -1,10 +1,4 @@
-/**
- * PhotoGrid — from `design/components/photo-primitives.html`.
- *
- * `auto-fill` with a 150px minimum, so the column count follows the container
- * rather than a breakpoint. Fixed aspect ratios on the children keep the grid
- * from going ragged and stop the page reflowing as images load.
- */
+/** PhotoGrid uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 

@@ -19,6 +19,7 @@ import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { vi } from "vitest";
 
+import { GRANULARITY_LABEL, GRANULARITY_PRECISION } from "../../components/granularity";
 import { ApiRequestError } from "../../api/client";
 import type { CurrentUser, VoyageList, VoyageSummary } from "../../api/types";
 import { AuthContext } from "../../auth/context";
@@ -30,7 +31,7 @@ import type { AuthState, AuthStatus } from "../../auth/context";
 
 export const ADA: CurrentUser = {
   id: "0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
-  display_name: "Ada Lovelace",
+  display_name: "ada-lovelace",
   avatar_url: null,
   created_at: "2026-02-01T10:00:00Z",
 };
@@ -46,18 +47,29 @@ export const STRANGER_ID = "0192f0c2-9999-7c3d-8e4f-5a6b7c8d9e0f";
  * as `authState(ADA)` and `authState(null)` and only the awkward ones —
  * "still loading", "the read failed" — have to say so.
  */
+export function authState(user: CurrentUser): Extract<AuthState, { status: "authenticated" }>;
+export function authState(user: null): Extract<AuthState, { status: "anonymous" }>;
+export function authState<S extends AuthStatus>(
+  user: null,
+  status: S,
+): Extract<AuthState, { status: S }>;
 export function authState(
   user: CurrentUser | null,
   status: AuthStatus = user === null ? "anonymous" : "authenticated",
 ): AuthState {
-  return {
-    status,
-    user: status === "authenticated" ? user : null,
-    identities: [],
-    error: null,
-    refresh: () => Promise.resolve(),
-    signOut: () => Promise.resolve(),
-  };
+  const actions = { refresh: () => Promise.resolve(), signOut: () => Promise.resolve() };
+  if (status === "authenticated" && user !== null)
+    return { ...actions, status, user, identities: [], error: null };
+  if (status === "failed")
+    return {
+      ...actions,
+      status,
+      user: null,
+      identities: [],
+      error: new Error("fixture read failed"),
+    };
+  if (status === "authenticated") throw new Error("authenticated fixtures require a user");
+  return { ...actions, status, user: null, identities: [], error: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -66,17 +78,19 @@ export function authState(
 
 export function voyage(overrides: Partial<VoyageSummary> = {}): VoyageSummary {
   return {
+    cover_url: null,
+    photos_pending: false,
     id: "0192f0c2-aaaa-7c3d-8e4f-5a6b7c8d9e0f",
     owner_id: ADA.id,
     title: "Three weeks in Hokkaido",
     description: "Ferries, snow, and a great deal of ramen.",
     published: true,
     granularity: "km1",
-    granularity_label: "~1 km",
-    precision_m: 1000,
     created_at: "2026-08-01T10:00:00Z",
     published_at: "2026-08-02T10:00:00Z",
     ...overrides,
+    granularity_label: GRANULARITY_LABEL[overrides.granularity ?? "km1"],
+    precision_m: GRANULARITY_PRECISION[overrides.granularity ?? "km1"],
   };
 }
 
@@ -153,10 +167,7 @@ export interface RenderScreenOptions {
   auth?: AuthState;
 }
 
-export function renderScreen(
-  ui: ReactElement,
-  options: RenderScreenOptions = {},
-): RenderResult {
+export function renderScreen(ui: ReactElement, options: RenderScreenOptions = {}): RenderResult {
   const { path = "/", route, auth = authState(null) } = options;
 
   const client = new QueryClient({

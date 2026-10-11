@@ -1,22 +1,4 @@
-/**
- * Button — implements `design/components/buttons.html`.
- *
- * Four variants, three sizes, plus the icon-only, loading and disabled states
- * drawn in the design file. Every appearance below comes from `.pv-btn` and its
- * modifiers in `design/components.css`; this file chooses which of those class
- * names apply and nothing else.
- *
- * Two behaviors are worth knowing about:
- *
- *  - **Icon-only requires an accessible name.** The type below will not compile
- *    without an `aria-label` when `iconOnly` is set. An icon with no accessible
- *    name is unusable with a screen reader, and it is the most common
- *    accessibility defect in interfaces of this kind.
- *  - **Loading suppresses the click.** The design system sets
- *    `pointer-events: none` on a loading button, which stops the mouse but not
- *    the keyboard — Enter on a focused button still fires. The handler is
- *    guarded here so "loading" means the same thing to both.
- */
+/** Button uses the shared runtime styles and accessible native controls. */
 
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
 
@@ -25,8 +7,7 @@ import { cx } from "./cx";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
-interface ButtonBase
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {
+interface ButtonBase extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {
   variant?: ButtonVariant;
   /** 32px, 40px (default), 48px. All three keep a 44px touch target. */
   size?: ButtonSize;

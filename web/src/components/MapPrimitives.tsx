@@ -1,14 +1,4 @@
-/**
- * Map primitives — from `design/components/map-primitives.html`.
- *
- * Presentational only. Phase 7 owns MapLibre; what these establish is the
- * marker geometry and the dimensions that map has to fit into, so the layout is
- * genuinely exercised at both breakpoints before a real map arrives.
- *
- * Positions are inline `left`/`top`, exactly as the design specimens set them.
- * That is data — where a marker is — not styling, and a real map will be
- * feeding the same two numbers from a projection.
- */
+/** MapPrimitives uses the shared runtime styles and accessible native controls. */
 
 import type { CSSProperties, ReactNode } from "react";
 
@@ -211,11 +201,7 @@ export function Attribution({ dark = false, children, className }: AttributionPr
       {children ?? (
         <>
           ©{" "}
-          <a
-            href="https://www.openstreetmap.org/copyright"
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
             OpenStreetMap
           </a>{" "}
           contributors

@@ -1,10 +1,4 @@
-/**
- * Badge — from `design/components/feedback.html`.
- *
- * The draft badge matters more than it looks. A voyage is world-readable the
- * moment it is published, and this is the persistent reminder of which side of
- * that line the current voyage sits on.
- */
+/** Badge uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode } from "react";
 

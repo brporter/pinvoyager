@@ -57,9 +57,7 @@ describe("TextField", () => {
     expect(screen.getByLabelText("Voyage title")).toHaveAccessibleDescription(
       "A title is required.",
     );
-    expect(screen.getByLabelText("Location name")).toHaveAccessibleDescription(
-      "Unknown place.",
-    );
+    expect(screen.getByLabelText("Location name")).toHaveAccessibleDescription("Unknown place.");
   });
 
   it("accepts typing", async () => {
@@ -185,9 +183,7 @@ describe("Switch", () => {
 
   it("toggles on click, Space and Enter", async () => {
     const onCheckedChange = vi.fn();
-    render(
-      <Switch checked={false} onCheckedChange={onCheckedChange} label="Publish voyage" />,
-    );
+    render(<Switch checked={false} onCheckedChange={onCheckedChange} label="Publish voyage" />);
 
     const control = screen.getByRole("switch");
     await userEvent.click(control);
@@ -219,14 +215,7 @@ describe("Switch", () => {
 
   it("does not toggle, and leaves the tab order, when disabled", async () => {
     const onCheckedChange = vi.fn();
-    render(
-      <Switch
-        checked
-        disabled
-        onCheckedChange={onCheckedChange}
-        label="Publish voyage"
-      />,
-    );
+    render(<Switch checked disabled onCheckedChange={onCheckedChange} label="Publish voyage" />);
 
     const control = screen.getByRole("switch");
     await userEvent.click(control);

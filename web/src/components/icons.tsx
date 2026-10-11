@@ -1,15 +1,4 @@
-/**
- * The icon set drawn in `design/components/`.
- *
- * Every path here is copied from a design file rather than redrawn, so the
- * component and the specimen it implements are the same shape. Icons are
- * always `aria-hidden` and `focusable={false}`: they are decoration beside an
- * accessible name, never the name itself. That is why `Button` requires an
- * `aria-label` when it renders nothing but an icon.
- *
- * Color comes from `currentColor`, so an icon inherits whatever the
- * design-system class on its container decided. No icon sets its own color.
- */
+/** icons uses the shared runtime styles and accessible native controls. */
 
 import type { ReactNode, SVGProps } from "react";
 
@@ -18,11 +7,7 @@ export interface IconProps extends Omit<SVGProps<SVGSVGElement>, "children"> {
   size?: number;
 }
 
-function icon(
-  viewBox: string,
-  body: ReactNode,
-  defaults: SVGProps<SVGSVGElement> = {},
-) {
+function icon(viewBox: string, body: ReactNode, defaults: SVGProps<SVGSVGElement> = {}) {
   return function Icon({ size = 16, ...rest }: IconProps) {
     return (
       <svg

@@ -1,18 +1,5 @@
-/**
- * Avatar — from `design/components/navigation.html`.
- *
- * The initials fallback is not an edge case. Providers do not reliably return a
- * picture, and Apple supplies the user's name only on the very first
- * authorization — so `CurrentUser` has `display_name: string | null` and
- * `avatar_url: string | null`, and an account can legitimately have neither.
- * This component therefore has three renderings, not two: picture, initials,
- * and a person glyph when there is nothing at all to derive initials from.
- *
- * Known design-system gap: `design/components.css` has no rule sizing an
- * `<img>` inside `.pv-avatar`, so a real provider picture is not yet clipped to
- * the circle. The design file mocks the picture case with a CSS gradient class
- * (`pv-img-4`) rather than an image, which is why the rule was never needed.
- */
+import { initialsOf } from "./initials";
+/** Avatar uses the shared runtime styles and accessible native controls. */
 
 import { cx } from "./cx";
 import { PersonIcon } from "./icons";
@@ -33,19 +20,6 @@ export interface AvatarProps {
 
 /** First letters of the first two words, which is what the design draws ("BP").
  *  Returns null rather than a placeholder character when there is no name. */
-export function initialsOf(name: string | null | undefined): string | null {
-  if (name == null) return null;
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return null;
-  const letters = [words[0], words.length > 1 ? words[words.length - 1] : undefined]
-    .filter((word): word is string => word !== undefined)
-    // `filter(Boolean)` above guarantees each selected word has at least one
-    // code point; keep the non-null assertion so initials preserve emoji.
-    .map((word) => [...word][0]!)
-    .join("");
-  return letters.toLocaleUpperCase();
-}
-
 export function Avatar({ name, src, size = "md", label, className }: AvatarProps) {
   const initials = initialsOf(name);
   const naming =
@@ -54,10 +28,7 @@ export function Avatar({ name, src, size = "md", label, className }: AvatarProps
       : { role: "img" as const, "aria-label": label };
 
   return (
-    <span
-      {...naming}
-      className={cx("pv-avatar", size === "lg" && "pv-avatar--lg", className)}
-    >
+    <span {...naming} className={cx("pv-avatar", size === "lg" && "pv-avatar--lg", className)}>
       {src != null && src !== "" ? (
         <img src={src} alt="" />
       ) : initials != null ? (

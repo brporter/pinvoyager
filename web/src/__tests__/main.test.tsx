@@ -51,16 +51,20 @@ describe("application startup", () => {
     expect(mocks.rootRender.mock.calls[0]?.[0].type).toBe(StrictMode);
   });
 
-  it("does not retry unauthorized queries and retries one other failure", async () => {
+  it("does not retry unauthorized queries and retries transient failures twice", async () => {
     document.body.innerHTML = '<div id="root"></div>';
     mocks.createRoot.mockReturnValue({ render: mocks.rootRender });
     await import("../main");
 
     const retry = mocks.clientOptions?.defaultOptions.queries.retry;
     expect(retry).toBeTypeOf("function");
-    expect(retry?.(0, new Response(null, { status: 401 }))).toBe(false);
-    expect(retry?.(0, new Response(null, { status: 500 }))).toBe(true);
+    const { ApiRequestError } = await import("../api/client");
+    const error = (status: number) =>
+      new ApiRequestError({ status, code: "test", message: "test", requestId: null });
+    expect(retry?.(0, error(401))).toBe(false);
+    expect(retry?.(0, error(404))).toBe(false);
+    expect(retry?.(0, error(500))).toBe(true);
     expect(retry?.(0, new Error("network failure"))).toBe(true);
-    expect(retry?.(1, new Error("already retried"))).toBe(false);
+    expect(retry?.(2, new Error("already retried twice"))).toBe(false);
   });
 });
