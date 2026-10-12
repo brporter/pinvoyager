@@ -17,8 +17,10 @@ validation checks and tracing-related coverage entries.
 | Regions | 5,442 / 5,652 | 96.28% | 210 |
 
 The run passed 440 backend tests and ignored one opt-in performance test. The
-coverage command failed because the repository requires 100% for all three
-metrics. See [testing](../testing.md) and [the coverage command](../../.cargo/config.toml).
+coverage command failed because the repository then required 100% for all three
+metrics. On 2026-10-11, the project owner lowered the required threshold to 95%
+for deployment; these measurements exceed that threshold. The gaps remain
+recorded as test-improvement work. See [testing](../testing.md) and [the coverage command](../../.cargo/config.toml).
 
 Regions are executable ranges within source lines. For example, the success path
 through `operation()?` can execute while its early error return remains

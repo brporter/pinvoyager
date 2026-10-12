@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+FROM node:24-alpine AS builder
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+COPY design/ /app/design/
+ARG VITE_TILE_URL
+# Production builds require an explicitly chosen tile source.
+RUN test -n "$VITE_TILE_URL"
+ENV VITE_TILE_URL=${VITE_TILE_URL}
+RUN npm run build
+
+FROM nginx:stable-alpine
+COPY deploy/nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/web/dist /usr/share/nginx/html
+USER nginx
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=3s --start-period=15s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+ENTRYPOINT ["nginx", "-g", "daemon off;"]

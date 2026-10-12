@@ -1,0 +1,17 @@
+# Append these sites to /opt/shared/Caddyfile on shell.betaporter.dev.
+pinvoyager.com {
+    handle /auth/callback {
+        reverse_proxy pinvoyager-web:8080
+    }
+    @api path /api /api/* /auth /auth/* /health /ready
+    handle @api {
+        reverse_proxy pinvoyager-api:8080
+    }
+    handle {
+        reverse_proxy pinvoyager-web:8080
+    }
+}
+
+www.pinvoyager.com {
+    redir https://pinvoyager.com{uri} permanent
+}

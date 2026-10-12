@@ -1,0 +1,59 @@
+name: pinvoyager
+services:
+  api:
+    image: ghcr.io/brporter/pinvoyager-api:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PINVOYAGER__DATABASE__URL: postgres://pinvoyager:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/pinvoyager
+      PINVOYAGER__AUTH__BASE_URL: https://pinvoyager.com
+      PINVOYAGER__AUTH__SESSION__COOKIE_SECURE: "true"
+      PINVOYAGER__AUTH__DEV_LOGIN: "false"
+      PINVOYAGER__DATABASE__MAX_CONNECTIONS: "10"
+      PINVOYAGER__DATABASE__MIN_CONNECTIONS: "1"
+      PINVOYAGER__DATABASE__ACQUIRE_TIMEOUT_SECS: "5"
+      PINVOYAGER__SERVER__SHUTDOWN_TIMEOUT_SECS: "30"
+      PINVOYAGER__TELEMETRY__LOG_LEVEL: info
+      PINVOYAGER__TELEMETRY__JSON: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    stop_grace_period: 75s
+    volumes:
+      - uploads:/data
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      default: {}
+      web:
+        aliases: [pinvoyager-api]
+  frontend:
+    image: ghcr.io/brporter/pinvoyager-web:latest
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      web:
+        aliases: [pinvoyager-web]
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pinvoyager
+      POSTGRES_DB: pinvoyager
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pinvoyager -d pinvoyager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+volumes:
+  pgdata:
+  uploads:
+networks:
+  web:
+    external: true

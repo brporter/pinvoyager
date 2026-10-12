@@ -24,8 +24,7 @@ dist/
 **/dist/
 .vite/
 
-# Browser styles — not used by the API image
-design/
+# Shared styles also build the production frontend image.
 
 # Documentation
 docs/

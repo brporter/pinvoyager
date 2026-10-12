@@ -16,7 +16,10 @@ The mobile voyage layout offsets attribution above its photo sheet. Attribution
 styles come from `design/components.css`; the same component is used by discovery,
 voyage, precision preview, and upload review maps.
 
-The project limits this source to development. The service's own usage terms are
+The project normally limits this source to development. On 2026-10-11, the
+project owner explicitly authorized this existing source for the initial
+`pinvoyager.com` production deployment. This exception does not authorize bulk
+downloads or change the provider terms. The service's own usage terms are
 published in the [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/).
 The repository's development restriction is a project constraint, separate from
 the provider's terms. Changing the tile URL changes the applicable provider terms.

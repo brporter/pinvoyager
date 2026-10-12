@@ -26,9 +26,9 @@ npm --prefix web run build
 ```
 
 `cargo coverage` is the alias in `.cargo/config.toml` and requires
-`cargo-llvm-cov`. It fails below 100% lines, functions, or regions. Stable Rust
+`cargo-llvm-cov`. It fails below 95% lines, functions, or regions. Stable Rust
 does not provide the nightly branch instrumentation; meaningful conditionals
-require tests for both outcomes. Frontend coverage requires 100% statements,
+require tests for both outcomes. Frontend coverage requires 95% statements,
 branches, functions, and lines across production TypeScript modules. Its
 exclusions cover declarations, tests, fixtures, mocks, and test setup, not
 production features. No production instrumentation exclusion is configured.

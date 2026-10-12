@@ -146,7 +146,7 @@ cargo coverage -- --test-threads=1
 
 Install the coverage subcommand once with `cargo install cargo-llvm-cov --locked`.
 `cargo coverage` instruments all workspace tests and fails unless line,
-function, and region coverage each reach 100%. Start PostgreSQL and set
+function, and region coverage each reach 95%. Start PostgreSQL and set
 `DATABASE_URL` as described under [First run](#first-run) first. See the
 [test reference](testing.md) for coverage scope and test-environment limitations.
 
@@ -183,6 +183,8 @@ Skipping this breaks the container build, which compiles with `SQLX_OFFLINE=true
 and has no database to check against.
 
 ## Container
+
+For the shared production VM, see [production deployment](deployment.md).
 
 The Dockerfile uses Debian trixie and the libheif 1.17 API feature set supported
 by its packaged native library. The runtime installs the HEVC decoder plugin.

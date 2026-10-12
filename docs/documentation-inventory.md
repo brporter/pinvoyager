@@ -28,6 +28,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 
 | Document | Purpose |
 | --- | --- |
+| [Production deployment](deployment.md) | GHCR publication, VM containers, Caddy routing, credentials, verification, persistence, and rollback. |
 | [Running locally](running.md) | Native dependencies, PostgreSQL, configuration, startup, development login, SQL metadata, and persistent container storage. |
 | [Testing](testing.md) | Backend/frontend commands, coverage scope, focused suites, native fixtures, and browser-test boundaries. |
 | [Backend coverage gaps](todo/coverage-gaps.md) | Dated coverage shortfall, untested failure paths, instrumentation uncertainty, and reproduction commands. |
@@ -43,7 +44,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | [Repository README](../README.md) | Product summary, source layout, stack, and documentation links. |
 | [Web README](../web/README.md) | Frontend startup, proxy behavior, styling inputs, and check commands. |
 | [Contributor guide](../AGENTS.md) | Repository constraints, communication and writing guidance, test-first delivery, and coverage requirements. |
-| [This inventory](documentation-inventory.md) | Index of all 22 Markdown documents. |
+| [This inventory](documentation-inventory.md) | Index of maintained Markdown documents. |
 
 ## Supporting implementation references
 

@@ -208,8 +208,9 @@ Map component tests use a substitute, while a separate test compares geometry
 with the installed MapLibre implementation. CI runs formatting, types, lint,
 coverage, and the frontend build.
 
-The container builds the API and mounts upload storage at `/data`. Compose also
-runs PostgreSQL and optional development tracing. Production frontend serving,
-TLS/proxy configuration, backups, and release tile hosting are outside the
-implemented deployment configuration. [Documentation inventory](documentation-inventory.md)
+The API container mounts upload storage at `/data`. Local Compose also runs
+PostgreSQL and development tracing. Production uses separate non-root API and
+frontend images, private PostgreSQL, shared Caddy TLS, and Watchtower updates
+from GHCR. See [production deployment](deployment.md). Scheduled backups and
+release tile hosting remain external configuration requirements. [Documentation inventory](documentation-inventory.md)
 lists every maintained document and its purpose.

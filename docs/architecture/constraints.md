@@ -9,7 +9,7 @@ overview](../architecture.md) for modules, routes, and data flow.
 | D1 | Authentication is delegated to providers. The application stores no passwords or long-lived provider access/refresh tokens. Session hashes, short-lived authorization attempts, and configured provider secrets exist. |
 | D2 | A verified provider identity signs in to its existing account or creates an account. There is no separate password signup path. |
 | D3 | Identities match on provider and subject, never email. Linking another provider requires an authenticated account. |
-| D4, D4a | MapLibre uses OpenStreetMap raster tiles for development. Attribution is visible and requests use normal browser caching and an origin Referer. This tile configuration is limited to development by project policy. |
+| D4, D4a | MapLibre uses OpenStreetMap raster tiles for development. Attribution is visible and requests use normal browser caching and an origin Referer. This tile configuration is normally limited to development by project policy; the owner authorized it for the initial production deployment on 2026-10-11 (see the tile policy reference). |
 | D5 | The application performs no geocoding. Place context comes from basemap labels. |
 | D6 | Published voyages are public; drafts return 404 to non-owners. Public voyage coordinates use the voyage's granularity. Exact coordinates remain available in owner-only photo metadata. Originals are never served. |
 | D7 | Image paths derive from content hashes. The authorized HTTP handler serves only re-encoded WebP variants with controlled response headers. Variant responses are private and must revalidate authorization before reuse. |
