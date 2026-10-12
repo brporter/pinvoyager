@@ -3,7 +3,7 @@
 [`http/auth.rs::routes`](../../crates/api/src/http/auth.rs) registers provider start,
 GET/POST callback, provider-link start, logout, and current-user endpoints.
 Google and Microsoft use OpenID Connect; Apple uses an OIDC form callback and
-signed client secret; Facebook uses OAuth code exchange and provider identity lookup.
+signed client secret. These are the three supported authentication providers.
 
 ```mermaid
 sequenceDiagram
@@ -46,3 +46,71 @@ loads current-user data and requires a unique name when it is absent. See
 
 Debug builds can expose `/auth/dev/login` when enabled in configuration. The route
 is absent from release builds. See [local sign-in](../running.md#signing-in-without-provider-credentials).
+
+## Microsoft personal and organizational accounts
+
+With the `https://login.microsoftonline.com/common/v2.0` authority and an app
+registration supporting organizational and personal Microsoft accounts, sign-in
+and account linking accept personal accounts and work or school accounts from any
+Microsoft Entra tenant. See [deployment configuration](../deployment.md#microsoft).
+Existing tenant-specific configurations continue to use exact issuer matching.
+
+`crates/api/src/auth/providers/oidc.rs::microsoft_common` enables this behavior
+only for the Microsoft provider at the exact HTTPS common v2 authority.
+`discover_microsoft_metadata` fetches discovery and JWKS at startup, requires the
+published `https://login.microsoftonline.com/{tenantid}/v2.0` issuer template,
+and caches signing keys with their Microsoft `issuer` restrictions preserved.
+Authorization and code exchange use the discovered common endpoints.
+
+`microsoft_token_issuer` reads the unverified token's `tid` only to construct
+verification inputs. It requires a canonical UUID and substitutes it into the
+fixed Microsoft issuer template; the token cannot supply a metadata URL or host.
+`OidcCore::verification_client` includes only signing keys whose issuer is that
+exact tenant issuer or Microsoft's tenant-independent issuer template.
+`openidconnect::IdToken::claims` then checks the signature, exact token issuer,
+audience, expiry, and stored nonce before the subject becomes an identity.
+The provider/subject identity key stays unchanged, so existing Microsoft identities
+continue to resolve to their accounts. No email matching or additional provider
+credentials are stored.
+
+An unknown signing key triggers the existing JWKS refresh, at most once every
+five minutes, and one verification retry. Refresh preserves key issuer restrictions.
+Provider HTTP requests retain the ten-second timeout and do not follow redirects.
+
+`crates/api/src/auth/providers/oidc_tests.rs::microsoft_accepts_personal_and_business_accounts`
+exchanges signed tokens for the personal-account tenant and an organizational
+tenant. The companion `microsoft_rejects_invalid_tenants_issuers_and_security_claims`,
+`microsoft_requires_a_signing_key_scoped_to_the_token_issuer`,
+`microsoft_discovery_rejects_an_unexpected_issuer`, and
+`microsoft_key_refresh_preserves_key_issuer_restrictions` tests cover tenant,
+issuer, signature, audience, expiry, nonce, discovery, and key refresh validation.
+These tests use the local signed-token provider in `crates/api/tests/support/mod.rs`;
+they do not establish that a live Entra registration has been configured correctly.
+
+## Removing the retired provider
+
+Facebook sign-in and account linking are removed. Only Google, Microsoft, and
+Apple appear in the sign-in screen, Settings, API provider types, and provider
+registry. `crates/api/src/auth/provider.rs::ProviderKind::parse` rejects the
+retired provider, so its start and callback requests return 404; authenticated
+link requests also return 404. The frontend callback parser no longer recognizes
+it or offers a retry for it.
+
+`crates/api/migrations/20261011000001_remove_facebook_auth.sql` deletes retired
+provider identity links and pending authorization attempts and restricts both
+provider columns to the three supported values. API startup applies the migration
+through `crates/api/src/db/mod.rs::migrate`. Previously applied migrations retain
+their original contents to preserve sqlx checksums. No users, voyages, photos,
+or sessions are deleted. Existing sessions continue to work until revoked or
+expired; users can link a supported provider in Settings while signed in.
+Accounts that had only the retired identity cannot sign in again without a
+supported identity linked to that same account. Matching by email remains prohibited.
+
+Regression tests live in
+`crates/api/src/auth/provider_tests.rs::removed_provider_is_not_recognized`,
+`crates/api/tests/provider_removal.rs::removing_a_provider_preserves_users_sessions_and_other_identities`,
+`crates/api/tests/auth_flow.rs::retired_provider_start_callback_and_link_requests_return_not_found`,
+`web/src/auth/__tests__/SignIn.test.tsx`, `web/src/auth/__tests__/AuthCallback.test.tsx`, and
+`web/src/screens/__tests__/Settings.test.tsx`. The migration test starts with the
+old auth schema, verifies that retained rows survive, and checks that the database
+rejects the retired provider while accepting each supported provider.

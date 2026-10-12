@@ -200,7 +200,7 @@ function ProfileSection({
 
 function ProvidersSection({ identities }: { identities: readonly LinkedProvider[] }) {
   const linked = new Map(identities.map((identity) => [identity.provider, identity]));
-  const names = { google: "Google", microsoft: "Microsoft", apple: "Apple", facebook: "Facebook" };
+  const names = { google: "Google", microsoft: "Microsoft", apple: "Apple" };
   return (
     <Section
       title="Sign-in methods"

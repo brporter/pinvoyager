@@ -124,27 +124,38 @@ Source: [Google OpenID Connect setup](https://developers.google.com/identity/ope
 
 ### Microsoft
 
-In Microsoft Entra's App registrations, create a registration and add a **Web**
-redirect URI: `https://pinvoyager.com/auth/microsoft/callback`. Under Certificates
-& secrets, create a client secret and save its **value**, not its ID. Save the
-Application (client) ID and Directory (tenant) ID.
+In Microsoft Entra's App registrations, select **Accounts in any organizational
+directory and personal Microsoft accounts** (`AzureADandPersonalMicrosoftAccount`)
+as the supported account type. For an existing registration, update its supported
+account types while retaining its Application (client) ID. Add a **Web** redirect
+URI: `https://pinvoyager.com/auth/microsoft/callback`. Under Certificates & secrets,
+create a client secret and save its **value**, not its ID.
 
-The current `auth/providers/oidc.rs::OidcCore::discover` requires the discovered
-issuer to equal the configured issuer exactly. Use a specific tenant's issuer:
+Configure the common v2 authority to allow personal accounts and work or school
+accounts from any Microsoft Entra tenant:
 
 ```dotenv
 PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__CLIENT_ID=your-application-id
 PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__CLIENT_SECRET=your-secret-value
-PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__ISSUER=https://login.microsoftonline.com/your-tenant-id/v2.0
+PINVOYAGER__AUTH__PROVIDERS__MICROSOFT__ISSUER=https://login.microsoftonline.com/common/v2.0
 ```
 
-This configures sign-in for that tenant. Do not use `common` or `organizations`
-with the existing exact-issuer implementation; broad organizational/personal
-Microsoft account support needs additional provider implementation and tests.
-Choose the tenant's supported account type in the registration for the initial
-configuration.
+Restart the API after changing these settings. Both the registration's supported
+account types and the configured authority must allow these accounts. An
+organization can still require administrator consent or restrict application
+access through its own policies. A tenant-specific issuer remains supported for
+installations that intentionally restrict sign-in to one tenant. `organizations`
+and `consumers` authorities are not supported by the common-authority implementation.
 
-Source: [Microsoft web redirect configuration](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri).
+`auth/providers/oidc.rs::discover_microsoft_metadata` checks Microsoft's issuer
+template during startup. `OidcCore::verification_client` substitutes a validated
+UUID tenant ID, restricts signing keys to that issuer, and keeps the library's
+signature, issuer, audience, expiry, and nonce checks. See
+[authentication flow](architecture/auth-flow.md) for validation and test references.
+
+Sources: [Microsoft authority and issuer validation](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens),
+[supported account types](https://learn.microsoft.com/en-us/entra/identity-platform/supported-accounts-validation),
+and [web redirect configuration](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri).
 
 ### Apple
 

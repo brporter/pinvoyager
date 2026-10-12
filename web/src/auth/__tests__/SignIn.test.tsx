@@ -51,11 +51,12 @@ describe("SignIn", () => {
         screen.getByRole("heading", { name: "Sign in or create an account" }),
       ).toBeInTheDocument();
       expect(screen.getByText(/Every voyage you create is public/)).toBeInTheDocument();
-      for (const provider of ["Google", "Apple", "Microsoft", "Facebook"]) {
+      for (const provider of ["Google", "Apple", "Microsoft"]) {
         expect(
           screen.getByRole("button", { name: `Continue with ${provider}` }),
         ).toBeInTheDocument();
       }
+      expect(screen.queryByRole("button", { name: /Facebook/i })).not.toBeInTheDocument();
       expect(screen.queryByLabelText(/email|password/i)).not.toBeInTheDocument();
     },
   );
@@ -98,7 +99,9 @@ describe("SignIn", () => {
     );
     expect(screen.getByRole("button", { name: "Continue with Apple" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Continue with Microsoft" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Continue with Facebook" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Continue with Facebook" }),
+    ).not.toBeInTheDocument();
   });
 
   it("omits the development sign-in form when the production flag is false", () => {

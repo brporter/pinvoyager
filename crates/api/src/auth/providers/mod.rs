@@ -1,11 +1,9 @@
-//! The four provider implementations behind [`AuthProvider`].
+//! The three provider implementations behind [`AuthProvider`].
 //!
 //! [`AuthProvider`]: crate::auth::AuthProvider
 //!
-//! Three of them (Google, Microsoft, Apple) are OIDC and share [`oidc::OidcCore`];
-//! Facebook is not OIDC at all and has no ID token to verify, so it talks to the
-//! Graph API instead. Apple mints signed client secrets and uses a form-POST
-//! callback — see [`apple`].
+//! Google, Microsoft, and Apple share [`oidc::OidcCore`]. Apple mints signed
+//! client secrets and uses a form-POST callback — see [`apple`].
 //!
 //! ## What "verified" means, and where it happens
 //!
@@ -14,7 +12,7 @@
 //!
 //! - **signature** against the JWKS fetched at discovery, restricted to the
 //!   algorithms the provider's own metadata advertises;
-//! - **`iss`** against the issuer in the discovery document;
+//! - **`iss`** against the discovered issuer (Microsoft common substitutes the validated tenant);
 //! - **`aud`** against our `client_id`;
 //! - **`exp`** (and `iat`) against the clock;
 //! - **`nonce`** against the value we stored in the pending attempt.
@@ -31,7 +29,6 @@
 //! [`VerifiedIdentity`]: crate::auth::VerifiedIdentity
 
 pub(crate) mod apple;
-pub(crate) mod facebook;
 pub(crate) mod oidc;
 
 use std::time::Duration;
@@ -63,7 +60,7 @@ pub(crate) fn callback_uri(base_url: &Url, kind: ProviderKind) -> Result<Redirec
 }
 
 /// The HTTP client every provider call goes through — discovery, JWKS, token
-/// endpoints and Facebook's Graph API alike.
+/// endpoints alike.
 ///
 /// `redirect::Policy::none()` is not a detail: `oauth2` documents that following
 /// redirects on these requests turns the client into an SSRF gadget, because a

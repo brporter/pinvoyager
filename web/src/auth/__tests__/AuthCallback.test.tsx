@@ -129,9 +129,9 @@ describe("/auth/callback", () => {
     await waitFor(() => expect(location()).toBe("/settings"));
   });
 
-  it("does not offer a provider restart for an unrecognized provider", () => {
+  it.each(["not-a-provider", "facebook"])("does not offer a restart for %s", (provider) => {
     stubMe(401);
-    renderAt("/auth/callback?status=conflict&provider=not-a-provider");
+    renderAt(`/auth/callback?status=conflict&provider=${provider}`);
 
     expect(screen.queryByRole("button", { name: /Sign in with/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();

@@ -1,7 +1,5 @@
 use super::*;
-use crate::config::{
-    AppleProviderConfig, AuthConfig, FacebookProviderConfig, OidcProviderConfig, ProvidersConfig,
-};
+use crate::config::{AppleProviderConfig, AuthConfig, OidcProviderConfig, ProvidersConfig};
 use secrecy::SecretString;
 
 use crate::test_support as support;
@@ -78,10 +76,6 @@ async fn every_configured_provider_is_discovered_registered_and_authorizable() {
                 key_id: "KEYID67890".to_owned(),
                 private_key_pem: SecretString::from(APPLE_TEST_KEY),
             }),
-            facebook: Some(FacebookProviderConfig {
-                client_id: "facebook-client".to_owned(),
-                client_secret: SecretString::from("facebook-secret"),
-            }),
         },
         dev_login: false,
     };
@@ -95,7 +89,6 @@ async fn every_configured_provider_is_discovered_registered_and_authorizable() {
             ProviderKind::Google,
             ProviderKind::Microsoft,
             ProviderKind::Apple,
-            ProviderKind::Facebook,
         ]
     );
     for kind in registry.configured() {
@@ -138,8 +131,13 @@ fn every_protocol_provider_maps_to_its_storage_provider() {
         (ProviderKind::Google, DbProvider::Google),
         (ProviderKind::Microsoft, DbProvider::Microsoft),
         (ProviderKind::Apple, DbProvider::Apple),
-        (ProviderKind::Facebook, DbProvider::Facebook),
     ] {
         assert_eq!(DbProvider::from(protocol), storage);
     }
+}
+
+#[test]
+fn removed_provider_is_not_recognized() {
+    assert_eq!(ProviderKind::parse("facebook"), None);
+    assert_eq!(DISPLAY_ORDER.len(), 3);
 }

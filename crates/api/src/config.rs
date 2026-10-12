@@ -102,11 +102,7 @@ pub struct AuthConfig {
     pub base_url: Url,
     #[serde(default)]
     pub session: SessionConfig,
-    /// **Every provider is optional.** A deployment configures the ones it has
-    /// credentials for, and the service starts with the rest disabled rather
-    /// than refusing to boot. This is not just developer convenience: obtaining
-    /// four sets of OAuth credentials is a serialized, human-gated process, and
-    /// a service that cannot start until all four exist cannot be worked on.
+    /// Every provider is optional. The service starts with any subset configured.
     /// An unconfigured provider's endpoints return 404.
     #[serde(default)]
     pub providers: ProvidersConfig,
@@ -116,7 +112,7 @@ pub struct AuthConfig {
     ///
     /// **This is a complete authentication bypass.** Anyone who can reach the
     /// endpoint can become any account. It exists so the rest of the product
-    /// can be built and tested before four sets of OAuth credentials are in
+    /// can be built and tested before provider credentials are in
     /// hand, and it is defended in three independent layers:
     ///
     /// 1. The handler and its route are behind `#[cfg(debug_assertions)]`, so
@@ -150,7 +146,6 @@ pub struct ProvidersConfig {
     pub google: Option<OidcProviderConfig>,
     pub microsoft: Option<OidcProviderConfig>,
     pub apple: Option<AppleProviderConfig>,
-    pub facebook: Option<FacebookProviderConfig>,
 }
 
 /// A standards-conformant OIDC provider: discovery document, JWKS, ID token.
@@ -174,14 +169,6 @@ pub struct AppleProviderConfig {
     pub key_id: String,
     /// Contents of the .p8 file, PEM-encoded PKCS#8.
     pub private_key_pem: SecretString,
-}
-
-/// Facebook is OAuth2, not OIDC. There is no ID token to verify; the subject
-/// comes from a Graph API call.
-#[derive(Debug, Deserialize)]
-pub struct FacebookProviderConfig {
-    pub client_id: String,
-    pub client_secret: SecretString,
 }
 
 #[derive(Debug, Deserialize)]

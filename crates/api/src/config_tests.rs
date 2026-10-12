@@ -32,7 +32,6 @@ fn serde_applies_defaults_to_optional_configuration_sections() {
     assert!(providers.google.is_none());
     assert!(providers.microsoft.is_none());
     assert!(providers.apple.is_none());
-    assert!(providers.facebook.is_none());
 }
 
 #[test]

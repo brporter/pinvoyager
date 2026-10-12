@@ -771,3 +771,34 @@ async fn unknown_and_unconfigured_provider_routes_remain_not_found(pool: PgPool)
         StatusCode::NOT_FOUND
     );
 }
+
+#[sqlx::test]
+async fn retired_provider_start_callback_and_link_requests_return_not_found(pool: PgPool) {
+    let provider = MockOidcProvider::start().await;
+    let root = ScratchRoot::new();
+    let app = app(pool, provider.issuer(), &root).await;
+    let flow = start_flow(&app, provider.issuer(), "/settings").await;
+    let code = provider.token().nonce(&flow.nonce).issue();
+    let session = complete_sign_in(&app, "google", &flow, &code).await;
+    for (method, uri) in [
+        ("GET", "/auth/facebook/start"),
+        ("GET", "/auth/facebook/callback?state=unused&code=unused"),
+        ("POST", "/auth/link/facebook"),
+    ] {
+        assert_eq!(
+            send(&app, method, uri, Some(&session)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+    assert_eq!(
+        send_form(
+            &app,
+            "/auth/facebook/callback",
+            Some(&session),
+            "state=unused&code=unused"
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+}

@@ -5,7 +5,7 @@
  *
  * It posts a name to `POST /auth/dev/login` and receives a session for it. No
  * provider, no `state`, no PKCE, no ID token, no signature. It exists because
- * obtaining credentials for four providers is a serialized, human-gated process
+ * obtaining credentials for three providers is a serialized, manual process
  * — Apple alone needs a paid developer account — and without it nobody can sign
  * in on a development machine at all, which makes every signed-in screen in
  * this application unbuildable and untestable.

@@ -240,7 +240,7 @@ struct Callback<'a> {
     error: Option<&'a str>,
 }
 
-/// The ordinary redirect callback: Google, Microsoft, Facebook.
+/// The ordinary redirect callback: Google and Microsoft.
 async fn callback(
     State(state): State<AppState>,
     Path(provider): Path<String>,
@@ -453,7 +453,7 @@ async fn complete(
     let provider = state.providers.get(kind).ok_or(AppError::NotFound)?;
 
     // Verification lives behind this call: JWKS signature, `iss`, `aud`, `exp`
-    // and `nonce` for the OIDC three, a Graph lookup for Facebook. Whatever
+    // and `nonce` for all three OIDC providers. Whatever
     // fails inside it reaches the client as the same sentence.
     let identity = provider
         .exchange(code, &attempt.pkce_verifier, &attempt.nonce)
@@ -752,8 +752,7 @@ const BINDING_COOKIE: &str = "pv_auth_binding";
 ///
 /// * **`SameSite=None`.** Apple's callback is a cross-site form POST, and a
 ///   `Lax` cookie is not sent on one — every Apple sign-in would fail the
-///   binding check. `None` is what makes the mechanism work across all four
-///   providers rather than three.
+///   binding check. `None` allows both redirect and form callbacks to carry it.
 /// * **`Secure`.** Mandatory alongside `SameSite=None`; browsers reject the
 ///   combination otherwise. Set unconditionally rather than from
 ///   `cookie_secure`, because a `SameSite=None` cookie without `Secure` is not

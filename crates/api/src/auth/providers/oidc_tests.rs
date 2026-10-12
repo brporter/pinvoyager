@@ -225,3 +225,258 @@ async fn stopped_provider_is_reported_at_discovery_exchange_and_key_refresh() {
     .await;
     assert!(matches!(discovered, Err(AuthError::Configuration(_))));
 }
+
+const PERSONAL_TENANT: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
+const BUSINESS_TENANT: &str = "11111111-2222-3333-4444-555555555555";
+
+#[test]
+fn only_microsoft_common_uses_tenant_independent_discovery() {
+    for (kind, url, expected) in [
+        (
+            ProviderKind::Microsoft,
+            "https://login.microsoftonline.com/common/v2.0",
+            true,
+        ),
+        (
+            ProviderKind::Microsoft,
+            "https://login.microsoftonline.com/common/v2.0/",
+            true,
+        ),
+        (
+            ProviderKind::Google,
+            "https://login.microsoftonline.com/common/v2.0",
+            false,
+        ),
+        (
+            ProviderKind::Microsoft,
+            "https://evil.example/common/v2.0",
+            false,
+        ),
+        (
+            ProviderKind::Microsoft,
+            "http://login.microsoftonline.com/common/v2.0",
+            false,
+        ),
+        (
+            ProviderKind::Microsoft,
+            "https://login.microsoftonline.com/tenant/v2.0",
+            false,
+        ),
+    ] {
+        assert_eq!(
+            microsoft_common(kind, &Url::parse(url).expect("valid authority URL")),
+            expected
+        );
+    }
+}
+
+async fn microsoft_core(mock: &support::MockOidcProvider, key_issuer: Option<&str>) -> OidcCore {
+    let mut core = core_for_test(mock, vec![]).await;
+    core.kind = ProviderKind::Microsoft;
+    mock.use_microsoft_common_metadata();
+    let (metadata, mut keys) = discover_microsoft_metadata(
+        &issuer_url(mock.issuer()).expect("valid mock issuer"),
+        &core.http,
+    )
+    .await
+    .expect("valid Microsoft discovery or token exchange");
+    for key in keys["keys"].as_array_mut().expect("JWKS keys are an array") {
+        key.as_object_mut()
+            .expect("JWK is an object")
+            .remove("issuer");
+    }
+    let mut cached = core.metadata.write().expect("metadata lock is healthy");
+    cached.metadata = metadata;
+    if let Some(issuer) = key_issuer {
+        for key in keys["keys"].as_array_mut().expect("JWKS keys are an array") {
+            key["issuer"] = serde_json::json!(issuer);
+        }
+    }
+    cached.microsoft_jwks = Some(keys);
+    drop(cached);
+    core
+}
+
+#[tokio::test]
+async fn microsoft_accepts_personal_and_business_accounts() {
+    let mock = support::MockOidcProvider::start().await;
+    let core = microsoft_core(&mock, Some(MICROSOFT_ISSUER_TEMPLATE)).await;
+    for tenant in [PERSONAL_TENANT, BUSINESS_TENANT] {
+        let issuer = MICROSOFT_ISSUER_TEMPLATE.replace("{tenantid}", tenant);
+        let code = mock
+            .token()
+            .issuer(&issuer)
+            .claim("tid", serde_json::json!(tenant))
+            .issue();
+        let identity = core
+            .exchange(&code, support::PKCE_VERIFIER, support::NONCE)
+            .await
+            .expect("valid Microsoft discovery or token exchange");
+        assert_eq!(identity.provider, ProviderKind::Microsoft);
+        assert_eq!(identity.subject, support::SUBJECT);
+    }
+}
+
+#[tokio::test]
+async fn microsoft_rejects_invalid_tenants_issuers_and_security_claims() {
+    let mock = support::MockOidcProvider::start().await;
+    let core = microsoft_core(&mock, Some(MICROSOFT_ISSUER_TEMPLATE)).await;
+    let issuer = MICROSOFT_ISSUER_TEMPLATE.replace("{tenantid}", BUSINESS_TENANT);
+    for (tid, iss) in [
+        (serde_json::Value::Null, issuer.clone()),
+        (serde_json::json!("not-a-uuid"), issuer.clone()),
+        (serde_json::json!("../common"), issuer.clone()),
+        (
+            serde_json::json!(BUSINESS_TENANT),
+            "https://evil.example/v2.0".into(),
+        ),
+        (serde_json::json!(PERSONAL_TENANT), issuer.clone()),
+    ] {
+        let code = mock.token().issuer(&iss).claim("tid", tid).issue();
+        assert!(matches!(
+            core.exchange(&code, support::PKCE_VERIFIER, support::NONCE)
+                .await,
+            Err(AuthError::TokenVerification(_))
+        ));
+    }
+    for (claim, value) in [
+        ("aud", serde_json::json!("wrong-client")),
+        ("nonce", serde_json::json!("wrong-nonce")),
+        ("exp", serde_json::json!(1)),
+    ] {
+        let code = mock
+            .token()
+            .issuer(&issuer)
+            .claim("tid", serde_json::json!(BUSINESS_TENANT))
+            .claim(claim, value)
+            .issue();
+        assert!(
+            core.exchange(&code, support::PKCE_VERIFIER, support::NONCE)
+                .await
+                .is_err()
+        );
+    }
+    let code = mock
+        .token()
+        .issuer(&issuer)
+        .claim("tid", serde_json::json!(BUSINESS_TENANT))
+        .signed_by_an_unknown_key()
+        .issue();
+    assert!(
+        core.exchange(&code, support::PKCE_VERIFIER, support::NONCE)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn microsoft_requires_a_signing_key_scoped_to_the_token_issuer() {
+    let issuer = MICROSOFT_ISSUER_TEMPLATE.replace("{tenantid}", PERSONAL_TENANT);
+    for scope in [
+        None,
+        Some("https://evil.example/v2.0"),
+        Some(&issuer),
+        Some(MICROSOFT_ISSUER_TEMPLATE),
+    ] {
+        let mock = support::MockOidcProvider::start().await;
+        let core = microsoft_core(&mock, scope).await;
+        let code = mock
+            .token()
+            .issuer(&issuer)
+            .claim("tid", serde_json::json!(PERSONAL_TENANT))
+            .issue();
+        let result = core
+            .exchange(&code, support::PKCE_VERIFIER, support::NONCE)
+            .await;
+        assert_eq!(
+            result.is_ok(),
+            scope == Some(&issuer) || scope == Some(MICROSOFT_ISSUER_TEMPLATE)
+        );
+    }
+}
+
+#[tokio::test]
+async fn microsoft_discovery_rejects_an_unexpected_issuer() {
+    let mock = support::MockOidcProvider::start().await;
+    assert!(matches!(
+        discover_microsoft_metadata(
+            &issuer_url(mock.issuer()).expect("valid mock issuer"),
+            &provider_http_client().expect("build provider HTTP client")
+        )
+        .await,
+        Err(AuthError::Configuration(_))
+    ));
+}
+
+#[tokio::test]
+async fn microsoft_key_refresh_preserves_key_issuer_restrictions() {
+    let mock = support::MockOidcProvider::start().await;
+    let core = microsoft_core(&mock, Some("https://evil.example")).await;
+    core.metadata
+        .write()
+        .expect("metadata lock is healthy")
+        .jwks_fetched_at = Instant::now() - JWKS_MIN_REFETCH_INTERVAL - Duration::from_secs(1);
+    let issuer = MICROSOFT_ISSUER_TEMPLATE.replace("{tenantid}", BUSINESS_TENANT);
+    let code = mock
+        .token()
+        .issuer(&issuer)
+        .claim("tid", serde_json::json!(BUSINESS_TENANT))
+        .issue();
+    let before = mock.jwks_requests();
+    core.exchange(&code, support::PKCE_VERIFIER, support::NONCE)
+        .await
+        .expect("valid Microsoft discovery or token exchange");
+    assert_eq!(mock.jwks_requests(), before + 1);
+    let keys = core
+        .metadata
+        .read()
+        .expect("metadata lock is healthy")
+        .microsoft_jwks
+        .clone()
+        .expect("Microsoft signing keys are cached");
+    assert_eq!(keys["keys"][0]["issuer"], MICROSOFT_ISSUER_TEMPLATE);
+}
+
+#[test]
+fn microsoft_tenant_parsing_rejects_malformed_tokens_and_noncanonical_ids() {
+    for token in ["", "header.!.signature", "header.bm90LWpzb24.signature"] {
+        assert!(microsoft_token_issuer(token).is_err());
+    }
+    for tenant in [
+        serde_json::Value::Null,
+        serde_json::json!(PERSONAL_TENANT.to_uppercase()),
+        serde_json::json!(PERSONAL_TENANT.replace('-', "")),
+    ] {
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&serde_json::json!({"tid": tenant}))
+                .expect("serialize tenant claim"),
+        );
+        assert!(microsoft_token_issuer(&format!("header.{payload}.signature")).is_err());
+    }
+}
+
+#[tokio::test]
+async fn microsoft_metadata_fetch_reports_transport_status_and_json_failures() {
+    use axum::{Router, routing::get};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let addr = listener.local_addr().expect("mock server address");
+    let app = Router::new().route("/invalid", get(|| async { "not-json" }));
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve mock");
+    });
+    let http = provider_http_client().expect("provider HTTP client");
+    for path in ["missing", "invalid"] {
+        assert!(matches!(
+            fetch_json(&http, &format!("http://{addr}/{path}")).await,
+            Err(AuthError::Provider(_))
+        ));
+    }
+    server.abort();
+    let _ = server.await;
+    assert!(matches!(
+        fetch_json(&http, &format!("http://{addr}/invalid")).await,
+        Err(AuthError::Provider(_))
+    ));
+}

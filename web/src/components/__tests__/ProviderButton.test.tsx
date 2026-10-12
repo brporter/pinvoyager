@@ -8,7 +8,7 @@ import { ProviderButton } from "../ProviderButton";
 import { PROVIDERS } from "../providers";
 
 describe("ProviderButton", () => {
-  it("gives all four providers the shared label grammar", () => {
+  it("gives all three providers the shared label grammar", () => {
     render(
       <>
         {PROVIDERS.map((provider) => (
@@ -17,7 +17,7 @@ describe("ProviderButton", () => {
       </>,
     );
 
-    for (const name of ["Google", "Apple", "Microsoft", "Facebook"]) {
+    for (const name of ["Google", "Apple", "Microsoft"]) {
       expect(screen.getByRole("button", { name: `Continue with ${name}` })).toBeInTheDocument();
     }
   });
@@ -35,9 +35,9 @@ describe("ProviderButton", () => {
     // Two OAuth redirects race each other, and the loser is a confusing
     // callback with a state that no longer matches.
     const onClick = vi.fn();
-    render(<ProviderButton provider="facebook" loading onClick={onClick} />);
+    render(<ProviderButton provider="apple" loading onClick={onClick} />);
 
-    const button = screen.getByRole("button", { name: "Redirecting to Facebook…" });
+    const button = screen.getByRole("button", { name: "Redirecting to Apple…" });
     await userEvent.click(button);
     button.focus();
     await userEvent.keyboard("{Enter}");

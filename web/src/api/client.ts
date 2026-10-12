@@ -649,10 +649,7 @@ export function signOut(options: RequestOptions = {}): Promise<void> {
 
 /** Where a provider sign-in begins. A full-page navigation, not a fetch: the
  *  flow is a redirect chain that ends at the provider's consent screen. */
-export function signInUrl(
-  provider: "google" | "microsoft" | "apple" | "facebook",
-  redirectTo?: string,
-): string {
+export function signInUrl(provider: "google" | "microsoft" | "apple", redirectTo?: string): string {
   const query = redirectTo ? `?${new URLSearchParams({ redirect_to: redirectTo })}` : "";
   return `${BASE}/auth/${provider}/start${query}`;
 }

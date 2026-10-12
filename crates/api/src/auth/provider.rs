@@ -1,9 +1,7 @@
 //! Provider abstraction.
 //!
-//! Three of the four providers are OIDC-conformant and share almost everything.
-//! Facebook is not: it issues no ID token, so its subject comes from a Graph
-//! API call instead. The trait exists so that difference lives in one
-//! implementation rather than in every call site.
+//! Google, Microsoft, and Apple use OIDC. Apple supplies a signed client secret
+//! and a form callback; the shared trait keeps those differences in the provider.
 
 use std::collections::HashMap;
 
@@ -12,7 +10,6 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::providers::apple::AppleProvider;
-use crate::auth::providers::facebook::FacebookProvider;
 use crate::auth::providers::oidc::StandardOidcProvider;
 use crate::db::repo::identities::Provider as DbProvider;
 
@@ -24,7 +21,6 @@ pub enum ProviderKind {
     Google,
     Microsoft,
     Apple,
-    Facebook,
 }
 
 impl ProviderKind {
@@ -35,7 +31,6 @@ impl ProviderKind {
             ProviderKind::Google => "google",
             ProviderKind::Microsoft => "microsoft",
             ProviderKind::Apple => "apple",
-            ProviderKind::Facebook => "facebook",
         }
     }
 
@@ -44,7 +39,6 @@ impl ProviderKind {
             "google" => Some(ProviderKind::Google),
             "microsoft" => Some(ProviderKind::Microsoft),
             "apple" => Some(ProviderKind::Apple),
-            "facebook" => Some(ProviderKind::Facebook),
             _ => None,
         }
     }
@@ -56,7 +50,6 @@ impl From<ProviderKind> for DbProvider {
             ProviderKind::Google => DbProvider::Google,
             ProviderKind::Microsoft => DbProvider::Microsoft,
             ProviderKind::Apple => DbProvider::Apple,
-            ProviderKind::Facebook => DbProvider::Facebook,
         }
     }
 }
@@ -108,10 +101,8 @@ pub trait AuthProvider: Send + Sync {
 
 /// The configured providers.
 ///
-/// Providers are individually optional. Obtaining four sets of OAuth
-/// credentials is a serialized, human-gated process, and a service that cannot
-/// start until all four exist cannot be worked on. An unconfigured provider's
-/// endpoints return 404.
+/// Providers are individually optional. The service starts with any subset of
+/// credentials configured. An unconfigured provider's endpoints return 404.
 pub struct ProviderRegistry {
     providers: HashMap<ProviderKind, Box<dyn AuthProvider>>,
 }
@@ -121,11 +112,10 @@ pub struct ProviderRegistry {
 /// Fixed, because [`ProviderRegistry::configured`] feeds the sign-in screen and
 /// a `HashMap`'s iteration order would reshuffle the buttons on every restart —
 /// a UI that moves under a user who has learned where their provider is.
-const DISPLAY_ORDER: [ProviderKind; 4] = [
+const DISPLAY_ORDER: [ProviderKind; 3] = [
     ProviderKind::Google,
     ProviderKind::Microsoft,
     ProviderKind::Apple,
-    ProviderKind::Facebook,
 ];
 
 impl ProviderRegistry {
@@ -194,19 +184,11 @@ impl ProviderRegistry {
             },
         );
 
-        // Facebook needs no discovery — it publishes none — so it is built
-        // inline rather than joined.
-        let facebook = configured
-            .facebook
-            .as_ref()
-            .map(|cfg| FacebookProvider::new(cfg, base_url).map(boxed));
-
         let mut providers = HashMap::new();
         let outcomes = [
             (ProviderKind::Google, google),
             (ProviderKind::Microsoft, microsoft),
             (ProviderKind::Apple, apple),
-            (ProviderKind::Facebook, facebook),
         ];
 
         for (kind, outcome) in outcomes {
@@ -217,15 +199,9 @@ impl ProviderRegistry {
                 }
                 // A provider whose discovery document is
                 // unreachable — an outage, a proxy, a typo'd issuer — must not
-                // stop the other three from serving. It is logged at warn and
+                // stop the other providers from serving. It is logged at warn and
                 // its endpoints will 404 until the next restart, which is a
                 // partial outage rather than a total one.
-                //
-                // Microsoft is the likeliest to land here: the `common` and
-                // `consumers` issuers return `issuer` values that do not equal
-                // the URL they were fetched from (`common` literally returns a
-                // `{tenantid}` placeholder), and OIDC requires that comparison
-                // to be exact. It needs a tenant-specific issuer URL.
                 Some(Err(err)) => {
                     let provider_name = kind.as_str();
                     tracing::warn!(

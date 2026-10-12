@@ -228,6 +228,7 @@ struct MockState {
     jwks_requests: Arc<AtomicUsize>,
     omit_token_endpoint: Arc<std::sync::atomic::AtomicBool>,
     omit_id_token: Arc<std::sync::atomic::AtomicBool>,
+    microsoft_common: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// A running OIDC provider on 127.0.0.1, with an ephemeral port so that
@@ -267,6 +268,7 @@ impl MockOidcProvider {
             jwks_requests: Arc::new(AtomicUsize::new(0)),
             omit_token_endpoint: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             omit_id_token: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            microsoft_common: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         let app = Router::new()
@@ -286,6 +288,11 @@ impl MockOidcProvider {
             state,
             server,
         }
+    }
+
+    /// Publish tenant-independent Microsoft metadata and scoped signing keys.
+    pub fn use_microsoft_common_metadata(&self) {
+        self.state.microsoft_common.store(true, Ordering::Relaxed);
     }
 
     /// The issuer URL to configure the service with, and the base for joining
@@ -385,6 +392,9 @@ async fn discovery(State(state): State<MockState>) -> Json<Value> {
         "claims_supported": ["iss", "aud", "sub", "iat", "exp", "nonce", "name", "picture"],
         "code_challenge_methods_supported": ["S256"],
     });
+    if state.microsoft_common.load(Ordering::Relaxed) {
+        document["issuer"] = json!("https://login.microsoftonline.com/{tenantid}/v2.0");
+    }
     if state.omit_token_endpoint.load(Ordering::Relaxed) {
         document
             .as_object_mut()
@@ -403,7 +413,13 @@ fn endpoint(issuer: &Url, path: &str) -> String {
 
 async fn jwks(State(state): State<MockState>) -> Json<Value> {
     state.jwks_requests.fetch_add(1, Ordering::Relaxed);
-    Json(JWKS.clone())
+    let mut keys = JWKS.clone();
+    if state.microsoft_common.load(Ordering::Relaxed) {
+        for key in keys["keys"].as_array_mut().expect("JWKS keys are an array") {
+            key["issuer"] = json!("https://login.microsoftonline.com/{tenantid}/v2.0");
+        }
+    }
+    Json(keys)
 }
 
 /// Present only because discovery must advertise it. Nothing follows the

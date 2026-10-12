@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -222,4 +222,14 @@ it("includes the request reference in a server failure", async () => {
   expect(
     screen.getByText("The server failed. Please try again, quoting reference support-123."),
   ).toBeInTheDocument();
+});
+
+it("offers only Google, Apple, and Microsoft account linking", () => {
+  renderScreen(<Settings />, { auth: authState(ADA) });
+  for (const provider of ["Google", "Apple", "Microsoft"]) {
+    const row = screen.getByText(provider).closest("li")!;
+    expect(within(row).getByRole("button", { name: "Link" })).toBeInTheDocument();
+  }
+  expect(screen.getAllByRole("button", { name: "Link" })).toHaveLength(3);
+  expect(screen.queryByText("Facebook")).not.toBeInTheDocument();
 });

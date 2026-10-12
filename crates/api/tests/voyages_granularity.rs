@@ -127,7 +127,7 @@ fn test_state(pool: PgPool) -> AppState {
         "auth": {
             "base_url": "http://127.0.0.1:8080/",
             // The only way to get an authenticated session without credentials
-            // for four providers. It is an authentication bypass and it is
+            // for three providers. It is an authentication bypass and it is
             // compiled out of release builds; a debug test binary is the one
             // place it is meant to be used.
             "dev_login": true,

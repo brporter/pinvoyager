@@ -69,8 +69,10 @@ Sources: `run_service` in [`main.rs`](../crates/api/src/main.rs), `serve_router`
 
 ## Authentication and accounts
 
-Google and Microsoft use OIDC; Apple adds signed client secrets and a form-POST
-callback; Facebook uses OAuth and a profile lookup. Accounts match provider and
+Google and Microsoft use OIDC. Microsoft supports personal and organizational
+accounts through the common v2 authority with tenant and signing-key issuer
+validation (see the authentication flow reference). Apple adds signed client secrets and a form-POST
+callback. Accounts match provider and
 subject, never email. Provider-supplied names are not account display names.
 
 Authorization starts by saving state, nonce, PKCE material, and a hash of a

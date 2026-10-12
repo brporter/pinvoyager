@@ -132,7 +132,7 @@
    published specs rather than a house style, because non-compliance is
    grounds for rejection during provider app review.
 
-   Shared geometry, per-provider skin. All four are the same height and the
+   Shared geometry, per-provider skin. All three are the same height and the
    same label grammar ("Continue with X") so the sign-in screen reads as one
    set of choices rather than four vendors shouting.
    ========================================================================== */
@@ -184,13 +184,6 @@
   font-family: "Segoe UI", var(--pv-font-sans);
 }
 .pv-provider--microsoft:hover { background: #f3f3f3; }
-
-/* Facebook: brand blue #1877F2 with the white f mark. */
-.pv-provider--facebook {
-  background: #1877f2;
-  color: #ffffff;
-}
-.pv-provider--facebook:hover { background: #166fe0; }
 
 .pv-provider:disabled { opacity: 0.5; cursor: not-allowed; }
 

@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// type by name (case-insensitively, so it matches the built-in `TEXT`) and
 /// resolves to an OID once per connection when binding. Reading it as an enum
 /// on the Rust side while storing text keeps the provider list a code-level
-/// decision — adding a fifth provider needs no `ALTER TYPE`, only the CHECK
+/// decision — adding another provider needs no `ALTER TYPE`, only the CHECK
 /// constraint in the migration.
 ///
 /// `rename_all` gives the lowercase spellings the migration's CHECK constraint
@@ -26,7 +26,6 @@ pub enum Provider {
     Google,
     Microsoft,
     Apple,
-    Facebook,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

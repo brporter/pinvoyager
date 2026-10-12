@@ -14,7 +14,6 @@ const PROVIDER_NAME: Record<Provider, string> = {
   google: "Google",
   apple: "Apple",
   microsoft: "Microsoft",
-  facebook: "Facebook",
 };
 
 /**

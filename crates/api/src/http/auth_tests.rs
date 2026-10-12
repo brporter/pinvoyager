@@ -19,7 +19,7 @@ impl crate::auth::AuthProvider for MislabelledProvider {
         _nonce: &str,
     ) -> Result<VerifiedIdentity, AuthError> {
         Ok(VerifiedIdentity {
-            provider: ProviderKind::Facebook,
+            provider: ProviderKind::Apple,
             subject: "mislabelled-subject".to_owned(),
 
             avatar_url: None,
@@ -467,13 +467,13 @@ fn callback_failure_includes_only_safe_request_reference_characters() {
     let response = to_browser(
         Err(AppError::BadRequest("internal detail".to_owned())),
         CookieJar::new(),
-        ProviderKind::Facebook,
+        ProviderKind::Apple,
         &headers,
     );
 
     assert_eq!(
         response.headers()[header::LOCATION],
-        "/auth/callback?status=failed&provider=facebook&ref=abcscript-123"
+        "/auth/callback?status=failed&provider=apple&ref=abcscript-123"
     );
 }
 

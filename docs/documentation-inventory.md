@@ -10,7 +10,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | [Architecture overview](architecture.md) | System boundaries, modules, data model, API routes, authentication, uploads, maps, frontend state, and operational limits. |
 | [Implementation constraints](architecture/constraints.md) | Current privacy, identity, storage, processing, map, and naming boundaries; explains D identifiers in source comments. |
 | [Navigation](architecture/navigation.md) | Routes, layouts, sign-in/name prompts, and navigation between implemented workflows. |
-| [Authentication flow](architecture/auth-flow.md) | Provider exchange, browser binding, account linking, session cookies, expiry, and logout. |
+| [Authentication flow](architecture/auth-flow.md) | Supported providers, provider exchange and retirement, browser binding, account linking, session cookies, expiry, and logout. |
 | [Application data flow](architecture/data-flow.md) | Client transport, query/cache behavior, handlers, SQL, and response construction. |
 | [Map data flow](architecture/map-data-flow.md) | Voyage/discovery inputs, clustering, coordinate precision, selection, and antimeridian/precision behavior. |
 | [Image pipeline](photo-pipeline.md) | Upload validation, storage, background queue, conversion, readiness polling, recovery, and authorized serving. |

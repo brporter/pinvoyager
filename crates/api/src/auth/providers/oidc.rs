@@ -7,6 +7,9 @@
 //! changes about once a year.
 
 use std::sync::{Arc, RwLock};
+
+use base64::Engine as _;
+use serde_json::Value;
 use std::time::{Duration, Instant};
 
 use openidconnect::core::{
@@ -78,6 +81,8 @@ impl ClientSecretSource for StaticClientSecret {
 /// Discovery output, plus what is needed to keep the key set current.
 struct CachedMetadata {
     metadata: CoreProviderMetadata,
+    /// Preserve Microsoft signing-key issuer restrictions, which CoreJsonWebKey ignores.
+    microsoft_jwks: Option<Value>,
     /// When the JWKS in `metadata` was last fetched, for the refetch floor.
     /// Set at discovery, so a provider cannot be hit again immediately after
     /// startup either.
@@ -125,6 +130,67 @@ fn issuer_url(issuer: &Url) -> Result<IssuerUrl, AuthError> {
     )
 }
 
+const MICROSOFT_ISSUER_TEMPLATE: &str = "https://login.microsoftonline.com/{tenantid}/v2.0";
+
+fn microsoft_common(kind: ProviderKind, issuer: &Url) -> bool {
+    kind == ProviderKind::Microsoft
+        && issuer.as_str().trim_end_matches('/') == "https://login.microsoftonline.com/common/v2.0"
+}
+
+async fn fetch_json(http: &reqwest::Client, url: &str) -> Result<Value, AuthError> {
+    http.get(url)
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|err| AuthError::Provider(format!("OIDC metadata request failed: {err}")))?
+        .json()
+        .await
+        .map_err(|err| AuthError::Provider(format!("invalid OIDC metadata: {err}")))
+}
+
+/// Fetch only from the configured authority. Never follow a URL supplied by a token.
+async fn discover_microsoft_metadata(
+    issuer: &IssuerUrl,
+    http: &reqwest::Client,
+) -> Result<(CoreProviderMetadata, Value), AuthError> {
+    let mut document = fetch_json(
+        http,
+        &format!("{}/.well-known/openid-configuration", issuer.as_str()),
+    )
+    .await?;
+    if document["issuer"].as_str() != Some(MICROSOFT_ISSUER_TEMPLATE) {
+        return Err(AuthError::Configuration(
+            "unexpected Microsoft discovery issuer".into(),
+        ));
+    }
+    // The common authority is used for authorization and code exchange. Verification
+    // replaces it with the concrete tenant issuer after checking the token's tid.
+    document["issuer"] = Value::String(issuer.as_str().to_owned());
+    let metadata: CoreProviderMetadata = serde_json::from_value(document)
+        .map_err(|err| AuthError::Configuration(format!("invalid Microsoft discovery: {err}")))?;
+    let keys = fetch_json(http, metadata.jwks_uri().as_str()).await?;
+    let jwks = serde_json::from_value(keys.clone())
+        .map_err(|err| AuthError::Configuration(format!("invalid Microsoft JWKS: {err}")))?;
+    Ok((metadata.set_jwks(jwks), keys))
+}
+
+/// Decode tid only to choose verification inputs. No identity is trusted until
+/// the library checks the signature, exact issuer, audience, expiry, and nonce.
+fn microsoft_token_issuer(token: &str) -> Result<IssuerUrl, AuthError> {
+    let invalid = || AuthError::TokenVerification("invalid Microsoft tenant ID".into());
+    let payload = token.split('.').nth(1).ok_or_else(invalid)?;
+    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .map_err(|_| invalid())?;
+    let claims: Value = serde_json::from_slice(&decoded).map_err(|_| invalid())?;
+    let tenant = claims["tid"].as_str().ok_or_else(invalid)?;
+    let uuid = uuid::Uuid::parse_str(tenant).map_err(|_| invalid())?;
+    if uuid.hyphenated().to_string() != tenant {
+        return Err(invalid());
+    }
+    IssuerUrl::new(MICROSOFT_ISSUER_TEMPLATE.replace("{tenantid}", tenant)).map_err(|_| invalid())
+}
+
 impl OidcCore {
     /// Fetches the discovery document and the JWKS, once.
     pub(crate) async fn discover(
@@ -136,15 +202,19 @@ impl OidcCore {
         scopes: Vec<Scope>,
         extra_authorize_params: Vec<(&'static str, &'static str)>,
     ) -> Result<Self, AuthError> {
+        let common = microsoft_common(kind, issuer);
         let issuer = issuer_url(issuer)?;
         let http = provider_http_client()?;
 
-        // This fetches `{issuer}/.well-known/openid-configuration` *and* the
-        // JWKS it points at, and rejects a document whose `issuer` claim is not
-        // the issuer we asked for.
-        let metadata = CoreProviderMetadata::discover_async(issuer, &http)
-            .await
-            .map_err(|err| AuthError::Configuration(format!("OIDC discovery failed: {err}")))?;
+        let (metadata, microsoft_jwks) = if common {
+            let (metadata, keys) = discover_microsoft_metadata(&issuer, &http).await?;
+            (metadata, Some(keys))
+        } else {
+            let metadata = CoreProviderMetadata::discover_async(issuer, &http)
+                .await
+                .map_err(|err| AuthError::Configuration(format!("OIDC discovery failed: {err}")))?;
+            (metadata, None)
+        };
 
         Ok(Self {
             kind,
@@ -156,6 +226,7 @@ impl OidcCore {
             http,
             metadata: RwLock::new(CachedMetadata {
                 metadata,
+                microsoft_jwks,
                 jwks_fetched_at: Instant::now(),
             }),
         })
@@ -184,6 +255,37 @@ impl OidcCore {
             // Microsoft support it alongside HTTP Basic. `oauth2` defaults to
             // Basic, which Apple rejects.
             .set_auth_type(AuthType::RequestBody)
+    }
+
+    fn verification_client(&self, token: &str) -> Result<DiscoveredClient, AuthError> {
+        let cached = self
+            .metadata
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(keys) = &cached.microsoft_jwks else {
+            drop(cached);
+            return Ok(self.client(None));
+        };
+        let issuer = microsoft_token_issuer(token)?;
+        let matching: Vec<_> = keys["keys"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|key| {
+                matches!(key["issuer"].as_str(), Some(scope)
+                if scope == MICROSOFT_ISSUER_TEMPLATE || scope == issuer.as_str())
+            })
+            .cloned()
+            .collect();
+        let jwks =
+            serde_json::from_value(serde_json::json!({"keys": matching})).map_err(|err| {
+                AuthError::TokenVerification(format!("invalid Microsoft signing keys: {err}"))
+            })?;
+        let metadata = cached.metadata.clone().set_issuer(issuer).set_jwks(jwks);
+        Ok(
+            CoreClient::from_provider_metadata(metadata, self.client_id.clone(), None)
+                .set_redirect_uri(self.redirect_uri.clone()),
+        )
     }
 
     pub(crate) fn authorize(&self) -> Result<AuthorizationRedirect, AuthError> {
@@ -257,13 +359,15 @@ impl OidcCore {
         //              algorithms in `id_token_signing_alg_values_supported`
         //              (set by `from_provider_metadata`, so a provider cannot be
         //              downgraded to `none` by the token itself);
-        //   iss        against the discovered issuer;
+        //   iss        against the discovered issuer, with a validated tenant
+        //              substituted for Microsoft common;
         //   aud        must contain our `client_id`;
         //   exp/iat    against the clock;
         //   nonce      against the value from the pending attempt.
         //
         // Nothing here is our own crypto, and that is the point.
-        let claims = match id_token.claims(&client.id_token_verifier(), &nonce) {
+        let verification_client = self.verification_client(&id_token.to_string())?;
+        let claims = match id_token.claims(&verification_client.id_token_verifier(), &nonce) {
             Ok(claims) => claims,
             Err(ClaimsVerificationError::SignatureVerification(
                 SignatureVerificationError::NoMatchingKey,
@@ -272,7 +376,7 @@ impl OidcCore {
                 // a key rotation looks like from here, so refetch the JWKS and
                 // try once more — rate-limited, see `refresh_jwks`.
                 self.refresh_jwks().await?;
-                let client = self.client(Some(self.secret.client_secret()?));
+                let client = self.verification_client(&id_token.to_string())?;
                 id_token
                     .claims(&client.id_token_verifier(), &nonce)
                     .map_err(|err| AuthError::TokenVerification(err.to_string()))?
@@ -295,7 +399,7 @@ impl OidcCore {
     /// The rate limit is claimed *before* the network call, so a burst of
     /// unknown-`kid` tokens produces one fetch rather than one per token.
     async fn refresh_jwks(&self) -> Result<(), AuthError> {
-        let jwks_uri = {
+        let (jwks_uri, microsoft) = {
             let mut cached = self
                 .metadata
                 .write()
@@ -313,7 +417,10 @@ impl OidcCore {
             }
 
             cached.jwks_fetched_at = Instant::now();
-            cached.metadata.jwks_uri().clone()
+            (
+                cached.metadata.jwks_uri().clone(),
+                cached.microsoft_jwks.is_some(),
+            )
         };
 
         let provider_name = self.kind.as_str();
@@ -322,9 +429,17 @@ impl OidcCore {
             "refetching JWKS after an unknown signing key"
         );
 
-        let jwks = CoreJsonWebKeySet::fetch_async(&jwks_uri, &self.http)
-            .await
-            .map_err(|err| AuthError::Provider(format!("JWKS refetch failed: {err}")))?;
+        let (jwks, raw_keys) = if microsoft {
+            let keys = fetch_json(&self.http, jwks_uri.as_str()).await?;
+            let jwks = serde_json::from_value(keys.clone())
+                .map_err(|err| AuthError::Provider(format!("invalid Microsoft JWKS: {err}")))?;
+            (jwks, Some(keys))
+        } else {
+            let jwks = CoreJsonWebKeySet::fetch_async(&jwks_uri, &self.http)
+                .await
+                .map_err(|err| AuthError::Provider(format!("JWKS refetch failed: {err}")))?;
+            (jwks, None)
+        };
 
         let mut cached = self
             .metadata
@@ -333,12 +448,13 @@ impl OidcCore {
         // `set_jwks` consumes the metadata, so this is clone-modify-replace.
         // It happens at most once per rotation, not per request.
         cached.metadata = cached.metadata.clone().set_jwks(jwks);
+        cached.microsoft_jwks = raw_keys;
 
         Ok(())
     }
 }
 
-/// Google and Microsoft: OIDC with nothing bent out of shape.
+/// Google OIDC and Microsoft OIDC, including the common authority.
 pub(crate) struct StandardOidcProvider {
     core: OidcCore,
 }

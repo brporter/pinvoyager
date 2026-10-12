@@ -5,8 +5,7 @@ public location precision, and upload photos. The API reads EXIF locations,
 processes image variants, and supplies the voyage's map and photo views.
 
 Draft voyages are owner-only. Published voyages and named public profiles are
-readable without an account. Authentication uses Google, Microsoft, Apple, or
-Facebook identities and server-side sessions.
+readable without an account. Authentication uses Google, Microsoft, or Apple identities and server-side sessions.
 
 ## Documentation
 

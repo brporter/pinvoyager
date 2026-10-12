@@ -234,7 +234,7 @@ export interface CurrentUser {
 
 /** Rust: `LinkedProvider`. */
 export interface LinkedProvider {
-  provider: "google" | "microsoft" | "apple" | "facebook";
+  provider: "google" | "microsoft" | "apple";
   linked_at: string;
   last_seen_at: string;
 }

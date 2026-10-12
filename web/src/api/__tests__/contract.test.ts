@@ -238,7 +238,7 @@ export type ContractHasNoExtraFields = [
 const GRANULARITIES = ["exact", "km1", "km10", "km50"] as const;
 const VARIANT_STATUSES = ["pending", "ready", "failed"] as const;
 const ORIGINAL_FORMATS = ["jpeg", "png", "webp", "heic"] as const;
-const PROVIDERS = ["google", "microsoft", "apple", "facebook"] as const;
+const PROVIDERS = ["google", "microsoft", "apple"] as const;
 
 /**
  * The arrays above are the same sets as the unions in `types.ts`.

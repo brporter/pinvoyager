@@ -22,7 +22,6 @@ fn each_provider_gets_its_own_callback_path() {
         ProviderKind::Google,
         ProviderKind::Microsoft,
         ProviderKind::Apple,
-        ProviderKind::Facebook,
     ] {
         let uri = callback_uri(&base, kind).expect("should build");
         assert_eq!(
