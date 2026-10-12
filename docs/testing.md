@@ -88,3 +88,9 @@ continue to use the map substitute for DOM and interaction checks.
 build, plus Rust formatting, Clippy, and database/native-image coverage on stable
 Rust. CI retains coverage reports as workflow artifacts. Generated reports are
 ignored and are not maintained documentation.
+
+The shared database used by `crates/api/tests/integration.rs::pool` is migrated
+before each pool is returned. These tests therefore run against a fresh CI
+database as well as an already migrated local database; mutations still roll
+back their transactions. The separate empty-database migration test verifies
+bootstrap in its own temporary database.

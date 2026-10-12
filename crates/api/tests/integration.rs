@@ -29,12 +29,16 @@ fn database_url() -> String {
 /// A pool with an explicit size and timeout, so a test can create the exact
 /// conditions it needs rather than inheriting production's.
 async fn pool(max_connections: u32, acquire_timeout: Duration) -> PgPool {
-    PgPoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(max_connections)
         .acquire_timeout(acquire_timeout)
         .connect(&database_url())
         .await
-        .expect("database is not reachable — is `docker compose up -d` running?")
+        .expect("database is not reachable — is `docker compose up -d` running?");
+    pinvoyager_api::db::migrate(&pool)
+        .await
+        .expect("test database migrations apply");
+    pool
 }
 
 // ---------------------------------------------------------------------------
