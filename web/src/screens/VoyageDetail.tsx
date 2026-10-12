@@ -26,7 +26,7 @@ export function VoyageDetail() {
   const [selection, setSelection] = useState<Selection | null>(null);
 
   /** Photo id → the element showing it, in whichever layout is mounted. Used
-   *  only to scroll a pin's photograph into view. */
+   *  to reveal a pin's photograph in the mobile sheet. */
   const photoNodes = useRef(new Map<string, HTMLElement>());
 
   const registerPhoto = useCallback((photoId: string, node: HTMLElement | null) => {
@@ -38,7 +38,7 @@ export function VoyageDetail() {
   }, []);
 
   useEffect(() => {
-    if (selection === null || selection.source !== "pin") return;
+    if (desktop || selection === null || selection.source !== "pin") return;
 
     const node = photoNodes.current.get(selection.photoId);
     // `scrollIntoView` is absent in jsdom and in any non-browser renderer, and
@@ -48,7 +48,7 @@ export function VoyageDetail() {
       inline: "nearest",
       behavior: prefersReducedMotion() ? "auto" : "smooth",
     });
-  }, [selection]);
+  }, [selection, desktop]);
 
   const selectFromPin = useCallback((photoId: string) => {
     setSelection({ photoId, source: "pin" });

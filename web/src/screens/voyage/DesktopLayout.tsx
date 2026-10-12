@@ -1,19 +1,11 @@
-import { NoPhotos } from "./VoyageStates";
-import type { CSSProperties } from "react";
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { PhotoGrid } from "../../components";
 import { LazyVoyageMap } from "../../map";
-
-import {
-  RAIL_WIDTH,
-  fillHeight,
-  groupByCaptureDate,
-  pinsFor,
-  placedPhotos,
-  type LayoutProps,
-} from "./model";
-import { SelectablePhoto, UnplacedSection, VoyageHeading } from "./VoyageChrome";
+import { groupByCaptureDate, pinsFor, placedPhotos, type LayoutProps } from "./model";
+import { paginatePhotoGroups } from "./pagination";
+import { SelectablePhoto, VoyageHeading } from "./VoyageChrome";
+import { NoPhotos } from "./VoyageStates";
 
 export function DesktopLayout({
   voyage,
@@ -23,20 +15,83 @@ export function DesktopLayout({
   onSelectPhoto,
   registerPhoto,
 }: LayoutProps) {
-  const selectedPhotoId = selection?.photoId ?? null;
-  const placed = placedPhotos(voyage);
-  const unplaced = voyage.photos.filter((photo) => !photo.placed);
   const pins = useMemo(() => pinsFor(voyage), [voyage]);
+  const area = useRef<HTMLDivElement>(null);
+  const headingProbe = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({
+    width: 388,
+    height: 500,
+    heading: 38,
+    rowGap: 12,
+    sectionGap: 20,
+  });
+  const [firstPhoto, setFirstPhoto] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    const node = area.current!;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      const probe = headingProbe.current!.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      // A non-browser renderer has no layout. Keep the initial dimensions there.
+      if (rect.width > 0) {
+        setSize({
+          width: rect.width,
+          height: rect.height,
+          heading: probe.height,
+          rowGap: parseFloat(style.getPropertyValue("--voyage-row-gap")) || 12,
+          sectionGap: parseFloat(style.getPropertyValue("--voyage-section-gap")) || 20,
+        });
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    observer?.observe(headingProbe.current!);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  const unplaced = voyage.photos.filter((photo) => !photo.placed);
+  const groups = [
+    ...groupByCaptureDate(placedPhotos(voyage)),
+    ...(unplaced.length
+      ? [{ key: "unplaced", label: "Photos with no location", photos: unplaced }]
+      : []),
+  ];
+  // On short screens shrink the square thumbnails so at least one row fits.
+  const photoSize = Math.max(
+    0,
+    Math.min((size.width - size.rowGap - 10) / 2, size.height - size.heading),
+  );
+  const pages = paginatePhotoGroups(
+    groups,
+    size.height,
+    photoSize,
+    size.heading,
+    size.rowGap,
+    size.sectionGap,
+  );
+  const requestedPage = pages.findIndex((page) =>
+    page.some((group) => group.photos.some((photo) => photo.id === firstPhoto)),
+  );
+  const pageIndex = Math.max(0, requestedPage);
+  const page = pages[pageIndex] ?? [];
+
+  useLayoutEffect(() => {
+    if (selection?.source === "pin") setFirstPhoto(selection.photoId);
+  }, [selection]);
+
+  function turnPage(index: number) {
+    setFirstPhoto(pages[index][0].photos[0].id);
+  }
 
   return (
-    <div
-      style={{
-        ...fillHeight(true),
-        display: "grid",
-        gridTemplateColumns: `1fr ${RAIL_WIDTH}px`,
-      }}
-    >
-      <div style={{ position: "relative", minWidth: 0 }}>
+    <div className="pv-voyage-desktop">
+      <div className="pv-voyage-map-frame">
         <LazyVoyageMap
           label={`Map of ${voyage.title}`}
           pins={pins}
@@ -47,78 +102,76 @@ export function DesktopLayout({
           style={{ position: "absolute", inset: 0 }}
         />
       </div>
-
-      <aside
-        aria-label="Photos in this voyage"
-        style={{
-          borderLeft: "1px solid var(--pv-border)",
-          background: "var(--pv-bg)",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-        }}
-      >
-        <div
-          style={{
-            flex: "none",
-            padding: "var(--pv-space-4)",
-            borderBottom: "1px solid var(--pv-border)",
-          }}
-        >
+      <aside aria-label="Photos in this voyage" className="pv-voyage-rail">
+        <div className="pv-voyage-rail-heading">
           <VoyageHeading voyage={voyage} />
         </div>
-
-        <div style={{ overflowY: "auto", padding: "var(--pv-space-4)" }}>
-          {voyage.photos.length === 0 ? (
-            <NoPhotos voyageId={voyage.id} />
-          ) : (
-            <>
-              {groupByCaptureDate(placed).map((group) => (
-                <section key={group.key} style={{ marginBottom: "var(--pv-space-5)" }}>
-                  <h3 style={DATE_HEADING}>{group.label}</h3>
-                  {/* Two columns, as the design draws the rail: the grid's
-                      150px `auto-fill` minimum resolves to exactly two inside
-                      a 420px rail, so the column count is not restated here. */}
-                  <PhotoGrid label={`Photos from ${group.label}`}>
+        <div className="pv-voyage-page-padding">
+          <div
+            ref={area}
+            className="pv-voyage-page-area"
+            style={{ "--voyage-photo-size": `${photoSize}px` } as CSSProperties}
+          >
+            <div ref={headingProbe} className="pv-voyage-heading-probe" aria-hidden="true">
+              <h3 className="pv-voyage-date">Date</h3>
+            </div>
+            {voyage.photos.length === 0 ? (
+              <NoPhotos voyageId={voyage.id} />
+            ) : (
+              page.map((group) => (
+                <section key={group.key} className="pv-voyage-date-section">
+                  <h3 className="pv-voyage-date">{group.label}</h3>
+                  <PhotoGrid
+                    label={group.key === "unplaced" ? group.label : `Photos from ${group.label}`}
+                    className="pv-voyage-page-grid"
+                  >
                     {group.photos.map((photo) => (
                       <SelectablePhoto
                         key={photo.id}
                         photo={photo}
-                        selected={photo.id === selectedPhotoId}
+                        selected={photo.id === selection?.photoId}
                         onSelect={onSelectPhoto}
                         registerPhoto={registerPhoto}
                       />
                     ))}
                   </PhotoGrid>
                 </section>
-              ))}
-
-              <UnplacedSection
-                photos={unplaced}
-                selectedPhotoId={selectedPhotoId}
-                onSelect={onSelectPhoto}
-                registerPhoto={registerPhoto}
-              />
-            </>
-          )}
+              ))
+            )}
+          </div>
         </div>
+        <nav aria-label="Photo pages" className="pv-voyage-pagination">
+          {pageIndex > 0 ? (
+            <a
+              href={`#photos-page-${pageIndex}`}
+              onClick={(event) => {
+                event.preventDefault();
+                turnPage(pageIndex - 1);
+              }}
+            >
+              Previous
+            </a>
+          ) : (
+            <span />
+          )}
+          <span className="pv-xs pv-subtle" aria-live="polite">
+            {pages.length > 0 ? `Page ${pageIndex + 1} of ${pages.length}` : ""}
+          </span>
+          {pageIndex < pages.length - 1 ? (
+            <a
+              href={`#photos-page-${pageIndex + 2}`}
+              onClick={(event) => {
+                event.preventDefault();
+                turnPage(pageIndex + 1);
+              }}
+            >
+              More
+            </a>
+          ) : (
+            <span />
+          )}
+        </nav>
       </aside>
     </div>
   );
 }
-
-const DATE_HEADING: CSSProperties = {
-  margin: "0 0 var(--pv-space-3)",
-  fontSize: "var(--pv-text-xs)",
-  color: "var(--pv-text-subtle)",
-  textTransform: "uppercase",
-  letterSpacing: "var(--pv-tracking-wide)",
-  fontWeight: "var(--pv-weight-semibold)",
-};
-
-/* ==========================================================================
-   Mobile — full-bleed map, photos in a sheet over it
-   ========================================================================== */
-
-/** The sheet's two rest positions, from the design: peek shows the filmstrip,
- *  expanded shows the selected photograph above it. */

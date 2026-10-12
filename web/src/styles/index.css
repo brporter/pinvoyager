@@ -150,3 +150,86 @@ body {
   border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-md);
 }
+
+/* The desktop voyage and its map stay within the space below the top bar. */
+.pv-voyage-desktop {
+  height: max(0px, calc(100dvh - var(--pv-header-h)));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  overflow: hidden;
+}
+.pv-voyage-map-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.pv-voyage-rail {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--pv-border);
+  background: var(--pv-bg);
+}
+.pv-voyage-rail-heading {
+  flex: none;
+  max-height: 45%;
+  overflow: auto;
+  padding: var(--pv-space-4);
+  border-bottom: 1px solid var(--pv-border);
+}
+.pv-voyage-page-padding {
+  flex: 1;
+  min-height: 0;
+  padding: var(--pv-space-4);
+}
+.pv-voyage-page-area {
+  /* Pixel values are also read by DesktopLayout when packing rows. */
+  --voyage-row-gap: 12px;
+  --voyage-section-gap: 20px;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.pv-voyage-date-section + .pv-voyage-date-section {
+  margin-top: var(--voyage-section-gap);
+}
+.pv-voyage-date {
+  margin: 0 0 var(--pv-space-3);
+  font-size: var(--pv-text-xs);
+  line-height: 16px;
+  color: var(--pv-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-wide);
+  font-weight: var(--pv-weight-semibold);
+}
+.pv-voyage-heading-probe {
+  padding-bottom: 10px;
+  position: absolute;
+  visibility: hidden;
+  display: flow-root;
+}
+.pv-voyage-page-grid {
+  padding: 5px;
+  grid-template-columns: repeat(2, var(--voyage-photo-size));
+  gap: var(--voyage-row-gap);
+}
+.pv-voyage-page-grid .pv-photo {
+  height: var(--voyage-photo-size);
+  aspect-ratio: auto;
+}
+.pv-voyage-pagination {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--pv-touch-min);
+  padding: var(--pv-space-2) var(--pv-space-4);
+  border-top: 1px solid var(--pv-border);
+}
+.pv-voyage-pagination a {
+  color: var(--pv-accent-text);
+  padding-block: var(--pv-space-2);
+}
+.pv-voyage-page-area .pv-empty {
+  padding: var(--pv-space-4);
+}

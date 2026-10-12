@@ -17,7 +17,8 @@ flow](architecture/map-data-flow.md).
 `ClusterMarker`) sends marker member IDs to the page. On the Voyage page, clicking a
 cluster opens its gallery. Zooming in can split the group into smaller markers. Without
 a gallery callback, a cluster click zooms into that group. Single-pin selection still
-highlights and scrolls the corresponding photo. Selecting a photo in the rail continues
+highlights the corresponding photo. The desktop rail opens its photo page; the
+mobile sheet scrolls it into view. Selecting a photo in the rail continues
 to pan its pin.
 
 `web/src/screens/VoyageDetail.tsx` (`VoyageDetail`) stores the selected IDs and filters
@@ -26,6 +27,44 @@ layouts. It preserves the IDs while image processing updates the payload, so an 
 gallery receives newly ready images through `useVoyage` polling. If photos disappear
 from a refreshed payload, they disappear from the gallery too; the close action remains
 available.
+
+## Desktop voyage layout and photo pages
+
+The desktop Voyage view (at widths of 768 px and above) fixes the map and photo
+rail to the viewport height minus the 56 px application header. Adding photos
+cannot increase the map height or the page height. The map attribution remains
+visible. The mobile view continues to use its map and bottom sheet.
+
+`web/src/screens/voyage/DesktopLayout.tsx` (`DesktopLayout`) measures the space
+remaining below the voyage heading and above the photo navigation. It observes
+rail size changes with `ResizeObserver` and also measures on window resize.
+`web/src/screens/voyage/pagination.ts` (`paginatePhotoGroups`) fills each page
+with complete two-column photo rows, accounting for date headings, grid padding,
+and spacing between rows and sections. Date groups keep their existing order;
+a group continuing on another page repeats its heading. Photos with unknown
+dates remain in the Date unknown group. Photos without locations appear in a
+trailing Photos with no location group and use the same pagination.
+
+Only photos on the current page are mounted. **More** opens the following page;
+**Previous** opens the preceding page. The first page omits Previous and the last
+page omits More. A live page counter announces the current page and total.
+Selecting a single map pin opens the page containing its photo and highlights
+it, while continuing to open the location gallery. Desktop selection never
+scrolls the document. Photo selection continues to pan the map.
+
+Resizing repacks the rows and keeps the page containing the previously visible
+first photo. If that photo disappears from refreshed data, the rail falls back
+to the first page. On short screens thumbnails shrink to fit one row. An unusually
+long voyage heading can scroll within its own area, limited to 45% of the rail;
+photo pages themselves do not scroll. The API payload and public coordinate
+precision are unchanged.
+
+`web/src/styles/index.css` (`pv-voyage-desktop`, `pv-voyage-page-grid`,
+`pv-voyage-pagination`) defines the fixed height and uses the existing design
+tokens and photo components. `pagination.test.ts` checks row packing, heading
+continuation, empty voyages, and insufficient space. The desktop photo pages
+suite in `VoyageDetail.test.tsx` checks forward/backward navigation, end links,
+pin selection, resizing, unplaced photos, and refreshed photo removal.
 
 ## HTML and visual treatment
 

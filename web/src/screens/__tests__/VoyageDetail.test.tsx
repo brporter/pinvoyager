@@ -12,7 +12,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -862,4 +862,120 @@ it("can close the gallery if a refreshed voyage no longer contains its photo", a
   expect(within(dialog).getByText("0 photos")).toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole("button", { name: "Close gallery" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+describe("VoyageDetail — desktop photo pages", () => {
+  function pagedVoyage() {
+    stubViewport(true);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return {
+        width: 388,
+        height: this.classList.contains("pv-voyage-page-area") ? 250 : 28,
+      } as DOMRect;
+    });
+    const photos = Array.from({ length: 7 }, (_, index) =>
+      photo({
+        id: `paged-${index}`,
+        position: index + 1,
+        captured_at: `2025-02-14T09:${String(index).padStart(2, "0")}:00Z`,
+        coordinate: { latitude: 40 + index, longitude: 140 + index, precision_m: 1000 },
+      }),
+    );
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ photos, photo_count: 7 }) }));
+    return renderScreen();
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("fits the map to the viewport and pages photos forward and backward", async () => {
+    const view = pagedVoyage();
+    const rail = screen.getByRole("complementary", { name: "Photos in this voyage" });
+    expect(view.container.querySelector(".pv-voyage-desktop")).toBeInTheDocument();
+    expect(within(rail).getAllByRole("img")).toHaveLength(2);
+    expect(within(rail).queryByRole("link", { name: "Previous" })).not.toBeInTheDocument();
+    await userEvent.click(within(rail).getByRole("link", { name: "More" }));
+    expect(within(rail).getAllByRole("img")[0]).toHaveAttribute("src", "/api/photos/paged-2/thumb");
+    await userEvent.click(within(rail).getByRole("link", { name: "Previous" }));
+    expect(within(rail).getAllByRole("img")[0]).toHaveAttribute("src", "/api/photos/paged-0/thumb");
+    for (let i = 0; i < 3; i++)
+      await userEvent.click(within(rail).getByRole("link", { name: "More" }));
+    expect(within(rail).getAllByRole("img")).toHaveLength(1);
+    expect(within(rail).queryByRole("link", { name: "More" })).not.toBeInTheDocument();
+  });
+
+  it("recalculates pages when the rail resizes and preserves the current photo", async () => {
+    let resize!: ResizeObserverCallback;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resize = callback;
+        }
+        observe = vi.fn();
+        disconnect = disconnect;
+      },
+    );
+    const view = pagedVoyage();
+    const rail = screen.getByRole("complementary", { name: "Photos in this voyage" });
+    await userEvent.click(within(rail).getByRole("link", { name: "More" }));
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return {
+        width: 388,
+        height: this.classList.contains("pv-voyage-page-area") ? 650 : 38,
+      } as DOMRect;
+    });
+    act(() => resize([], {} as ResizeObserver));
+    expect(within(rail).getAllByRole("img")).toHaveLength(6);
+    expect(within(rail).getByText("Page 1 of 2")).toBeInTheDocument();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return {
+        width: 388,
+        height: this.classList.contains("pv-voyage-page-area") ? 150 : 38,
+      } as DOMRect;
+    });
+    fireEvent(window, new Event("resize"));
+    expect(within(rail).getAllByRole("img")).toHaveLength(2);
+    expect(within(rail).getByText("Page 2 of 4")).toBeInTheDocument();
+    view.unmount();
+    expect(disconnect).toHaveBeenCalled();
+  });
+
+  it("includes unplaced photos in pagination and returns to page one if photos disappear", async () => {
+    const view = pagedVoyage();
+    vi.mocked(useVoyage).mockReturnValue(
+      queryResult({ data: voyage({ photos: [PLACED_A, UNPLACED] }) }),
+    );
+    view.rerender(screenTree());
+    const rail = screen.getByRole("complementary", { name: "Photos in this voyage" });
+    await userEvent.click(within(rail).getByRole("link", { name: "More" }));
+    expect(
+      within(rail).getByRole("group", { name: "Photos with no location" }),
+    ).toBeInTheDocument();
+    expect(within(rail).getByRole("button", { name: /no location/ })).toHaveAttribute(
+      "data-unplaced",
+      "true",
+    );
+    vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ photos: [PLACED_A] }) }));
+    view.rerender(screenTree());
+    expect(within(rail).getByText("Page 1 of 1")).toBeInTheDocument();
+    expect(within(rail).queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("shows the page containing a selected map pin", async () => {
+    pagedVoyage();
+    await mapReady();
+    await userEvent.click(mapPins()[6]);
+    const rail = screen.getByRole("complementary", { name: "Photos in this voyage" });
+    expect(within(rail).getAllByRole("img")[0]).toHaveAttribute("src", "/api/photos/paged-6/thumb");
+    expect(
+      within(rail).getByRole("button", { name: mapPins()[6].getAttribute("aria-label")! }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
 });
