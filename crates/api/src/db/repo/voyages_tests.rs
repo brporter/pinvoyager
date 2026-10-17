@@ -90,6 +90,31 @@ async fn order_of(pool: &PgPool, voyage_id: Uuid) -> Vec<Uuid> {
 }
 
 #[sqlx::test]
+async fn omitted_granularity_defaults_to_one_kilometer(pool: PgPool) {
+    let owner = a_user(&pool).await;
+    let explicit = a_voyage(&pool, owner).await;
+    let granularity: String = sqlx::query_scalar(
+        "INSERT INTO voyages (id, owner_id, title) VALUES ($1, $2, $3) RETURNING granularity",
+    )
+    .bind(Uuid::now_v7())
+    .bind(owner)
+    .bind("Default precision")
+    .fetch_one(&pool)
+    .await
+    .expect("insert with default precision");
+
+    assert_eq!(granularity, "km1");
+    assert_eq!(
+        find_by_id(&pool, explicit.id)
+            .await
+            .expect("find explicit voyage")
+            .expect("voyage exists")
+            .granularity,
+        "exact"
+    );
+}
+
+#[sqlx::test]
 async fn a_voyage_is_created_as_a_draft(pool: PgPool) {
     let owner = a_user(&pool).await;
     let created = create(&pool, &new_voyage(owner)).await.expect("create");

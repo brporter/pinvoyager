@@ -120,6 +120,9 @@
   --pv-cluster-bg:    var(--pv-pin-700);
   --pv-map-area-fill:   rgb(12 122 113 / 0.14);
   --pv-map-area-stroke: rgb(12 122 113 / 0.55);
+  /* Preview edges contrast with the light basemap in both page themes. */
+  --pv-map-preview-stroke: var(--pv-accent-700);
+  --pv-map-preview-halo: var(--pv-neutral-0);
 
   /* Status */
   --pv-success:       var(--pv-green-600);

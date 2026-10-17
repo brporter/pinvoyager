@@ -231,25 +231,23 @@ describe("tally", () => {
 });
 
 describe("Upload screen", () => {
-  it("requires an explicit precision choice even when the other voyage details are filled", async () => {
+  it("defaults new voyages to one kilometer without requiring a precision click", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem("pinvoyager.default_granularity", "exact");
     renderScreen(<Upload />, { auth: authState(ADA) });
     window.localStorage.removeItem("pinvoyager.default_granularity");
     for (const name of ["Exact", "~1 km", "~10 km", "~50 km"]) {
-      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name })).toHaveAttribute(
+        "aria-pressed",
+        name === "~1 km" ? "true" : "false",
+      );
     }
     await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "Private places");
     await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "A trip");
     await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Choose a location precision.");
-    expect(createVoyage).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "~10 km" }));
-    expect(screen.queryByText("Choose a location precision.")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
     await waitFor(() =>
       expect(createVoyage).toHaveBeenCalledWith(
-        { title: "Private places", description: "A trip", granularity: "km10" },
+        { title: "Private places", description: "A trip", granularity: "km1" },
         { traceContext: {} },
       ),
     );

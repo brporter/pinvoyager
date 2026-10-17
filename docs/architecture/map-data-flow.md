@@ -57,7 +57,12 @@ ground: a nominal 50 km cell is about 10 km wide at 89°. Latitude rounding keep
 the selected size, so the kilometer labels do not guarantee that width on both
 axes near the poles.
 
-`PrecisionPreview` uses St. Louis as its example and waits for an explicit
-precision choice. `UploadReviewMap` uses exact owner coordinates from accepted
+`PrecisionPreview` uses St. Louis as its example and displays the selected precision;
+the creation form initially selects ~1 km. `UploadReviewMap` uses exact owner coordinates from accepted
 uploads, with a maximum fitted zoom of 16. Neither requires variants to be ready.
+The precision preview circle uses a solid 3px dark teal outline with 2px white
+edges inside and outside the outline so the boundary stands out against the
+basemap in both page themes. Shared styles are in
+`design/components.css` (`.pv-gran-preview .pv-map-area`), using the
+`--pv-map-preview-stroke` and `--pv-map-preview-halo` tokens in `design/tokens.css`.
 See [photo ownership](../voyage-owned-photos.md) and [tile requests](../osm-tile-policy.md).

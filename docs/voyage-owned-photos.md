@@ -7,10 +7,17 @@ later attachment endpoint. Photos without GPS remain in their voyage.
 ## Creation and upload
 
 [`Upload`](../web/src/screens/Upload.tsx) starts with required Voyage Name, Voyage
-Description, and Location precision fields. Precision begins unselected for every new
+Description, and Location precision fields. Precision defaults to ~1 km for every new
 voyage. The four choices are Exact, ~1 km, ~10 km, and ~50 km. Continuing trims the text
 and creates a private draft before showing the file picker. Failure preserves the fields
 and sends no photo bytes.
+
+`http/voyages.rs::create` also defaults omitted API precision to `km1`. The
+`20261017000001_default_voyage_granularity.sql` migration sets the same default
+for database inserts that omit the column. Explicit choices and existing voyages
+keep their selected precision. `http/voyages_tests.rs::create_update_and_delete_handlers_apply_owner_changes`,
+`db/repo/voyages_tests.rs::omitted_granularity_defaults_to_one_kilometer`, and
+`web/src/screens/__tests__/Upload.test.tsx` cover these defaults and explicit choices.
 
 Choosing or dropping files starts sequential uploads into that draft. Accepted
 photos remain even when another file fails. Upload rows display filenames,

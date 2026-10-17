@@ -9,8 +9,9 @@ paths are relative to `web/src/`.
 
 ## Browser workflow
 
-`web/src/screens/Upload.tsx` collects a voyage name, description, and explicit
-precision, creates the draft, and replaces the URL query with `voyage=<id>`.
+`web/src/screens/Upload.tsx` collects a voyage name and description, defaults
+precision to ~1 km, and lets the owner choose another precision. It creates the
+draft and replaces the URL query with `voyage=<id>`.
 Refreshing that address resumes upload into the existing draft.
 `upload/useUploadBatch.ts` owns per-file state, progress, cancellation, and retry.
 It sends files sequentially, one per request. Each item has a UUID reused as its

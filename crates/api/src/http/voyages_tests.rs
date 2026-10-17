@@ -133,7 +133,8 @@ async fn create_update_and_delete_handlers_apply_owner_changes(pool: PgPool) {
     assert!(!created.published);
     assert_eq!(created.title, "");
     assert_eq!(created.description.as_deref(), Some("first draft"));
-    assert_eq!(created.granularity, "exact");
+    assert_eq!(created.granularity, "km1");
+    assert_eq!(created.precision_m, Some(500));
 
     let voyage = repo::create(
         &pool,

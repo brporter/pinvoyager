@@ -558,6 +558,12 @@
   pointer-events: none;
 }
 
+/* Keep the example boundary visible over roads, labels, and terrain. */
+.pv-gran-preview .pv-map-area {
+  border: 3px solid var(--pv-map-preview-stroke);
+  box-shadow: 0 0 0 2px var(--pv-map-preview-halo), inset 0 0 0 2px var(--pv-map-preview-halo);
+}
+
 /* OpenStreetMap attribution is an ODbL license requirement, not a courtesy.
    It appears on every map instance. */
 .pv-attribution {

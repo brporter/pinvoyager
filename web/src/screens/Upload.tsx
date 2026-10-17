@@ -53,8 +53,7 @@ export function Upload() {
   const [nameError, setNameError] = useState<string>();
   const [description, setDescription] = useState("");
   const [descriptionError, setDescriptionError] = useState<string>();
-  const [precision, setPrecision] = useState<Granularity | null>(null);
-  const [precisionError, setPrecisionError] = useState<string>();
+  const [precision, setPrecision] = useState<Granularity>("km1");
   const queryClient = useQueryClient();
   const createMutation = useCreateVoyage({ traceContext: traceContext.current });
 
@@ -107,8 +106,7 @@ export function Upload() {
               const missingDescription = description.trim() === "";
               setNameError(missingName ? "Enter a voyage name." : undefined);
               setDescriptionError(missingDescription ? "Enter a voyage description." : undefined);
-              setPrecisionError(precision === null ? "Choose a location precision." : undefined);
-              if (missingName || missingDescription || precision === null) return;
+              if (missingName || missingDescription) return;
               create.mutate(precision);
             }}
           >
@@ -138,27 +136,15 @@ export function Upload() {
                 setDescriptionError(undefined);
               }}
             />
-            <fieldset
-              disabled={create.isPending}
-              aria-describedby={precisionError === undefined ? undefined : "voyage-precision-error"}
-              style={{ border: 0, padding: 0, margin: 0 }}
-            >
+            <fieldset disabled={create.isPending} style={{ border: 0, padding: 0, margin: 0 }}>
               <legend className="pv-sm" style={{ marginBottom: "var(--pv-space-3)" }}>
                 Location precision (required)
               </legend>
               <GranularitySelector
                 value={precision}
                 disabled={create.isPending}
-                onChange={(value) => {
-                  setPrecision(value);
-                  setPrecisionError(undefined);
-                }}
+                onChange={setPrecision}
               />
-              {precisionError !== undefined && (
-                <p id="voyage-precision-error" className="pv-field-error" role="alert">
-                  {precisionError}
-                </p>
-              )}
             </fieldset>
             {create.isError && (
               <Toast tone="error" title="The voyage could not be created">

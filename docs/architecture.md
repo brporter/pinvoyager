@@ -146,7 +146,8 @@ or provider-unlink endpoint.
 
 ## Image lifecycle and consistency
 
-The creation form requires name, description, and explicit precision. It creates
+The creation form requires name and description and preselects approximately 1 km
+precision. The owner can choose another precision before continuing. It creates
 a draft and records its ID in the upload URL. `useUploadBatch` uploads one file
 per request, preserves a UUID retry key per file, reports each outcome, and
 cancels active and not-yet-started work on unmount. Draft creation and mutations

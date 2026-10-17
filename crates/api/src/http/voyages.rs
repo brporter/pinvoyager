@@ -331,7 +331,7 @@ struct CreateRequest {
     /// Optional draft title. Publishing requires a nonblank title.
     title: Option<String>,
     description: Option<String>,
-    /// Stored spelling. Absent defaults to `exact` in this handler.
+    /// Stored spelling. Absent defaults to `km1` in this handler.
     granularity: Option<String>,
 }
 
@@ -346,7 +346,7 @@ async fn create(
     let description = clean_description(body.description.as_deref())?;
     let granularity = match body.granularity.as_deref() {
         Some(spelling) => parse_granularity(spelling)?,
-        None => Granularity::Exact,
+        None => Granularity::Km1,
     };
 
     let voyage = repo::create(

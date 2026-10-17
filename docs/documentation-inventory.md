@@ -19,7 +19,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 
 | Document | Purpose |
 | --- | --- |
-| [Voyage creation and photo ownership](voyage-owned-photos.md) | Creation, explicit precision, upload/review, publication, covers, deletion, and ownership migration. |
+| [Voyage creation and photo ownership](voyage-owned-photos.md) | Creation, default and selected precision, upload/review, publication, covers, deletion, and ownership migration. |
 | [Location gallery](location-gallery.md) | Marker membership, photo navigation, processing states, native dialog dismissal, and focus handling. |
 | [Voyage sharing](voyage-sharing.md) | Public URL copying, draft publication, errors, and dialog lifecycle. |
 | [Display names and profiles](display-names.md) | Name validation, unique claims, reservations, aliases, migration, and anonymous published-voyage profiles. |
