@@ -1,4 +1,4 @@
-/** TabBar uses the shared runtime styles and accessible native controls. */
+/** Renders navigation links with active state and optional sign-in actions. */
 
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";

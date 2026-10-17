@@ -1,20 +1,6 @@
-//! Derived variants: resized, re-encoded, stripped.
-//!
-//! # The strip is the feature
-//!
-//! D6 requires every served variant to omit original metadata.
-//! Published voyages are public, so a served image is a public artifact. If someone
-//! chooses ~50 km granularity and the served WebP still carries its original
-//! GPS EXIF, the granularity control is decorative and anyone who downloads the
-//! file reads the exact coordinates out of it.
-//!
-//! Encoding from a decoded pixel buffer is what makes the strip structural
-//! rather than a step someone can forget: there is no metadata attached to a
-//! `DynamicImage` to carry forward. The `exiftool` test asserts it anyway,
-//! because "we re-encoded it" and "we stripped it" are different claims and an
-//! encoder upgrade can quietly change which one is true.
-//!
-//! D8: encoding is CPU-bound. Run under `spawn_blocking`.
+//! Resizes decoded pixels and encodes lossy WebP variants without original
+//! EXIF, XMP, or color-profile metadata. Metadata omission is checked in tests.
+//! Run resize and encoding work on the blocking pool.
 
 use std::borrow::Cow;
 
@@ -23,12 +9,7 @@ use image::imageops::FilterType;
 
 use crate::photos::PhotoError;
 
-/// Resampling filter for the downscale.
-///
-/// Lanczos3 rather than a cheaper triangle filter: these are photographs shown
-/// at the size we produce, a 400 px thumbnail is an eighth of the original in
-/// each axis, and the softness of a box or triangle filter at that reduction is
-/// visible. The cost is CPU, which is already off the runtime by D8.
+/// Lanczos3 resampling filter used when reducing image dimensions.
 const FILTER: FilterType = FilterType::Lanczos3;
 
 /// The three sizes served.
@@ -75,11 +56,8 @@ impl VariantKind {
     }
 }
 
-/// Resizes and encodes to lossy WebP with no metadata.
-///
-/// Lossy specifically: the pure-Rust `image-webp` encoder is lossless-only, and
-/// lossless WebP on a photograph is typically *larger* than the source JPEG,
-/// which would invert the reason for choosing WebP at all. Hence libwebp (D9).
+/// Resizes to the variant's maximum edge and encodes lossy WebP without
+/// original metadata. Returns encoding errors as `PhotoError`.
 pub fn encode_variant(
     image: &DynamicImage,
     kind: VariantKind,
@@ -91,13 +69,8 @@ pub fn encode_variant(
         .in_scope(|| encode_webp(resized.as_ref(), quality))
 }
 
-/// Scales down to fit inside a `max_edge` square, preserving aspect ratio.
-///
-/// Never up. Enlarging a small original does not add detail; it produces a
-/// bigger file that looks softer than the thing it came from, and it makes a
-/// 200 px scan pretend to be a 2560 px photograph in the lightbox. The
-/// borrowed-or-owned return is what keeps that case free rather than a full
-/// copy of the buffer.
+/// Scales down to fit the maximum edge while preserving aspect ratio.
+/// Borrows the original when it already fits, avoiding upscaling and a buffer copy.
 fn fit_within(image: &DynamicImage, max_edge: u32) -> Cow<'_, DynamicImage> {
     if image.width() <= max_edge && image.height() <= max_edge {
         return Cow::Borrowed(image);
@@ -109,14 +82,9 @@ fn fit_within(image: &DynamicImage, max_edge: u32) -> Cow<'_, DynamicImage> {
     Cow::Owned(image.resize(max_edge, max_edge, FILTER))
 }
 
-/// Encodes a pixel buffer as lossy WebP through libwebp.
-///
-/// **This is the strip.** The input is a `DynamicImage` — a width, a height and
-/// pixels, with nowhere for an EXIF block, an XMP packet or a color profile to
-/// hide — and libwebp's encoder writes only the bitstream chunks it generates
-/// itself. There is no metadata to carry forward because there is no metadata
-/// in the input. That structural property is what the `exiftool` test verifies
-/// rather than trusts.
+/// Encodes pixels as lossy WebP without copying original metadata.
+/// Clamps quality to 0–100. Invalid dimensions or native encoder failures
+/// return `PhotoError::Unencodable`.
 fn encode_webp(image: &DynamicImage, quality: f32) -> Result<Vec<u8>, PhotoError> {
     let (width, height) = (image.width(), image.height());
     if width == 0 || height == 0 {

@@ -15,6 +15,7 @@ export DATABASE_URL='postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager'
 export SQLX_OFFLINE=true
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+RUSTDOCFLAGS='-D warnings' cargo doc --no-deps
 cargo test
 cargo coverage -- --test-threads=1
 

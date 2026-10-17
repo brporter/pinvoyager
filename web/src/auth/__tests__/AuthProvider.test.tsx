@@ -1,13 +1,5 @@
-/**
- * What a 401 from `/api/me` means.
- *
- * This is the load-bearing distinction in the whole module. Most of this
- * application is readable without an account, so "nobody is signed in" is an
- * ordinary answer, and treating it as an error is how an anonymous visitor ends
- * up looking at an error screen on the home page. The mirror-image mistake is
- * just as bad: reporting a 500 as "signed out" shows a signed-in user the
- * anonymous site and offers them a sign-in button they do not need.
- */
+/** `/api/me` returning 401 makes the session anonymous. Server errors produce
+ *  a failed session read, so an outage does not look like a successful sign-out. */
 
 import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";

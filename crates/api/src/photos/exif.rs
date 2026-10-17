@@ -1,17 +1,6 @@
-//! EXIF extraction.
-//!
-//! Read from the **original**, never from a variant — variants are stripped by
-//! design, so reading one would always yield nothing.
-//!
-//! Absent data is the normal case, not an error. Screenshots, scans, and any
-//! camera with location services off carry no GPS; plenty of images carry no
-//! timestamp either. Every field here is optional and the pipeline must not
-//! treat a missing one as a failure.
-//!
-//! D8: this reads and parses a file, so it is blocking work. Callers run it
-//! under [`crate::blocking::run_blocking`]; the leaf function itself is
-//! deliberately synchronous so it composes with decode and encode inside a
-//! single `spawn_blocking` closure rather than hopping the pool three times.
+//! Extracts optional metadata from original images. Missing or unreadable
+//! metadata does not reject an upload. File reads and parsing are synchronous;
+//! callers run this work on the blocking pool.
 
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
@@ -27,30 +16,15 @@ pub struct ExifData {
     /// precision irreversibly and make a later granularity change impossible.
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
-    /// EXIF orientation, 1–8. Applied to the pixels during decode and then
-    /// discarded.
-    ///
-    /// Read it as **the rotation the decoded pixels still need**, not as a
-    /// verbatim copy of the tag. The two differ for exactly one family of
-    /// files: in an ISO-BMFF container (HEIC/HEIF) the authoritative
-    /// orientation is the `irot`/`imir` transformation property, which libheif
-    /// has already carried out by the time
-    /// [`crate::photos::decode::decode`] returns. Reporting the EXIF tag as
-    /// well would have the caller rotate a second time and land an iPhone
-    /// portrait face down, so it is deliberately not reported. See
-    /// [`crate::photos::decode`] for the whole argument.
+    /// EXIF orientation still needed after decoding, when valid (1–8).
+    /// Omitted for HEIC/HEIF because libheif applies container transformations
+    /// and the caller must not apply the EXIF tag again.
     pub orientation: Option<u16>,
 }
 
-/// Extracts what is present, tolerating everything that is not.
-///
-/// A malformed or absent EXIF block yields `ExifData::default()` rather than an
-/// error: a photo with unreadable metadata is still a photo, and refusing it
-/// would reject files every other viewer opens happily.
-///
-/// GPS in EXIF is degrees/minutes/seconds plus a N/S/E/W reference, so the
-/// sign has to be applied from the reference — getting that wrong puts European
-/// photographs in the Atlantic and is not obvious from a single test case.
+/// Reads optional capture time, coordinates, and orientation from an original.
+/// File-open failures or missing/unreadable EXIF return defaults;
+/// readable fields are retained when other fields are malformed.
 pub fn extract(path: &Path) -> ExifData {
     let Ok(file) = File::open(path) else {
         return ExifData::default();
@@ -73,11 +47,7 @@ fn extract_reader(mut reader: impl std::io::BufRead + Seek) -> ExifData {
         return ExifData::default();
     }
 
-    // `continue_on_error` keeps the fields that did parse when a later one is
-    // malformed, and `distill_partial_result` unwraps that partial success into
-    // a plain `Exif`. A single bad tag from an unusual camera must not cost us
-    // the GPS coordinates sitting next to it — partial data is exactly what
-    // this function promises to salvage.
+    // Keep successfully parsed tags even when other EXIF fields are malformed.
     let parsed = ::exif::Reader::new()
         .continue_on_error(true)
         .read_from_container(&mut reader)
@@ -86,9 +56,7 @@ fn extract_reader(mut reader: impl std::io::BufRead + Seek) -> ExifData {
     let exif = match parsed {
         Ok(exif) => exif,
         Err(err) => {
-            // Debug, not warn: a file with no EXIF at all lands here and that
-            // is the ordinary case for screenshots and scans. Worth seeing when
-            // chasing a specific upload, never worth alerting on.
+            // Missing or unreadable EXIF is logged at debug and yields empty metadata.
             tracing::debug!(error = %err, "no readable EXIF; treating the photo as unannotated");
             return ExifData::default();
         }
@@ -114,15 +82,9 @@ fn extract_reader(mut reader: impl std::io::BufRead + Seek) -> ExifData {
     }
 }
 
-/// Whether the file is an ISO base media container — HEIC and HEIF.
-///
-/// The marker is a `ftyp` box at offset 4 rather than a fixed prefix, because
-/// the first four bytes are the box's length. Uploads have already been
-/// narrowed to JPEG, PNG, WebP and HEIC by the magic-byte sniff (D7), so an
-/// `ftyp` here is a HEIF and nothing else.
-///
-/// This exists only to answer "has libheif already applied the rotation?" —
-/// see the note on [`ExifData::orientation`].
+/// Checks for an ISO-BMFF `ftyp` box at offset four. Returns false if the
+/// reader cannot read the twelve-byte header. Used on validated upload formats
+/// to decide whether container transformations replace EXIF orientation.
 fn is_iso_bmff(reader: &mut impl Read) -> bool {
     let mut header = [0u8; 12];
     // A file too short to hold a box header is not a container; whatever it is,
@@ -130,11 +92,9 @@ fn is_iso_bmff(reader: &mut impl Read) -> bool {
     matches!(reader.read_exact(&mut header), Ok(())) && &header[4..8] == b"ftyp"
 }
 
-/// When the shutter fired, normalized to UTC.
-///
-/// `DateTimeOriginal` is preferred over `DateTime`: the former is when the
-/// picture was taken, the latter is when the file was last written, and an edit
-/// in any photo tool moves the second without touching the first.
+/// Reads capture time, preferring DateTimeOriginal over DateTime.
+/// Uses the matching offset when valid; otherwise treats the wall-clock value
+/// as UTC. Returns `None` when no supported date can be parsed.
 fn captured_at(exif: &::exif::Exif) -> Option<DateTime<Utc>> {
     let (tag, ifd) = [
         (::exif::Tag::DateTimeOriginal, ::exif::In::PRIMARY),
@@ -196,26 +156,14 @@ fn captured_at_values(
             .from_local_datetime(&naive)
             .single()
             .map(|dt| dt.with_timezone(&Utc)),
-        // No zone recorded, so there is no honest conversion to make. Treating
-        // the wall clock as UTC keeps the stored value equal to what every
-        // other tool shows for the photo; inventing a zone from the GPS
-        // position would be a guess that silently moves timestamps by hours.
+        // No usable offset: interpret the recorded wall-clock time as UTC.
         None => Utc.from_local_datetime(&naive).single(),
     }
 }
 
-/// One GPS coordinate, signed by its reference.
-///
-/// **This is where the bugs live.** EXIF stores an unsigned magnitude as three
-/// rationals — degrees, minutes, seconds — and puts the hemisphere in a
-/// *separate* tag. Ignore the reference and every southern and western
-/// coordinate comes out mirrored into the wrong hemisphere: a Sydney photo
-/// lands in Siberia and a London one in the Atlantic. Neither is visible from a
-/// test case in the northern-eastern quadrant, because there both signs are
-/// positive and the bug is invisible.
-///
-/// Preserve exact values in owner metadata; public serialization applies
-/// the voyage's selected granularity.
+/// Reads a GPS axis as degrees/minutes/seconds and applies its hemisphere sign.
+/// Returns `None` for missing or malformed values, unrecognized references,
+/// non-finite results, or coordinates outside the axis bounds.
 fn coordinate(exif: &::exif::Exif, value_tag: ::exif::Tag, ref_tag: ::exif::Tag) -> Option<f64> {
     let field = exif.get_field(value_tag, ::exif::In::PRIMARY)?;
     let reference = exif.get_field(ref_tag, ::exif::In::PRIMARY)?;
@@ -242,18 +190,14 @@ fn coordinate_values(
     let ::exif::Value::Ascii(ref values) = *reference else {
         return None;
     };
-    // The reference is a one-character ASCII string. Anything else is a file we
-    // cannot interpret, and a coordinate we cannot sign is worse than no
-    // coordinate at all — it would place the photo somewhere confidently wrong.
+    // Reject an unrecognized hemisphere reference.
     let signed = match (value_tag, values.first()?.as_slice()) {
         (::exif::Tag::GPSLatitude, b"N") | (::exif::Tag::GPSLongitude, b"E") => magnitude,
         (::exif::Tag::GPSLatitude, b"S") | (::exif::Tag::GPSLongitude, b"W") => -magnitude,
         _ => return None,
     };
 
-    // A bounds check rather than a clamp: an out-of-range value means the tag
-    // was misparsed or the file is lying, and pinning it to the pole would
-    // invent a location. Better to report the photo as unplaced.
+    // Reject out-of-range coordinates instead of inventing a position by clamping.
     let limit = if value_tag == ::exif::Tag::GPSLatitude {
         90.0
     } else {
@@ -262,11 +206,7 @@ fn coordinate_values(
     (signed.abs() <= limit).then_some(signed)
 }
 
-/// The orientation tag, validated to the 1–8 the spec defines.
-///
-/// Values outside that range exist in the wild (0 is common from buggy
-/// writers). They are dropped rather than defaulted to 1 so that the decoder
-/// can tell "the file says upright" from "the file says nothing".
+/// Returns a valid orientation from 1–8, or `None` for missing or invalid values.
 fn orientation(exif: &::exif::Exif) -> Option<u16> {
     let field = exif.get_field(::exif::Tag::Orientation, ::exif::In::PRIMARY)?;
     let value = u16::try_from(field.value.get_uint(0)?).ok()?;

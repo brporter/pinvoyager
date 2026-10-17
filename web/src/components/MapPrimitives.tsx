@@ -1,4 +1,4 @@
-/** MapPrimitives uses the shared runtime styles and accessible native controls. */
+/** Map marker, cluster, precision-area, and attribution presentation components. */
 
 import type { CSSProperties, ReactNode } from "react";
 
@@ -27,24 +27,8 @@ export interface PinProps {
 }
 
 /**
- * Pin.
- *
- * The visible marker is 26px; the button around it is 44px, per
- * `--pv-touch-min`. Dense clusters on a phone are unusable otherwise — the tap
- * lands between two markers and nothing happens, which reads as the app being
- * broken rather than the finger being imprecise. The offset margins in
- * `.pv-pin` are what keep the *visible* tip on the coordinate while the hit
- * area extends past it.
- *
- * Selection changes hue, scale and halo at once. Hue alone would fail for a
- * meaningful number of users, and on a map the marker often sits on an
- * arbitrary background where a single-signal change is easy to miss even with
- * full color vision.
- *
- * Without `onClick` it renders as a labeled graphic rather than a button. The
- * design file draws every pin as a `<button>`, but a button that does nothing
- * is a dead stop in the tab order — which is exactly what the granularity
- * preview would otherwise put there.
+ * Draws a 26px pin within a 44px hit area. Selection changes color, scale,
+ * and halo. With onClick it is a button; otherwise it is a labeled graphic.
  */
 export function Pin({ label, left, top, selected = false, onClick, className }: PinProps) {
   const shared = {
@@ -88,19 +72,7 @@ export interface ClusterProps {
   className?: string;
 }
 
-/**
- * Cluster.
- *
- * `--pv-cluster-bg` is darker than `--pv-pin` on purpose: the bubble carries a
- * number, so it needs 4.5:1 against its label, where a bare pin only needs the
- * 3:1 non-text floor against the basemap.
- *
- * Rendered as a `<button>` when it has a handler, because the design gives it
- * `cursor: pointer` and a pointer-only affordance is not reachable by keyboard.
- * `.pv-cluster` overrides the user agent's button background, border, and
- * padding but not its font family, so a clustered count inherits the platform
- * button font until `font-family: inherit` is added to that rule.
- */
+/** Draws a numbered cluster, using a button when an activation handler is supplied. */
 export function Cluster({
   count,
   left,
@@ -152,14 +124,7 @@ export interface MapAreaProps {
   className?: string;
 }
 
-/**
- * MapArea.
- *
- * A coarse voyage draws an area, not a point. Rendering a sharp pin at the
- * center of a 10 km rounding makes a precision claim the data cannot support,
- * and it visually undoes the choice the user deliberately made. The circle's
- * radius reflects the actual precision, so what is drawn is what is known.
- */
+/** Draws a circle at the supplied diameter to indicate approximate location precision. */
 export function MapArea({ left, top, size, label, className }: MapAreaProps) {
   return (
     <div
@@ -184,17 +149,7 @@ export interface AttributionProps {
   className?: string;
 }
 
-/**
- * Attribution.
- *
- * OpenStreetMap attribution is required by the ODbL license under which the map
- * data is published. It is not a courtesy: it appears on every map instance,
- * and removing it is a license violation. There is no prop to hide it.
- *
- * The design file draws the notice as plain text; `.pv-attribution a` exists in
- * the stylesheet, so the copyright link is rendered here — which is what the
- * license actually asks for.
- */
+/** Displays linked OpenStreetMap attribution, with a dark-basemap modifier. */
 export function Attribution({ dark = false, children, className }: AttributionProps) {
   return (
     <div className={cx("pv-attribution", dark && "pv-attribution--dark", className)}>

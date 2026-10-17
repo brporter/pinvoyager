@@ -1,43 +1,10 @@
 /**
- * A stand-in for `maplibre-gl` in tests.
+ * MapLibre test double for jsdom, installed by vi.mock("maplibre-gl").
  *
- * MapLibre cannot run here at all: it needs a WebGL context, and jsdom does not
- * implement one. Without a substitute, every test that renders a screen with a
- * map on it fails inside the MapLibre constructor, and the screen's own
- * behavior — which is what those tests are about — never gets exercised.
- *
- * Picked up automatically by `vi.mock("maplibre-gl")` with no factory, because
- * Vitest looks for a `__mocks__` directory in the project root when the module
- * being mocked is a package.
- *
- * ## What it is faithful about, and what it is not
- *
- * Faithful: markers are real DOM elements, appended into the map's container in
- * the order they were added and removed when the marker is removed. That is
- * what lets a test find a pin with the same queries a user's assistive
- * technology would use, and it is the only part of MapLibre the application's
- * own behavior depends on.
- *
- * Also faithful, because too much depends on it: fitting the camera to a set of
- * bounds produces a realistic zoom. Clustering is a function of zoom, so a map
- * that reported a fixed zoom would merge or separate pins according to an
- * arbitrary number rather than according to how far apart they actually are —
- * two photographs a few hundred meters apart would come out as one bubble in
- * every test regardless of what the screen does. {@link zoomForBounds} works out
- * what zoom shows a rectangle inside an assumed 800×600 viewport, since jsdom
- * reports every element as zero-sized and there is no real one to measure.
- *
- * Not faithful: nothing is projected, nothing is drawn, and the camera is three
- * numbers. `easeTo`, `fitBounds`, `zoomIn` and `zoomOut` record what they were
- * asked for and update the zoom, so a test can assert that a cluster click
- * zooms in — but they do not animate, and no tile is ever requested.
- *
- * One deliberate difference from the real library: `on("load", …)` fires its
- * callback immediately, because this map is "loaded" as soon as it is
- * constructed. The real one fires once, asynchronously, when the style and the
- * first tiles arrive. Firing synchronously keeps every state update inside
- * React's own effect, which means tests do not have to wrap map construction in
- * `act` or await anything that is not genuinely asynchronous.
+ * Creates DOM markers and records camera instructions. Camera fitting uses an
+ * assumed 800×600 viewport because jsdom has no layout. No tiles are requested
+ * and nothing is rendered or animated. Load callbacks fire synchronously.
+ * Tests can inspect instances and reset their bookkeeping with __resetMaps.
  */
 
 type Listener = (...args: unknown[]) => void;

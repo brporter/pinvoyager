@@ -19,8 +19,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-pinvoyager}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pinvoyager}
       POSTGRES_DB: ${POSTGRES_DB:-pinvoyager}
-      # Cheap corruption detection; free to enable at initdb, impossible to
-      # add later without a dump and restore.
+      # Enable PostgreSQL page checksums when initializing the data directory.
       POSTGRES_INITDB_ARGS: --data-checksums
     ports:
       # Host port is configurable because a developer may already have a local
@@ -66,8 +65,7 @@ services:
       PINVOYAGER__AUTH__BASE_URL: ${PINVOYAGER__AUTH__BASE_URL:-http://localhost:8080}
       PINVOYAGER__DATABASE__MAX_CONNECTIONS: "10"
       PINVOYAGER__DATABASE__MIN_CONNECTIONS: "1"
-      # D8: always set. Unset means pool exhaustion hangs requests forever
-      # instead of surfacing as a 503.
+      # Maximum seconds to wait for a free database connection.
       PINVOYAGER__DATABASE__ACQUIRE_TIMEOUT_SECS: "5"
       PINVOYAGER__SERVER__SHUTDOWN_TIMEOUT_SECS: "15"
       PINVOYAGER__SERVER__REQUEST_TIMEOUT_SECS: "30"
@@ -79,8 +77,8 @@ services:
       # it here only if you also override the image's HEALTHCHECK.
     ports:
       - "${API_PORT:-8080}:8080"
-    # Must exceed PINVOYAGER__SERVER__SHUTDOWN_TIMEOUT_SECS, or `docker stop`
-    # SIGKILLs the process mid-drain and the graceful shutdown is decorative.
+    # Allow time for HTTP and worker shutdown before Docker sends SIGKILL.
+    # Each shutdown step can wait up to the configured shutdown timeout.
     stop_grace_period: 30s
     volumes:
       - uploads:/data

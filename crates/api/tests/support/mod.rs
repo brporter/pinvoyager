@@ -1,42 +1,10 @@
-//! A local OIDC provider that will lie on request.
+//! Loopback OIDC provider for verification tests. Serves discovery, JWKS, token,
+//! and userinfo endpoints and mints RS256 tokens with configurable claims.
 //!
-//! The verification contract rejects a token signed by the wrong key, with the wrong
-//! `aud`, expired, or with a mismatched `nonce` is rejected in each case — test
-//! with crafted tokens, not only live ones". No real provider will issue any of
-//! those, so the only way to assert the rejection paths is to own the provider.
-//! This is that provider: a real HTTP server on an ephemeral loopback port,
-//! serving a real discovery document and a real JWKS, minting real RS256
-//! signatures — and offering a knob for every property the verifier is supposed
-//! to check.
-//!
-//! What it deliberately does **not** do is fake the verifier's inputs at a
-//! lower level. The service under test performs discovery, fetches JWKS over
-//! HTTP, and exchanges a code at a token endpoint; a mock that skipped any of
-//! that would leave those steps untested and would pass even if the
-//! implementation never fetched a key at all.
-//!
-//! ## Key material
-//!
-//! Both keypairs are generated at process start by shelling out to `openssl`.
-//! Nothing is committed. A private key in a repository is a bad habit even when
-//! it is only a test key — secret scanners cannot tell the difference, and the
-//! resulting rotation fire drill costs somebody an afternoon.
-//!
-//! Two keys exist because "signed by the wrong key" is only a meaningful test
-//! if the wrong key is a genuine RSA key producing a genuine signature that
-//! simply does not verify against the published JWKS. The attacker key is never
-//! served in `/jwks`.
-//!
-//! ## Deliberate omissions
-//!
-//! * Authorization codes are **not** single-use here. Replay of a code is T2's
-//!   concern and belongs to the attempt/session layer, which enforces
-//!   single-use on its own `state` record; making codes one-shot in the mock
-//!   would only mean an implementation that retried an exchange failed for a
-//!   confusing reason.
-//! * The PKCE verifier and client credentials are accepted without checking.
-//!   These tests are about ID token verification, and a mock that rejected them
-//!   would produce failures that look identical to the ones under test.
+//! Generates a published key and an unpublished signing key with openssl once
+//! per test binary. Tests can vary issuer, audience, expiry, nonce, and signing
+//! key independently. Authorization codes are reusable, and PKCE and client
+//! credentials are not checked; this mock tests ID token verification.
 
 // Not every helper here is used by every test binary that includes the module,
 // and an unused-code warning is not a useful signal about test scaffolding.
@@ -127,12 +95,8 @@ fn signing_key(kid: &str) -> CoreRsaPrivateSigningKey {
         .expect("the generated PEM should parse as a PKCS#1 RSA private key")
 }
 
-/// Generates a throwaway RSA key, in the PKCS#1 PEM form the signer accepts.
-///
-/// `openssl` is the only key generator reachable from this crate's dependency
-/// set: `jsonwebtoken` is compiled with neither of its crypto backend features,
-/// so it can neither generate nor sign, and the RSA implementation inside
-/// `openidconnect` is private to it.
+/// Generates a temporary RSA key using openssl and normalizes it to the
+/// PKCS#1 PEM form used by the test signer. Panics on command or parsing failure.
 fn generate_rsa_private_key_pem() -> String {
     let output = Command::new("openssl")
         .args(["genrsa", "2048"])
@@ -301,14 +265,8 @@ impl MockOidcProvider {
         &self.issuer
     }
 
-    /// The issuer *identifier* — the exact string the discovery document and
-    /// every ID token's `iss` claim carry.
-    ///
-    /// Not the same as `issuer().as_str()`: `Url` gives a bare origin a
-    /// trailing slash and no real provider publishes it that way, so the
-    /// service trims it off the configured side. This is the trimmed form, and
-    /// it is what any assertion about the published issuer should compare
-    /// against.
+    /// Issuer string published in discovery and token claims, with trailing
+    /// slashes removed to match the service's issuer normalization.
     pub fn issuer_identifier(&self) -> &str {
         issuer_identifier(&self.issuer)
     }
@@ -358,18 +316,8 @@ impl MockOidcProvider {
     }
 }
 
-/// The issuer identifier as a real provider emits it.
-///
-/// `Url` normalizes a bare origin to carry a trailing slash — `http://host:port`
-/// becomes `http://host:port/` — but no real provider publishes it that way.
-/// Google's document says `https://accounts.google.com`, and OIDC compares the
-/// configured issuer against the published one for *exact* equality, so the
-/// service trims the slash off the configured side to match.
-///
-/// The mock therefore has to publish the trimmed form too. Emitting the
-/// normalized one made discovery fail on a one-character difference, the
-/// provider was silently disabled, and every rejection test in this file
-/// "passed" by never reaching its assertion.
+/// Removes trailing slashes so mock discovery and ID-token issuers match
+/// the normalized issuer configured in the service.
 fn issuer_identifier(issuer: &Url) -> &str {
     issuer.as_str().trim_end_matches('/')
 }

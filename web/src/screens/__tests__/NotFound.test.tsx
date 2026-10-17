@@ -1,11 +1,5 @@
-/**
- * 404 and error states.
- *
- * The load-bearing assertion is that a deleted voyage and a draft belonging to
- * somebody else produce the same words. The server answers 404 for both so
- * that unpublished work cannot be enumerated by probing ids; a screen that
- * distinguished them would undo that in the interface instead of the API.
- */
+/** Missing voyages and foreign drafts show the same message, matching the
+ *  API's 404 response without revealing whether an unpublished voyage exists. */
 
 import "@testing-library/jest-dom/vitest";
 

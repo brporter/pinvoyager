@@ -43,8 +43,7 @@ describe("TopNav", () => {
   });
 
   it("copes with a user who has neither a name nor a picture", () => {
-    // Apple returns the name only on first authorization, so this is an
-    // ordinary account state rather than an edge case.
+    // Accounts without a chosen display name still render a usable avatar.
     at("/", <TopNav user={{ displayName: null, avatarUrl: null }} />);
 
     expect(screen.getByRole("img", { name: "Signed in" })).toBeInTheDocument();

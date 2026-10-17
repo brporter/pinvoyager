@@ -150,10 +150,7 @@ function ProfileSection({
       <div className="pv-inline-3" style={{ marginBottom: "var(--pv-space-4)" }}>
         <Avatar name={displayName} src={avatarUrl} size="lg" />
         <p className="pv-xs pv-subtle" style={{ margin: 0, minWidth: 0 }}>
-          {/* The design draws a "Change picture" button. There is nowhere to
-              put a picture — PinVoyager stores none and the avatar comes from
-              whichever provider supplied one — so the explanation is shown
-              without a control that could not work. */}
+          {/* Avatar images come from providers; this screen offers no avatar upload. */}
           Your picture comes from your sign-in provider. Initials are used when a provider does not
           supply one.
         </p>

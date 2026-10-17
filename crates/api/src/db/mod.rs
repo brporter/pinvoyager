@@ -20,17 +20,12 @@ pub enum DbError {
     Migrate(#[source] sqlx::migrate::MigrateError),
 }
 
-/// Builds the pool.
-///
-/// `acquire_timeout` must be set from config — see D8. The default is no
-/// timeout, which turns pool exhaustion into requests that hang forever
-/// instead of a 503.
+/// Connects a PostgreSQL pool using the configured connection and acquisition
+/// limits. Connection failures return a database error.
 pub async fn connect(config: &DatabaseConfig) -> Result<PgPool, DbError> {
     let acquire_timeout = Duration::from_secs(config.acquire_timeout_secs);
 
-    // The URL is deliberately absent from this log line: it carries the
-    // password. Everything else about the pool is worth having in the log,
-    // because "why did that request 503" is answered by these three numbers.
+    // Log pool limits without exposing the password in the connection URL.
     tracing::info!(
         max_connections = config.max_connections,
         min_connections = config.min_connections,
@@ -41,12 +36,9 @@ pub async fn connect(config: &DatabaseConfig) -> Result<PgPool, DbError> {
     let pool = PgPoolOptions::new()
         .max_connections(config.max_connections)
         .min_connections(config.min_connections)
-        // D8. Without this, an exhausted pool parks the caller forever and the
-        // symptom is a service that looks alive while serving nothing.
+        // Limit how long requests wait for a pooled connection.
         .acquire_timeout(acquire_timeout)
-        // `connect` (rather than `connect_lazy`) opens a connection here, so a
-        // bad URL or an unreachable database is a loud startup failure instead
-        // of a 503 on the first real request.
+        // Connect now so startup reports database connection failures.
         .connect(config.url.expose_secret())
         .await
         .map_err(DbError::Connect)?;
@@ -72,12 +64,9 @@ pub async fn migrate(pool: &PgPool) -> Result<(), DbError> {
     Ok(())
 }
 
-/// Cheap round trip, used by the readiness probe.
+/// Runs `SELECT 1` for readiness, returning any database failure.
 pub async fn ping(pool: &PgPool) -> Result<(), sqlx::Error> {
-    // Deliberately the cheapest possible statement. A readiness probe runs on a
-    // timer forever, so it must not touch application tables — that would make
-    // probe cost scale with data, and would couple liveness of the process to
-    // the health of a schema it may be in the middle of migrating.
+    // Check connectivity without reading application tables.
     sqlx::query("SELECT 1").execute(pool).await?;
     Ok(())
 }

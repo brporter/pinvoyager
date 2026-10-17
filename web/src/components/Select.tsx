@@ -1,4 +1,4 @@
-/** Select uses the shared runtime styles and accessible native controls. */
+/** Renders a native select with a shared field label and validation feedback. */
 
 import { useId } from "react";
 import type { ReactNode, SelectHTMLAttributes } from "react";

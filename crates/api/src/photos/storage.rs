@@ -8,13 +8,8 @@
 //! {root}/variants/{aa}/{bb}/{full-hash}.{variant}.webp
 //! ```
 //!
-//! **No user-supplied string ever reaches the filesystem.** That is what makes
-//! path traversal a non-category here rather than something to defend against:
-//! a hash is 64 hex characters and cannot contain a separator, a dot-dot, or a
-//! null byte no matter what the uploader called their file.
-//!
-//! D8: these are blocking filesystem operations. Callers run them through
-//! [`crate::blocking::run_blocking`] or `tokio::fs`.
+//! Paths use validated 64-character hexadecimal content hashes and supported
+//! variant names; original filenames do not become storage path components.
 
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -32,14 +27,11 @@ const VARIANTS_DIR: &str = "variants";
 /// something derived from the source format.
 const VARIANT_EXTENSION: &str = "webp";
 
-/// A hex SHA-256. Two shard levels of two characters give 256 directories at
-/// each level — 65,536 leaf directories, which keeps any one of them small well
-/// past any volume this service will see.
+/// SHA-256 hex length. The first two pairs of characters select the shard directories.
 const HASH_HEX_LEN: usize = 64;
 const SHARD_WIDTH: usize = 2;
 
-/// Read size for streaming hashes. Large enough that the syscall overhead is
-/// negligible, small enough that it is a rounding error against a 25 MB upload.
+/// Buffer size used while streaming file contents into the hash.
 const HASH_CHUNK_BYTES: usize = 64 * 1024;
 
 /// Hex-encoded SHA-256 of the original bytes. The dedup key and the path stem.
@@ -66,10 +58,7 @@ impl ContentHash {
     pub fn of_file(path: &Path) -> Result<Self, PhotoError> {
         let mut file = std::fs::File::open(path).map_err(PhotoError::Storage)?;
 
-        // Streamed in fixed chunks rather than `read_to_end`: the whole point
-        // of hashing on the way past is that a 25 MB upload costs 64 KB of
-        // resident memory, not 25 MB, and fifty concurrent ones cost 3 MB
-        // rather than 1.2 GB.
+        // Hash in fixed-size chunks without buffering the entire upload.
         let mut hasher = Sha256::new();
         let mut buffer = vec![0u8; HASH_CHUNK_BYTES];
 
@@ -117,12 +106,9 @@ pub fn variant_path(root: &Path, hash: &ContentHash, kind: VariantKind) -> PathB
     root.join(VARIANTS_DIR).join(aa).join(bb).join(name)
 }
 
-/// Moves a completed upload into its content-addressed home.
-///
-/// Idempotent: if the destination already exists the bytes are identical by
-/// construction, so the temporary file is simply discarded. That is the dedup
-/// path, and it must not be an error — two users uploading the same photograph
-/// is ordinary.
+/// Moves a temporary upload to its content-hash path. If the destination
+/// already exists, discards the temporary file. A cross-filesystem rename
+/// uses a staged copy; other filesystem failures return `PhotoError`.
 #[tracing::instrument(name = "photo.store", skip_all, err)]
 pub async fn commit_original(
     root: &Path,
@@ -173,11 +159,7 @@ async fn recover_failed_rename(
     }
 }
 
-/// `EXDEV`: the temporary file and the storage root are on different
-/// filesystems, so there is no directory entry to move and `rename` cannot
-/// work. Detected rather than assumed away because the default temp directory
-/// is very often a tmpfs while the storage root is not, and the failure is a
-/// hard error on every single upload rather than something that degrades.
+/// Detects a cross-filesystem rename error using its kind or EXDEV code.
 fn is_cross_device(err: &std::io::Error) -> bool {
     // `raw_os_error` is checked alongside the kind because `CrossesDevices` is
     // a recent mapping and a platform that has not adopted it reports `Other`.
@@ -222,8 +204,9 @@ async fn copy_across_filesystems(temp_path: &Path, destination: &Path) -> Result
 ///
 /// **Only safe when no `photos` row still references the hash.** Deduplication
 /// means two users can share one file; an unqualified unlink here would delete
-/// another user's photograph. The reference check belongs to the caller, in the
-/// same transaction as the row delete.
+/// another user's photograph. After row deletion commits, `cleanup::clean`
+/// opens a new transaction, locks the content hash, and checks references.
+/// That transaction must retain the lock until removal finishes.
 pub fn remove_content(root: &Path, hash: &ContentHash) -> Result<(), PhotoError> {
     // Variants first. If the process dies between the two, what is left is an
     // original with no variants — which the worker can regenerate — rather than
@@ -234,10 +217,7 @@ pub fn remove_content(root: &Path, hash: &ContentHash) -> Result<(), PhotoError>
 
     remove_if_present(&original_path(root, hash))?;
 
-    // The shard directories are deliberately left behind. There are only 65,536
-    // of them, they cost an inode each, and removing one races with a
-    // concurrent `commit_original` that has just created it and is about to
-    // rename into it.
+    // Keep shard directories so their removal cannot race with an upload.
     Ok(())
 }
 

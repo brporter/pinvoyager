@@ -16,9 +16,8 @@ pub struct AppState {
     pub pool: PgPool,
     pub upload_limiter: Arc<crate::photos::rate_limit::UploadLimiter>,
     pub config: Arc<Config>,
-    /// Built once at startup: OIDC discovery and JWKS are fetched here, not per
-    /// sign-in. A discovery round trip on every authorization would add latency
-    /// to every sign-in and put avoidable load on the provider.
+    /// Providers initialized at startup. Unknown signing keys can trigger
+    /// rate-limited JWKS refreshes during verification.
     pub providers: Arc<ProviderRegistry>,
     /// Handle onto the variant worker. Uploads enqueue and return; encoding
     /// happens off the request path (D8).

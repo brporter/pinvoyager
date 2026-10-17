@@ -1,12 +1,4 @@
-/**
- * Provider names, for the copy that has to say one.
- *
- * The buttons themselves are `ProviderButton` in `src/components`, which owns
- * the mandated marks and the "Continue with X" grammar. What is left over is
- * the callback screen's prose — "Verifying your Google account", "That Apple ID
- * is already in use" — which needs a human name for a provider that arrived as
- * a string in a URL.
- */
+/** Provider display names used in callback messages. */
 
 import type { Provider } from "../components/ProviderButton";
 

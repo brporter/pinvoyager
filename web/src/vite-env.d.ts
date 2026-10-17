@@ -1,12 +1,8 @@
 /// <reference types="vite/client" />
 
 /**
- * Environment variables this application reads.
- *
- * Declared rather than left to `vite/client`'s index signature, which types
- * every `import.meta.env.X` as `any`. A misspelled variable name would then be
- * `any` too, and would silently be `undefined` at runtime instead of failing to
- * compile.
+ * Types for environment variables used by the application. Explicit declarations
+ * document the tile configuration values; Vite also permits other environment keys.
  */
 interface ImportMetaEnv {
   /**

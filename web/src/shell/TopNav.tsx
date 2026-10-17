@@ -33,17 +33,7 @@ export function TopNav({ desktop }: { desktop: boolean }) {
 
           {user === null ? null : <AccountMenu user={user} />}
 
-          {/* Suppressed only while the answer is still in flight. A "Sign in"
-              button offered to someone who is already signed in — and replaced
-              by their avatar a moment later — reads as the session having been
-              lost, and the wait is one round trip.
-
-              `failed` does show it. The state means "we could not find out",
-              and a bar with neither an avatar nor a way in is a dead end on
-              desktop: the tab bar that would otherwise rescue it is not
-              rendered above the `md` breakpoint. A link is also the harmless
-              direction to be wrong in — following it while signed in lands on
-              a screen that immediately redirects back. */}
+          {/* Hide sign-in while loading the session. Failed reads offer sign-in again. */}
           {status === "anonymous" || status === "failed" ? (
             <Link
               className="pv-btn pv-btn--primary pv-btn--sm"

@@ -1,25 +1,11 @@
 /**
- * The map.
+ * Map entry points and supporting modules.
  *
- * | file                  | what it owns                                          |
- * |-----------------------|-------------------------------------------------------|
- * | `style.ts`            | the tile source — the one place a basemap swap touches |
- * | `geo.ts`              | projection, clustering, area sizing, camera fitting    |
- * | `MapCanvas.tsx`       | the MapLibre instance, camera, controls, attribution   |
- * | `VoyageMap.tsx`       | one voyage: pins, clusters, areas, selection           |
- * | `UploadReviewMap.tsx`  | upload batch: exact-coordinate pins and camera fitting |
- * | `PrecisionPreview.tsx` | St. Louis tiles and geographic precision examples |
- * | `DiscoverMap.tsx`     | every voyage: markers grouped by the server            |
- * | `Lazy*.tsx`           | the code-splitting boundaries                          |
- *
- * Screens import the `Lazy` components and nothing else. Importing
- * `VoyageMap` or `DiscoverMap` directly would compile, and would quietly pull
- * MapLibre into the entry chunk for every route in the application.
- *
- * The two maps group their markers in different places, and the difference is
- * not arbitrary. A voyage arrives whole, so the browser groups it and a pan
- * costs nothing. The world cannot arrive whole, so the server groups it and a
- * pan is a request.
+ * Screens import Lazy components to defer MapLibre loading. MapCanvas owns
+ * the library instance; geo.ts computes geometry; style.ts supplies the basemap.
+ * Voyage maps cluster in the browser; discovery maps use server clusters.
+ * Upload review uses exact owner coordinates, and precision preview illustrates
+ * the selected rounding scale.
  */
 
 export { LazyUploadReviewMap } from "./LazyUploadReviewMap";

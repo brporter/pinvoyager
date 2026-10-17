@@ -1,4 +1,4 @@
-/** ProviderButton uses the shared runtime styles and accessible native controls. */
+/** Renders provider sign-in branding and a loading state that blocks repeat activation. */
 
 import type { ButtonHTMLAttributes, ReactElement } from "react";
 
@@ -21,9 +21,7 @@ export interface ProviderButtonProps extends Omit<
   /** The redirect has been initiated. Swaps the logo for a spinner and blocks
    *  a second activation, because two OAuth redirects race each other. */
   loading?: boolean;
-  /** Overrides "Continue with X". The shared label grammar is deliberate — it
-   *  makes the sign-in screen read as one set of equivalent choices rather than
-   *  four vendors competing — so override it only with good reason. */
+  /** Overrides the default "Continue with X" label. */
   label?: string;
   className?: string;
 }
@@ -129,5 +127,4 @@ const PROVIDER_LOGO: Record<Provider, () => ReactElement> = {
   microsoft: MicrosoftLogo,
 };
 
-/** The three providers in the order the sign-in screen shows them — by expected
- *  usage, as the design file specifies. */
+/** Provider order used by the sign-in screen. */

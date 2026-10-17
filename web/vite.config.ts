@@ -17,33 +17,16 @@ export default defineConfig({
   },
 
   optimizeDeps: {
-    // MapLibre decodes tiles in a Web Worker, which it loads as a sibling file
-    // (`maplibre-gl-worker.mjs`) rather than as an import. Vite's dependency
-    // pre-bundler rewrites the entry but does not carry the worker across, so
-    // the dev server logs
-    //
-    //   The file does not exist at ".../deps/maplibre-gl-worker.mjs"
-    //
-    // and the map renders no tiles at all — a gray panel with the pins drawn
-    // correctly on top of it, which looks like a tile-server problem rather
-    // than a bundler one.
-    //
-    // Excluding it costs nothing: maplibre-gl ships as a single pre-bundled
-    // ESM file, so pre-bundling it again buys no request savings. This affects
-    // the dev server only; the production build resolves the worker through
-    // Rollup and has always been correct.
+    // Exclude MapLibre from dependency pre-bundling so its sibling worker module
+    // remains resolvable in development. Production bundling handles it separately.
     exclude: ["maplibre-gl"],
   },
 
   server: {
     port: 5173,
     proxy: {
-      // The session cookie is HttpOnly and SameSite=Lax, so the browser only
-      // sends it to the origin that set it. Proxying the API through the dev
-      // server keeps everything on http://localhost:5173, which means sign-in
-      // works in development exactly as it will in production. Pointing the
-      // app straight at :8080 instead would drop the cookie on every request
-      // and look like a broken login.
+      // Proxy API requests through the frontend origin so cookie authentication
+      // uses the same request origin in development and production.
       "/api": { target: "http://127.0.0.1:8080", changeOrigin: false },
       "/auth": {
         target: "http://127.0.0.1:8080",

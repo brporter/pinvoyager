@@ -210,10 +210,8 @@ describe("VoyageMap — clustering", () => {
 
 describe("VoyageMap — granularity", () => {
   /**
-   * Target 10. A voyage rounded to ~10 km draws a circle 20 km across, because
-   * a sharp pin at the center of a 10 km rounding claims a precision the data
-   * does not have — and it visually undoes the choice the user deliberately
-   * made when they published at that setting.
+   * Coarse coordinates draw a circle using sqrt(2) times the per-axis
+   * precision as the approximate radius.
    */
   it("draws an area for a voyage that publishes rounded coordinates", () => {
     renderMap({ precisionM: 10_000 });
@@ -245,10 +243,8 @@ describe("VoyageMap — granularity", () => {
   });
 
   /**
-   * A single photograph has no span to fit, so the camera would otherwise go to
-   * its maximum and show a named street corner for a position known only to
-   * within fifty kilometers. The cap is the same defect target 10 is about,
-   * expressed as a camera rather than as a marker.
+   * A single coarse location limits fitted zoom so its approximate precision
+   * circle remains visible instead of fitting to street-level detail.
    */
   it("does not zoom past what the coordinates know", () => {
     renderMap({ pins: [SPREAD[0]], precisionM: 50_000 });
@@ -303,9 +299,7 @@ describe("VoyageMap — selection", () => {
     expect(onSelectPin).toHaveBeenCalledWith("b");
   });
 
-  /** Half of target 8: choosing a photograph in the list brings the map to it.
-   *  Without this the rail and the map are two lists that happen to share a
-   *  screen. */
+  /** Selecting a photo in the list moves the camera to its coordinate. */
   it("moves the camera to a photograph chosen in the list", () => {
     renderMap({ selection: { photoId: "b", source: "photo" } });
 

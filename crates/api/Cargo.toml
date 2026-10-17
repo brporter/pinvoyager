@@ -46,8 +46,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
 uuid = { version = "1.24.1", features = ["v7", "serde"] }
 
-# D8: tokio-console is how a blocking task holding a worker thread becomes
-# visible. Behind a feature flag so it never ships in a release build.
+# Optional Tokio runtime instrumentation for development; not enabled by default.
 console-subscriber = { version = "0.5.0", optional = true }
 openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
 # Pinned to 0.12, NOT 0.13. openidconnect 4 depends on oauth2 5, which is built
@@ -60,11 +59,8 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ] }
 
-# `rust_crypto` is NOT a default feature. jsonwebtoken's defaults are `use_pem`
-# alone, and with no backend the crate can neither sign nor verify — it panics
-# at runtime rather than failing to build. Apple's client secret is the only
-# JWT this service signs, so the panic would first appear on the first Apple
-# sign-in, in whatever environment that happened to be.
+# Enable the signing backend used by Apple client-secret JWTs. Without a
+# backend, jsonwebtoken signing panics at runtime.
 jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 rand = "0.10"
 base64 = "0.23.1"

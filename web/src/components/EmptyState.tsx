@@ -1,4 +1,4 @@
-/** EmptyState uses the shared runtime styles and accessible native controls. */
+/** Displays an icon, heading, explanation, and optional action for an empty region. */
 
 import type { ReactNode } from "react";
 
@@ -11,10 +11,7 @@ export interface EmptyStateProps {
   children?: ReactNode;
   /** Usually a single `Button`. */
   action?: ReactNode;
-  /** `danger` tints the icon for the "could not be loaded" variant. The design
-   *  file sets that color inline; `design/components.css` has no
-   *  `.pv-empty-icon--danger` modifier yet, so the inline style is mirrored
-   *  here rather than invented elsewhere. */
+  /** Tints the icon for an error state. */
   tone?: "default" | "danger";
   className?: string;
 }

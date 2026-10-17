@@ -1,25 +1,10 @@
 /**
- * The HTTP client for the PinVoyager API.
+ * HTTP transports for JSON requests and multipart uploads.
  *
- * Every call in this module goes through {@link request}, which is where the
- * three things that are easy to get wrong once and never notice again live:
- *
- *  1. **Cookies are always sent.** The session is an `HttpOnly` cookie set by
- *     the service, so `credentials: "same-origin"` is not a nicety — without it
- *     every authenticated request is anonymous and the whole app looks signed
- *     out. It is set here rather than at each call site precisely so that a new
- *     endpoint cannot forget it.
- *  2. **A failure keeps its `x-request-id`.** For a 5xx the response body says
- *     nothing useful on purpose; the real cause is in the server log, findable
- *     only by that header. The design's error screen asks the user to quote it,
- *     so an error object that dropped it would make the failure unreportable.
- *  3. **A 401 is a different kind of thing.** It means "sign in", not
- *     "something broke", and the two want different screens. It arrives as
- *     {@link UnauthorizedError}, a subclass, so callers can branch with
- *     `instanceof` rather than comparing numbers.
- *
- * Response shapes come from `./types`, which is checked against fixtures
- * captured from the running service — see `__tests__/contract.test.ts`.
+ * JSON requests use fetch; uploads use XMLHttpRequest for progress events.
+ * Both send session cookies and preserve request IDs on API errors. HTTP 401
+ * throws UnauthorizedError; transport failures throw NetworkError. Response
+ * types are checked against captured API fixtures.
  */
 
 import type {
@@ -47,15 +32,8 @@ export interface FieldError {
 }
 
 /**
- * An error body as it arrives on the wire.
- *
- * Deliberately wider than `ApiError` in `./types`. That type lists the seven
- * codes `AppError` produces; the two handler-local `Rejection` types add
- * `validation_failed`, `too_large`, `not_an_image`, `unprocessable_image`,
- * `rate_limited` and `variants_pending`, and the first of those also carries an
- * `errors` array. `code` is typed as `string` here so that a code this build
- * has never heard of still parses — a client that threw on an unknown code
- * would turn a new server-side rejection into a blank screen.
+ * Parsed error fields. Unknown server codes are retained as strings;
+ * missing or malformed fields receive fallbacks in the transport helpers.
  */
 export interface ApiErrorBody {
   code: string;
@@ -106,14 +84,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-/**
- * A 401.
- *
- * Its own class because "you are not signed in" is not a failure of the thing
- * the user asked for — it is a different screen, and often no screen at all:
- * most of this application is readable signed out, so a 401 from a background
- * refresh means "show the signed-out state", not "show an error".
- */
+/** HTTP 401 response, distinguished so callers can request authentication. */
 export class UnauthorizedError extends ApiRequestError {}
 
 /** Something below HTTP: the request never produced a response. Offline, DNS,
@@ -192,9 +163,7 @@ function requestIdOf(headers: Headers): string | null {
 function retryAfterOf(value: string | null): number | null {
   if (value === null) return null;
   const seconds = Number(value);
-  // `Retry-After` may also be an HTTP-date. This service only ever sends
-  // seconds, and guessing at a date we do not send would be a parser with no
-  // caller.
+  // Parse Retry-After as seconds, the format emitted by this API.
   return Number.isFinite(seconds) ? seconds : null;
 }
 
@@ -231,11 +200,8 @@ async function errorBodyOf(response: Response): Promise<ApiErrorBody> {
 }
 
 /**
- * Turns a non-2xx response into the error a caller sees.
- *
- * Exported because the upload path builds its responses with `XMLHttpRequest`
- * rather than `fetch` — see {@link uploadPhotos} — and the two must not grow
- * different error shapes.
+ * Converts an HTTP error response into ApiRequestError or UnauthorizedError,
+ * including its request ID, validation fields, and retry delay.
  */
 export function errorFrom(
   status: number,
@@ -256,11 +222,9 @@ export function errorFrom(
 }
 
 /**
- * One request, one response, or a throw.
- *
- * `T = void` for the endpoints that answer 204. Those are read as "no body"
- * rather than parsed, because `response.json()` on an empty body throws and
- * the throw would be reported as a failed delete that in fact succeeded.
+ * Sends a JSON request and returns its decoded response. HTTP 204 returns
+ * undefined without parsing JSON. Non-success statuses and transport failures
+ * throw typed errors.
  */
 async function request<T>(call: Call): Promise<T> {
   const headers = new Headers({ accept: "application/json" });
@@ -274,9 +238,7 @@ async function request<T>(call: Call): Promise<T> {
       method: call.method,
       headers,
       body: hasBody ? JSON.stringify(call.body) : undefined,
-      // The whole reason this module exists. The session is an HttpOnly
-      // cookie, and a fetch without this sends none — every authenticated
-      // request would 401 and the app would look permanently signed out.
+      // Explicitly send cookies for same-origin API requests.
       credentials: "same-origin",
       signal: call.signal,
     });
@@ -325,9 +287,7 @@ export function listVoyages(params: VoyageListParams = {}): Promise<VoyageList> 
   return request<VoyageList>({
     method: "GET",
     path: "/api/voyages",
-    // `mine` is omitted rather than sent as `false`: the server defaults it,
-    // and an explicit `mine=false` would look like a different cache key for
-    // the same request.
+    // Omit mine when false; the server defaults to the public feed.
     query: { mine: mine ? true : undefined, before, limit },
     signal,
   });
@@ -339,8 +299,7 @@ export function getVoyage(id: string, options: RequestOptions = {}): Promise<Voy
   return request<Voyage>({ method: "GET", path: `/api/voyages/${id}`, ...options });
 }
 
-/** The lean payload the map draws from. Same visibility rule as
- *  {@link getVoyage}, and deliberately smaller: it is fetched per view. */
+/** Fetches voyage map data using the same visibility rules as getVoyage. */
 export function getVoyageMap(id: string, options: RequestOptions = {}): Promise<VoyageMap> {
   return request<VoyageMap>({ method: "GET", path: `/api/voyages/${id}/map`, ...options });
 }
@@ -357,11 +316,8 @@ export interface MapWindow {
 }
 
 /**
- * Every published voyage's photographs inside a rectangle, already grouped.
- *
- * No session, and the answer is the same for everyone. Unlike a single voyage's
- * map, this one cannot be sent whole and grouped in the browser — at a world
- * view the rectangle covers every published photograph there is.
+ * Fetches server-grouped published photo locations in the viewport.
+ * The endpoint does not require a session.
  */
 export function getDiscoverMap(
   window: MapWindow,
@@ -435,7 +391,7 @@ export function detachPhoto(
   });
 }
 
-/** Sets the order. The body is the desired sequence in full, not a delta. */
+/** Orders listed photos first; omitted photos retain their relative order afterward. */
 export function reorderPhotos(
   id: string,
   photoIds: readonly string[],
@@ -458,8 +414,10 @@ export interface PhotoListParams extends RequestOptions {
   limit?: number;
 }
 
-/** One voyage's owner-only photo metadata, newest first. Owner-only, and the coordinates in
- *  it are exact — never render them on a public page. */
+/**
+ * Fetches one voyage's owner-only photo metadata in descending ID order,
+ * including exact coordinates.
+ */
 export function listPhotos(voyageId: string, params: PhotoListParams = {}): Promise<PhotoList> {
   const { before, limit, signal } = params;
   return request<PhotoList>({
@@ -482,24 +440,19 @@ export interface UploadOptions extends RequestOptions {
   /** Reuse for retries of the same files in the same order. */
   idempotencyKey?: string;
   voyageId: string;
-  /** Fraction between 0 and 1, or null while the total is unknown. Called as
-   *  the body goes out, which is the only progress a browser can report. */
+  /**
+   * Fraction of request bytes sent, from 0 to 1, or null when total size is
+   * unknown. Does not report server processing or variant generation progress.
+   */
   onProgress?: (fraction: number | null) => void;
 }
 
 /**
- * Uploads one or more files.
+ * Uploads files using XMLHttpRequest and reports upload progress.
  *
- * `XMLHttpRequest` rather than `fetch`, and not by preference: `fetch` reports
- * no upload progress in any shipping browser, and an upload screen with a bar
- * that only moves at the end is the design's "per-file progress" in name only.
- * The error path is routed through {@link errorFrom} so this call throws
- * exactly what every other call throws, request id included.
- *
- * The design's mixed-batch requirement (T8) is met by calling this **once per
- * file**: a batch is not a transaction server-side, but a rejected file fails
- * the request that carried it, so one request per file is what gives each file
- * its own outcome.
+ * HTTP and transport failures throw the same error classes as JSON requests.
+ * The batch hook calls this once per file so each file has its own outcome.
+ * A successful response accepts the photo; variants may still be pending.
  */
 export function uploadPhotos(
   files: readonly File[],
@@ -518,10 +471,7 @@ export function uploadPhotos(
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${BASE}/api/voyages/${options.voyageId}/photos`);
-    // Same-origin requests send cookies by default here, but a deployment that
-    // ever moves the API to another origin would silently lose the session
-    // without this. Stated rather than assumed, for the same reason
-    // `credentials` is stated above.
+    // Include cookies with the upload request.
     xhr.withCredentials = true;
     xhr.setRequestHeader("accept", "application/json");
     if (options.idempotencyKey) xhr.setRequestHeader("idempotency-key", options.idempotencyKey);
@@ -637,11 +587,8 @@ export function getPublicProfile(
 }
 
 /**
- * Signs out.
- *
- * The server deletes the session row, so this is not merely a cookie being
- * cleared: a token someone else is holding stops working too. Answers 204 even
- * when there was no session, which is why it is `void` and never throws a 401.
+ * Revokes the presented session and clears its cookie. Success returns no
+ * body, including when no session exists. HTTP or transport failures throw.
  */
 export function signOut(options: RequestOptions = {}): Promise<void> {
   return request<void>({ method: "POST", path: "/auth/logout", ...options });

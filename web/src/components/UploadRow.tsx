@@ -1,4 +1,4 @@
-/** UploadRow uses the shared runtime styles and accessible native controls. */
+/** Displays one file's upload status, progress, error, and available actions. */
 
 import type { ReactNode } from "react";
 

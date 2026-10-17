@@ -1,13 +1,7 @@
 /**
- * Behavior of the voyage detail screen.
- *
- * The API hooks are mocked rather than a server being stood up: what these
- * tests are about is what the screen does with a voyage once it has one, and
- * every state — pending, failed, empty — is a value the hook can simply return.
- *
- * There are no snapshots here on purpose. A snapshot of this screen would pass
- * whether or not selecting a pin selected its photograph, which is the only
- * thing the screen exists to do.
+ * Checks detail-screen states, map/list selection, and gallery behavior.
+ * API hooks supply fixtures, and the MapLibre double provides DOM markers
+ * and camera events without drawing tiles.
  */
 
 import "@testing-library/jest-dom/vitest";

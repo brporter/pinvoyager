@@ -1,36 +1,8 @@
 /**
- * Forged sign-in, for development only.
- *
- * # This is an authentication bypass
- *
- * It posts a name to `POST /auth/dev/login` and receives a session for it. No
- * provider, no `state`, no PKCE, no ID token, no signature. It exists because
- * obtaining credentials for three providers is a serialized, manual process
- * — Apple alone needs a paid developer account — and without it nobody can sign
- * in on a development machine at all, which makes every signed-in screen in
- * this application unbuildable and untestable.
- *
- * ## How it stays out of production
- *
- * Three independent layers, in order of how much they are worth relying on:
- *
- *  1. **The server route does not exist in a release build.** Both the handler
- *     and its route are behind `#[cfg(debug_assertions)]`, which Cargo turns
- *     off in the release profile, and the container image builds `--release`.
- *     Absent, not disabled. This is the guarantee that actually matters, and it
- *     does not depend on anything in this file.
- *  2. **The server refuses unless `auth.dev_login` is set**, answering 404 —
- *     indistinguishable from a bypass that was never built.
- *  3. **This component is not in the production bundle.** `SignIn` renders it
- *     behind `import.meta.env.DEV`, which Vite replaces with the literal
- *     `false` at build time; the branch folds away, the import becomes
- *     unreferenced, and Rollup drops the module. `npm run build` output can be
- *     grepped for the strings below to confirm it, and that check is worth
- *     repeating whenever the bundler configuration changes.
- *
- * Layer 3 is a bundle-size and honesty measure. It is not a security control —
- * a UI that is absent cannot stop a request that layer 1 has already made
- * impossible to serve.
+ * Development sign-in form that requests a session for a supplied subject
+ * without contacting a provider. Rendered only in development. The server
+ * additionally requires debug assertions and auth.dev_login; otherwise the
+ * endpoint returns 404.
  */
 
 import { useState } from "react";
@@ -44,10 +16,7 @@ export function DevSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<voi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Not routed through `src/api/client`. That module is the typed surface of
-  // the real API, and this endpoint is not part of it — it does not exist in a
-  // release build, so a client method for it would be a permanent reference to
-  // something that is usually absent.
+  // Call the development-only endpoint directly; it is absent in release builds.
   const submit = async () => {
     setBusy(true);
     setError(null);

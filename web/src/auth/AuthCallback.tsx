@@ -41,8 +41,7 @@ function namedOutcome(params: URLSearchParams): Outcome | null {
     return "verifying";
   }
 
-  // Anything else the provider or the API chose to say. Not rendered — see the
-  // module comment on why every failure gets one screen.
+  // Unrecognized error text becomes the generic failure state.
   return "failed";
 }
 
@@ -179,12 +178,7 @@ export function AuthCallback() {
             the other one first and unlink it there.
             <br />
             <br />
-            {/* Quoted exactly, and it is a promise the server keeps: the link
-                handler returns before any write and rolls back the read-only
-                transaction, so neither account's rows — not even a
-                `last_seen_at` — are touched. A user whose link attempt failed
-                is afraid they have half-merged something, and saying this
-                plainly is cheaper than any recovery flow. */}
+            {/* Link conflicts leave both accounts unchanged. */}
             Nothing has been changed on either account.
           </>
         }
@@ -248,10 +242,7 @@ export function AuthCallback() {
             <>
               <br />
               <br />
-              {/* The `x-request-id` the failure carried. It is the only handle
-                  on what actually went wrong, because the response body
-                  deliberately does not say — quoting it is what makes an
-                  otherwise opaque failure diagnosable from the server log. */}
+              {/* Show the request reference so the failure can be found in server logs. */}
               <span className="pv-xs pv-subtle">Reference {reference}</span>
             </>
           )}
@@ -274,9 +265,7 @@ export function AuthCallback() {
 
 const FULL_WIDTH = { width: "100%" } as const;
 
-/** Restarts the whole flow at the provider that conflicted. A full page
- *  navigation for the same reason the sign-in buttons are one: the endpoint
- *  redirects to another origin, and a fetch would be refused there. */
+/** Restarts sign-in with the conflicting provider using a full-page navigation. */
 function restartAt(provider: Provider): void {
   window.location.assign(signInUrl(provider));
 }

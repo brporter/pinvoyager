@@ -1,8 +1,7 @@
-//! Authentication extractors.
+//! Session extractors for required and optional authentication.
 //!
-//! The point of these is that authentication becomes a **type-level**
-//! requirement. A handler that takes [`CurrentUser`] cannot run without one, so
-//! handlers enforce ownership after the extractor authenticates the caller.
+//! `CurrentUser` rejects missing or expired sessions. `MaybeUser` allows
+//! anonymous requests. Both update activity when a valid session is found.
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
@@ -26,16 +25,9 @@ pub struct CurrentUser {
 #[derive(Debug, Clone)]
 pub struct MaybeUser(pub Option<CurrentUser>);
 
-/// The shared half of both extractors.
-///
-/// Both go through `lookup_and_touch` rather than a plain read, because the
-/// sliding expiry only slides if every authenticated request touches the row —
-/// including the ones that reach an endpoint through [`MaybeUser`]. An
-/// optional-auth endpoint is still activity.
-///
-/// A database failure is distinct from "not signed in" and stays a `sqlx::Error`
-/// here so that each extractor can decide what to do with it; folding it into
-/// `None` would turn an outage into a wave of silent sign-outs.
+/// Reads the session cookie and looks up its token, updating session activity.
+/// Returns `Ok(None)` for a missing cookie or invalid session and propagates
+/// database errors to the extractor.
 async fn resolve(parts: &Parts, state: &AppState) -> Result<Option<CurrentUser>, sqlx::Error> {
     let config = &state.config.auth.session;
 
@@ -79,10 +71,7 @@ impl FromRequestParts<AppState> for MaybeUser {
     ) -> Result<Self, Self::Rejection> {
         let user = match resolve(parts, state).await {
             Ok(user) => user,
-            // Infallible by contract, so a database failure degrades to
-            // anonymous rather than failing the request. That is the right
-            // trade for a read surface that is public anyway (D6), but it is
-            // invisible unless it is logged — hence the warning.
+            // Log database failures and continue as anonymous for optional authentication.
             Err(err) => {
                 tracing::warn!(error = %err, "session lookup failed; treating request as anonymous");
                 None

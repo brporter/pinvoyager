@@ -74,10 +74,7 @@ function DiscoverMarkers({ view }: { view: MapView }) {
         ),
       )}
 
-      {/* Truncation is stated rather than hidden. A map that silently dropped
-          half a continent looks exactly like a map of a continent with fewer
-          photographs on it, and a reader has no way to tell which they are
-          looking at. */}
+      {/* Show when the API omitted results after reaching its response limit. */}
       {query.isError && (
         <div className="pv-map-notice" role="alert">
           Map photographs could not be loaded.{" "}

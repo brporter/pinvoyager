@@ -51,6 +51,12 @@ on each axis. A corner is approximately `sqrt(2) * precision_m` from the center;
 `areaDiameterPx` and `zoomForPrecision` use that diagonal extent. Circles indicate
 approximate rounding, not an exact geodetic guarantee.
 
+`crates/api/src/voyages/granularity.rs::longitude_cell_scale` caps longitude
+widening at ±85°. Beyond that latitude, cells become narrower east-west on the
+ground: a nominal 50 km cell is about 10 km wide at 89°. Latitude rounding keeps
+the selected size, so the kilometer labels do not guarantee that width on both
+axes near the poles.
+
 `PrecisionPreview` uses St. Louis as its example and waits for an explicit
 precision choice. `UploadReviewMap` uses exact owner coordinates from accepted
 uploads, with a maximum fitted zoom of 16. Neither requires variants to be ready.

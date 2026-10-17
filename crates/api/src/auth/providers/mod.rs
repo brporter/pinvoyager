@@ -44,13 +44,8 @@ use crate::auth::provider::ProviderKind;
 /// the global request timeout fires.
 const PROVIDER_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The redirect URI we send to the provider and repeat at the code exchange.
-///
-/// It must match what is registered in the provider's console *exactly* —
-/// every provider compares it byte for byte and rejects a mismatch with an
-/// error that does not say so. Building it from one place means the `/start`
-/// redirect and the token request cannot drift apart, which is the failure this
-/// helper exists to prevent.
+/// Builds the provider callback URI from the public base URL and provider name.
+/// Returns a configuration error if the base cannot be joined with the callback path.
 pub(crate) fn callback_uri(base_url: &Url, kind: ProviderKind) -> Result<RedirectUrl, AuthError> {
     let path = format!("/auth/{}/callback", kind.as_str());
     let url = base_url.join(&path).map_err(|err| {
@@ -59,19 +54,9 @@ pub(crate) fn callback_uri(base_url: &Url, kind: ProviderKind) -> Result<Redirec
     Ok(RedirectUrl::from_url(url))
 }
 
-/// The HTTP client every provider call goes through — discovery, JWKS, token
-/// endpoints alike.
-///
-/// `redirect::Policy::none()` is not a detail: `oauth2` documents that following
-/// redirects on these requests turns the client into an SSRF gadget, because a
-/// provider (or anything that can answer for it) could redirect a request that
-/// carries our client secret somewhere else entirely.
-///
-/// One function rather than one per provider because there is exactly one
-/// `reqwest` in the build: `crates/api/Cargo.toml` pins it to 0.12 so that
-/// `&reqwest::Client` is the type `oauth2`'s `AsyncHttpClient` is implemented
-/// for. If that pin ever moves, `openidconnect::reqwest::Client` and
-/// `reqwest::Client` become two different types and this splits in two.
+/// Builds a provider HTTP client with a ten-second timeout and redirects disabled
+/// to prevent forwarding credentials to a redirected destination. Client setup
+/// failures return a configuration error.
 pub(crate) fn provider_http_client() -> Result<reqwest::Client, AuthError> {
     reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())

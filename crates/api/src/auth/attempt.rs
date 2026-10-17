@@ -1,10 +1,7 @@
-//! In-flight authorization attempts.
+//! Pending provider authorization attempts.
 //!
-//! An attempt is created at `/auth/{provider}/start` and **consumed** at the
-//! callback. Single-use is the point: it is what makes a replayed callback
-//! fail. Consumption must therefore be an atomic `DELETE ... RETURNING`, not a
-//! read followed by a delete — two concurrent callbacks with the same state
-//! must not both succeed.
+//! Starting authorization stores an attempt. A callback atomically deletes and
+//! returns it, so only one callback can consume a given state.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -17,20 +14,13 @@ use uuid::Uuid;
 
 use crate::auth::ProviderKind;
 
-/// 256 bits, same reasoning as a session token: an opaque value whose only
-/// security is that it cannot be guessed.
+/// Number of random bytes used for a browser-binding value.
 const BINDING_BYTES: usize = 32;
 
-/// The raw browser-binding value. Lives in exactly two places: this type and
-/// the cookie. Only its hash reaches the database.
+/// Browser-binding value whose hash is stored with an authorization attempt.
 ///
-/// Separate from the session cookie on purpose. Matching the callback's
-/// *session* against `link_user_id` would look simpler and would break Apple
-/// outright — its callback is a cross-site form POST, and a `SameSite=Lax`
-/// cookie is not sent on one. This value is carried `SameSite=None` so it
-/// survives that POST, which is safe precisely because it is single-use, opaque,
-/// and confers nothing on its own: possessing it lets you complete one specific
-/// authorization attempt you already started, and nothing else.
+/// Uses a separate `SameSite=None` cookie so Apple's cross-site POST callback
+/// can present it even when the session cookie is withheld.
 pub struct BindingValue(String);
 
 impl std::fmt::Debug for BindingValue {
@@ -60,13 +50,7 @@ impl BindingValue {
         Sha256::digest(self.0.as_bytes()).to_vec()
     }
 
-    /// Constant-time comparison against a stored hash.
-    ///
-    /// Timing on a 32-byte digest comparison is not a realistic attack here —
-    /// the value is single-use and expires in minutes — but the cost of getting
-    /// it right is one function call, and a short-circuiting `==` in
-    /// authentication code is the kind of thing that gets copied somewhere it
-    /// does matter.
+    /// Compares this value's SHA-256 hash with the stored hash in constant time.
     pub fn matches(&self, stored_hash: &[u8]) -> bool {
         let computed = self.hash();
         if computed.len() != stored_hash.len() {
@@ -95,14 +79,8 @@ pub struct PendingAttempt {
     pub link_user_id: Option<Uuid>,
     pub redirect_to: Option<String>,
     pub expires_at: DateTime<Utc>,
-    /// SHA-256 of the binding value handed to the browser as a cookie at
-    /// `/auth/{provider}/start`.
-    ///
-    /// The callback must present a cookie hashing to this, which is what ties
-    /// the flow to the browser that began it. Without it, an attacker can start
-    /// a link flow on their own account and lure a victim through the
-    /// provider's consent screen, attaching the victim's identity to the
-    /// attacker's account — see the migration for the full sequence.
+    /// SHA-256 of the browser-binding cookie. The callback must present the
+    /// matching value to complete the attempt in the browser that started it.
     pub binding_hash: Vec<u8>,
 }
 
@@ -111,9 +89,7 @@ pub async fn create(
     executor: impl PgExecutor<'_>,
     attempt: &PendingAttempt,
 ) -> Result<(), sqlx::Error> {
-    // `provider` is a text column with a CHECK constraint rather than a
-    // Postgres enum (see the identities migration), so the protocol-layer
-    // `ProviderKind` writes its own wire spelling.
+    // Store the provider's lowercase protocol name in the text column.
     sqlx::query!(
         "INSERT INTO auth_attempts
              (state, provider, nonce, pkce_verifier, link_user_id, redirect_to, expires_at,
@@ -134,24 +110,15 @@ pub async fn create(
     Ok(())
 }
 
-/// Atomically consumes an attempt by state.
+/// Atomically deletes and returns an unexpired attempt matching the state.
 ///
-/// `Ok(None)` covers unknown, already-used, and expired alike — the caller must
-/// not distinguish them to the client. Implement as a single
-/// `DELETE ... WHERE state = $1 RETURNING ...`; a SELECT-then-DELETE lets two
-/// concurrent callbacks both pass.
+/// Returns `Ok(None)` for missing, consumed, expired, or unrecognized-provider
+/// attempts. Expired attempts are deleted. Database failures return an error.
 pub async fn consume(
     executor: impl PgExecutor<'_>,
     state: &str,
 ) -> Result<Option<PendingAttempt>, sqlx::Error> {
-    // This DELETE is the single-use property. Postgres serializes the two
-    // deleters of one row and only the first gets a RETURNING row, so a
-    // replayed callback — or a genuinely concurrent one — finds nothing. A
-    // SELECT followed by a DELETE would let both readers pass the check before
-    // either deleted, which is precisely the replay this table exists to stop.
-    //
-    // The expiry is checked afterwards rather than in the WHERE clause so that
-    // an expired attempt is removed by the same statement that rejects it.
+    // DELETE RETURNING lets only one concurrent callback consume the state.
     let row = sqlx::query!(
         "DELETE FROM auth_attempts
           WHERE state = $1
@@ -171,10 +138,7 @@ pub async fn consume(
     }
 
     let Some(provider) = ProviderKind::parse(&row.provider) else {
-        // Unreachable behind the CHECK constraint, so this is a corrupt row or
-        // a provider removed from the code while attempts were in flight.
-        // Either way the flow cannot continue, and "no such attempt" is the
-        // truthful answer to give the caller.
+        // Treat an unrecognized stored provider as an unusable attempt.
         tracing::error!(provider = %row.provider, "auth attempt names an unknown provider");
         return Ok(None);
     };

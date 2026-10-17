@@ -25,15 +25,12 @@ pub struct UploadLimiter {
 }
 
 impl UploadLimiter {
-    /// Takes one token, or reports how many seconds until one exists.
-    ///
-    /// A token bucket rather than a fixed window: a fixed window lets a user spend
-    /// a whole minute's budget in the last second of one window and again in the
-    /// first second of the next, which is twice the rate it claims to enforce, at
-    /// exactly the moment it matters.
+    /// Consumes one token from the user's bucket. Refills continuously at the
+    /// configured per-minute rate. Returns retry seconds when no token is available;
+    /// a zero limit rejects every attempt.
     pub fn take_at(&self, user_id: Uuid, per_minute: u32, now: Instant) -> Result<(), u64> {
         if per_minute == 0 {
-            // Configured off. An honest 429 rather than the division by zero below.
+            // A zero limit rejects uploads without dividing by zero.
             return Err(60);
         }
 

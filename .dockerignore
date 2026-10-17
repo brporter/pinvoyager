@@ -30,7 +30,7 @@ dist/
 docs/
 README.md
 
-# Runtime data: uploaded originals, derived variants, session store
+# Runtime uploads, generated variants, and temporary upload files
 data/
 **/data/
 

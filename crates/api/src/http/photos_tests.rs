@@ -155,18 +155,8 @@ async fn status_of(method: &str, uri: &str) -> StatusCode {
 async fn every_metadata_route_requires_a_session() {
     let id = Uuid::now_v7();
 
-    // Note what is *not* in this list: `GET /api/photos/{id}/{variant}`.
-    //
-    // Serving the bytes is deliberately anonymous-capable, because every
-    // voyage is public (D6) and a published voyage whose images 404 for
-    // anyone but its author is a public gallery with the pictures painted
-    // out. That route authorizes per photograph — owner, or attached to a
-    // published voyage — rather than per session; see `viewable` and
-    // `tests/photos_public_access.rs`.
-    //
-    // The *metadata* routes stay session-gated. They return exact
-    // coordinates to an owner, and the granularity boundary lives in
-    // `http::voyages`; opening them would route around it.
+    // Image delivery permits anonymous access to published voyage variants.
+    // Metadata routes require a session and ownership because they return exact GPS.
     for (method, uri) in [
         ("GET", format!("/api/voyages/{id}/photos")),
         ("POST", format!("/api/voyages/{id}/photos")),
@@ -732,8 +722,7 @@ fn header_of(headers: &HeaderMap, name: header::HeaderName) -> Option<&str> {
     headers.get(name).and_then(|value| value.to_str().ok())
 }
 
-/// T9's header set, asserted without a database and without a file — which
-/// is what makes it a test that will still be run in a year.
+/// Checks image response headers without a database or filesystem.
 #[test]
 fn a_served_image_carries_the_security_headers() {
     let tag = etag(&"a".repeat(64), VariantKind::Display);
@@ -773,8 +762,7 @@ fn last_modified_is_an_http_date() {
     );
 }
 
-/// The tag is derived from content and variant, so two variants of one
-/// photo never collide and one variant of two photos never does either.
+/// ETags differ by original content hash and variant name.
 #[test]
 fn etags_are_content_derived() {
     let a = "a".repeat(64);

@@ -71,9 +71,7 @@ async fn a_photo_round_trips(pool: PgPool) {
     assert_eq!(found.latitude, created.latitude);
 }
 
-/// D6 turns on exact coordinates surviving the round trip: granularity is
-/// applied at serialization, so anything lost here is lost for good and the
-/// later "adjust location" feature has nothing to adjust.
+/// Repository storage preserves coordinates to the column's six-decimal scale.
 #[sqlx::test]
 async fn coordinates_round_trip_at_full_stored_precision(pool: PgPool) {
     let owner = a_user(&pool).await;
@@ -219,8 +217,8 @@ async fn setting_the_status_of_a_vanished_photo_is_not_an_error(pool: PgPool) {
         .expect("no row is not an error");
 }
 
-/// The plain case: the only photo referencing this content goes away, so
-/// the files may be unlinked.
+/// Deleting the only reference reports content as unreferenced. File cleanup
+/// must still recheck references after commit under the content lock.
 #[sqlx::test]
 async fn deleting_the_last_reference_reports_the_content_orphaned(pool: PgPool) {
     let owner = a_user(&pool).await;

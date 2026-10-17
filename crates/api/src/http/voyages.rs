@@ -11,53 +11,17 @@
 //! GET    /api/voyages/{id}/map              rounded map payload
 //! ```
 //!
-//! # This module is the granularity boundary
+//! Public detail, map, and discovery coordinates pass through `place_pair`,
+//! which applies the voyage's granularity and returns a
+//! [`crate::voyages::Coordinate`]. Summaries contain no coordinates.
+//! Owner-only photo metadata in `http::photos` intentionally returns exact
+//! coordinates. Repository rows do not implement `Serialize`; new response
+//! types still need review to ensure they do not expose raw coordinate fields.
 //!
-//! Every coordinate the service emits passes through here, and the only type
-//! that can carry one into a response is
-//! [`crate::voyages::Coordinate`], which cannot be constructed without a
-//! [`crate::voyages::Granularity`]. The repository's row types hold exact
-//! values and do not implement `Serialize`, so the compiler refuses the
-//! shortcut.
-//!
-//! Two things follow that are easy to get wrong:
-//!
-//! * **The list endpoint needs it too.** A voyage summary that carried a
-//!   "center" coordinate would leak at exactly the same precision as the
-//!   detail view, and it is the endpoint nobody thinks to check.
-//! * **So do error messages.** An error that echoes a coordinate back — "no
-//!   photo at 43.06, 141.35" — leaks it just as effectively as a success.
-//!
-//! # Draft visibility
-//!
-//! A draft returns **404** to anyone but its owner, never 403. Returning
-//! "forbidden" confirms that a voyage exists at that id, which turns id
-//! probing into an enumeration oracle for unpublished work.
-//!
-//! # How the one rule is made structural here
-//!
-//! Three properties, each of which is a compile-time fact rather than a
-//! convention someone has to remember:
-//!
-//! 1. **No response type in this file has an `f64` field.** The only way a
-//!    latitude reaches a body is the `coordinate` field of
-//!    [`VoyagePhotoResponse`] or [`MapPin`], both typed
-//!    [`crate::voyages::Coordinate`]. Writing `latitude: photo.latitude` into
-//!    a serializable struct does not compile, because the row type is not
-//!    `Serialize` and `Coordinate` has no constructor from a number.
-//! 2. **There is exactly one call to `Granularity::apply` in the module**, in
-//!    [`place`]. Every endpoint — detail, feed, map — reaches a coordinate
-//!    through it. A new endpoint added at six o'clock on a Friday either calls
-//!    it or has no coordinate to emit.
-//! 3. **Every error message in this module is a `&'static str`.** The field
-//!    error type carries `&'static str`, not `String`, so there is no
-//!    `format!` for a coordinate to be interpolated into. The one variant that
-//!    can carry runtime text — `AppError::BadRequest` — is only ever handed a
-//!    constant from the list at the top of this file.
-//!
-//! An unknown stored granularity fails **closed**, at the coarsest setting:
-//! see [`stored_granularity`]. A build that meets a spelling a later migration
-//! added must not decide that the safe reading is `exact`.
+//! Draft reads and owner-only mutations return 404 for foreign voyages.
+//! Validation messages name fields without echoing coordinates.
+//! `stored_granularity` uses the coarsest supported precision for an unknown
+//! stored value, so an older build does not interpret it as exact.
 
 use std::collections::HashSet;
 mod discovery;
@@ -84,21 +48,14 @@ use crate::voyages::{Coordinate, Granularity};
 const DEFAULT_PAGE: i64 = 20;
 const MAX_PAGE: i64 = 50;
 
-/// Bounds on the two free-text columns. Nothing legitimate is close to either;
-/// they exist so a caller cannot use `voyages` as free storage, and so the edit
-/// screen has a limit to show rather than discovering one from a 500.
+/// Maximum title and description lengths, measured in Unicode characters.
 const MAX_TITLE_LEN: usize = 200;
 const MAX_DESCRIPTION_LEN: usize = 8_000;
 
-/// Bound on a single attach or reorder request. A voyage of fifty photographs
-/// is the design's example; five hundred in one request is already generous and
-/// keeps the statement the repository issues a bounded size.
+/// Maximum number of photo IDs accepted in one reorder request.
 const MAX_PHOTO_IDS: usize = 500;
 
-// Every client-visible message in this module, as constants, because the type
-// that carries them is `&'static str`. That is the mechanical half of "an error
-// must not echo a coordinate": there is no `format!` here to interpolate one
-// into.
+// Fixed validation messages avoid including coordinates in error responses.
 const TITLE_REQUIRED: &str = "A title is required before publishing.";
 const TITLE_TOO_LONG: &str = "That title is longer than we can store.";
 const DESCRIPTION_TOO_LONG: &str = "That description is longer than we can store.";
@@ -108,12 +65,8 @@ const TOO_MANY_PHOTOS: &str = "That is more photographs than one request can car
 const BAD_CURSOR: &str = "That page cursor is not one we issued.";
 const MINE_REQUIRES_A_SESSION: &str = "Listing your own voyages requires signing in.";
 
-/// All voyage routes.
-///
-/// `/{id}/photos/order` is registered before nothing in particular — the router
-/// matches a literal segment ahead of a parameter, so `PATCH .../photos/order`
-/// reaches [`reorder`] and `DELETE .../photos/{uuid}` reaches [`detach`]
-/// without the two competing.
+/// Registers voyage CRUD, photo ordering/deletion, and public discovery routes.
+/// The literal `photos/order` segment takes precedence over `photos/{photo}`.
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/voyages", post(create).get(list))
@@ -128,20 +81,8 @@ pub fn routes() -> Router<AppState> {
 // The boundary itself
 // ---------------------------------------------------------------------------
 
-/// **The only call to [`Granularity::apply`] in the service's HTTP layer.**
-///
-/// Every coordinate any endpoint in this module emits comes from here, which is
-/// what makes "granularity is enforced in one place" a fact about the code
-/// rather than a claim in a comment.
-///
-/// A row with a latitude and no longitude is *unplaced*, not half-placed. Half
-/// a coordinate says nothing about where a photograph was taken and there is no
-/// honest way to draw it, so it joins the unplaced group rather than becoming a
-/// pin at longitude zero.
-///
-/// Takes the two values rather than a row, so that the voyage row type and the
-/// discovery map's own row type share this one call site instead of each
-/// growing a `Granularity::apply` of its own.
+/// Rounds a complete coordinate pair. Missing either axis leaves the photo
+/// unplaced. Discovery already has complete pairs and calls `place_pair` directly.
 fn place(
     granularity: Granularity,
     latitude: Option<f64>,
@@ -153,17 +94,16 @@ fn place(
     }
 }
 
+/// Applies the selected precision for public voyage and discovery responses.
 fn place_pair(granularity: Granularity, latitude: f64, longitude: f64) -> Coordinate {
     granularity.apply(latitude, longitude)
 }
 
-/// Parses a granularity as stored, failing **closed**.
+/// Converts a stored string to a granularity.
 ///
-/// The column has a CHECK constraint, so an unrecognized value means this build
-/// is older than the migration that added a fifth step. The safe reading of an
-/// unknown precision is the coarsest one available, never `exact`: a rollback
-/// to a previous release must not turn every coarse voyage into an exact one
-/// for as long as it runs.
+/// If the string is unrecognized, logs an error and returns `Granularity::Km50`,
+/// the coarsest supported precision, to avoid exposing exact coordinates.
+/// This function does not return an error.
 fn stored_granularity(stored: &str) -> Granularity {
     match Granularity::parse(stored) {
         Some(granularity) => granularity,
@@ -177,13 +117,8 @@ fn stored_granularity(stored: &str) -> Granularity {
     }
 }
 
-/// The label the design prints next to every coordinate — `Exact`, `~1 km`,
-/// `~10 km`, `~50 km`.
-///
-/// Served rather than derived on the client because it appears in three places
-/// (the discovery card, the voyage badge, the photo caption) and a viewer who
-/// reads a rounded pin as exact is the misreading the whole feature exists to
-/// prevent. One spelling, from the server, keeps those three in step.
+/// Returns the display label for the selected precision: `Exact`, `~1 km`,
+/// `~10 km`, or `~50 km`.
 fn granularity_label(granularity: Granularity) -> &'static str {
     match granularity {
         Granularity::Exact => "Exact",
@@ -193,23 +128,13 @@ fn granularity_label(granularity: Granularity) -> &'static str {
     }
 }
 
-/// The URL a client fetches a variant from. Built from an id and a closed set
-/// of three names, so nothing caller-supplied reaches it.
+/// Builds a variant URL from the photo ID and a supported variant name.
 fn variant_url(photo_id: Uuid, kind: VariantKind) -> String {
     format!("/api/photos/{photo_id}/{}", kind.as_str())
 }
 
-/// How many distinct points a set of coordinates draws — the "12 places" the
-/// detail screen shows beside "48 photos".
-///
-/// Counted *after* rounding, which is the only count that is true: at ~10 km a
-/// day's walk collapses to one cell, and reporting the pre-rounding count would
-/// tell a viewer how many distinct spots exist inside a cell. That is a small
-/// leak, but it is a leak, and it is free to avoid.
-///
-/// Compared on the bit patterns because `f64` is not `Eq`. Two coordinates out
-/// of one cell are bit-identical — the rounding is deterministic — so this is
-/// exact rather than approximate.
+/// Counts distinct coordinate bit patterns after rounding. Photos in the same
+/// rounding cell count as one place, without revealing distinct exact positions.
 fn place_count(coordinates: impl IntoIterator<Item = Coordinate>) -> usize {
     coordinates
         .into_iter()
@@ -222,11 +147,7 @@ fn place_count(coordinates: impl IntoIterator<Item = Coordinate>) -> usize {
 // Responses
 // ---------------------------------------------------------------------------
 
-/// One voyage, with its photographs.
-///
-/// No `f64` anywhere in it, deliberately: [`VoyagePhotoResponse::coordinate`]
-/// is the only field in the whole tree that can carry a latitude, and its type
-/// cannot be built without stating a precision.
+/// Voyage detail with photo coordinates rounded to its selected granularity.
 #[derive(Debug, Serialize)]
 struct VoyageResponse {
     id: Uuid,
@@ -237,11 +158,9 @@ struct VoyageResponse {
     /// Stored spelling — `exact`, `km1`, `km10`, `km50`. The value a PATCH
     /// sends back.
     granularity: &'static str,
-    /// What to print beside a pin, so the client does not invent its own
-    /// wording for the precision it is looking at.
+    /// Display label for the selected location precision.
     granularity_label: &'static str,
-    /// Per-axis half-width in meters for the public rounding cell. `null` at
-    /// exact precision, which is the only case where a sharp pin is honest.
+    /// Nominal per-axis half-width of the rounding cell in meters; `null` for exact.
     precision_m: Option<u32>,
     created_at: DateTime<Utc>,
     published_at: Option<DateTime<Utc>>,
@@ -250,20 +169,13 @@ struct VoyageResponse {
     /// draw once rounded. "48 photos · 12 places" comes from these two.
     placed_count: usize,
     place_count: usize,
-    /// The count the design shows in its own card: "6 photos have no location".
-    /// They are in `photos` as well — this is for the summary line, not a
-    /// substitute for listing them.
+    /// Number of photos without coordinates. These photos also appear in `photos`.
     unplaced_count: usize,
     photos: Vec<VoyagePhotoResponse>,
 }
 
-/// A photograph inside a voyage.
-///
-/// An unplaced photograph appears here with `coordinate: null` and
-/// `placed: false` rather than being dropped. Absent GPS is ordinary —
-/// screenshots, scans, an iPhone with location services off for the day — and
-/// the design gives those photographs a visible home at the bottom of the rail.
-/// Omitting them would silently shrink a voyage its owner can count.
+/// A voyage photo. Photos without coordinates remain in the response with
+/// `coordinate: null` and `placed: false`.
 #[derive(Debug, Serialize)]
 struct VoyagePhotoResponse {
     id: Uuid,
@@ -271,16 +183,13 @@ struct VoyagePhotoResponse {
     captured_at: Option<DateTime<Utc>>,
     width: i32,
     height: i32,
-    /// `pending`, `ready` or `failed`. A photo exists before its variants do,
-    /// so a client must handle `pending` rather than treating the URLs below as
-    /// promises.
+    /// `pending`, `ready`, or `failed`. Variant URLs may not be available
+    /// until processing finishes.
     variant_status: String,
     thumbnail_url: String,
     display_url: String,
     full_url: String,
-    /// `null` for an unplaced photograph. The **only** field in this module's
-    /// responses that can carry a latitude, and its type cannot exist without a
-    /// granularity having been applied.
+    /// Coordinates at the selected precision, or `null` for an unplaced photo.
     coordinate: Option<Coordinate>,
     placed: bool,
 }
@@ -311,13 +220,7 @@ struct ListResponse {
     next_before: Option<String>,
 }
 
-/// What a map needs and nothing else (T9).
-///
-/// The map fetches this for every pin on screen, so it deliberately does not
-/// carry the detail payload: no dimensions, no capture time, no variant status,
-/// no description. A pin is a point, an id and an image — sending the rest
-/// multiplies the cost of the most-visited endpoint by everything the map will
-/// not draw.
+/// Map response with rounded pins and a separate list of unplaced photos.
 #[derive(Debug, Serialize)]
 struct MapResponse {
     voyage_id: Uuid,
@@ -327,20 +230,13 @@ struct MapResponse {
     /// its areas even when the voyage has no pins at all.
     precision_m: Option<u32>,
     pins: Vec<MapPin>,
-    /// The headline the design prints beside the map: "6 photos have no
-    /// location".
+    /// Number of voyage photos without coordinates.
     unplaced_count: usize,
-    /// And what its "View" button opens. Listed rather than merely counted
-    /// because a photograph that disappears from a response is, to its owner,
-    /// indistinguishable from one that was lost — the map is an endpoint they
-    /// look at, so it has to account for every photograph in the voyage even
-    /// though it can only draw some of them.
+    /// Unplaced photos available for viewing even though they cannot appear as pins.
     unplaced: Vec<MapUnplaced>,
 }
 
-/// One pin. A pin has a coordinate by definition — an unplaced photograph is
-/// listed below, not drawn — so this is [`Coordinate`] rather than an option,
-/// and the type makes "a pin with no location" unrepresentable.
+/// A placed photo represented by a rounded coordinate, ID, and thumbnail URL.
 #[derive(Debug, Serialize)]
 struct MapPin {
     photo_id: Uuid,
@@ -353,16 +249,12 @@ struct MapPin {
 struct MapUnplaced {
     photo_id: Uuid,
     thumbnail_url: String,
-    /// Always `false`. Stated rather than implied by the array it sits in,
-    /// because a client that flattens the two lists — which is what viewing the
-    /// unplaced group does — must not lose the flag on the way.
+    /// Always `false`, including when clients combine this list with placed photos.
     placed: bool,
 }
 
 impl VoyageResponse {
-    /// Builds the detail payload. Takes the row types, which are not
-    /// `Serialize`, and is the only thing that turns them into something that
-    /// is.
+    /// Builds voyage detail from repository rows and rounds photo coordinates.
     fn build(voyage: Voyage, photos: Vec<VoyagePhoto>) -> Self {
         let granularity = stored_granularity(&voyage.granularity);
 
@@ -436,22 +328,14 @@ impl From<Voyage> for VoyageSummary {
 
 #[derive(Debug, Deserialize)]
 struct CreateRequest {
-    /// Optional, because a voyage starts as a draft and the design's edit
-    /// screen exists to fill it in. It becomes required at the moment of
-    /// publishing and only then — see [`publishable`].
+    /// Optional draft title. Publishing requires a nonblank title.
     title: Option<String>,
     description: Option<String>,
-    /// Stored spelling. Absent means the schema default, `exact`.
+    /// Stored spelling. Absent defaults to `exact` in this handler.
     granularity: Option<String>,
 }
 
-/// Creates a draft (T8).
-///
-/// Always a draft, whatever the request says: a voyage is world-readable the
-/// instant it is published (D6), and a half-populated one that arrived
-/// published by default would be readable before its author had seen it. There
-/// is no `published` field on this request for that reason — publishing is a
-/// PATCH, which is a second deliberate act.
+/// Creates an unpublished voyage. Publication requires a separate PATCH request.
 #[tracing::instrument(name = "voyage.create", skip_all, fields(voyage.id = tracing::field::Empty), err(Debug))]
 async fn create(
     State(state): State<AppState>,
@@ -478,8 +362,7 @@ async fn create(
 
     tracing::Span::current().record("voyage.id", voyage.id.to_string());
 
-    // A new voyage has no photographs, so no second query: the empty vector is
-    // the truth rather than a shortcut.
+    // New voyages have no photos, so the response needs no photo query.
     Ok((
         StatusCode::CREATED,
         Json(VoyageResponse::build(voyage, Vec::new())),
@@ -552,10 +435,8 @@ async fn update(
         None => None,
     };
 
-    // The design's only publish precondition, checked against the state the
-    // voyage will be in after this patch rather than the state it is in now —
-    // "set the title and publish" is one request, and clearing the title of an
-    // already-published voyage has to fail for the same reason.
+    // Validate the resulting state so publishing without a title and clearing
+    // the title of a published voyage both fail.
     let effective_title = title.as_deref().unwrap_or(&current.title);
     let effective_published = body.published.unwrap_or(current.published);
     publishable(effective_title, effective_published)?;
@@ -567,9 +448,8 @@ async fn update(
         published: body.published,
     };
 
-    // `Ok(None)` is "no such voyage, or not yours" and cannot be reached here,
-    // since `owned` has already answered both — but a concurrent delete makes
-    // it possible, and 404 is the honest answer to that race too.
+    // The lock above prevents concurrent deletion. Retain the repository's
+    // ownership predicate and handle a missing row as 404.
     let voyage = repo::update(&mut *tx, id, user.user_id, &patch)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -656,9 +536,8 @@ async fn detach(
 
 /// Sets an explicit order (T4).
 ///
-/// The body is the desired sequence, not a delta: a partial order would need a
-/// rule for where the unnamed photographs go, and every such rule is one the
-/// client and the server can disagree about.
+/// Listed photos come first in request order. The repository ignores unknown
+/// IDs and appends omitted photos in their previous relative order.
 async fn reorder(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -682,14 +561,10 @@ async fn reorder(
 // Reads
 // ---------------------------------------------------------------------------
 
-/// One voyage, at the precision its owner chose (T5, T6).
+/// Returns voyage detail with coordinates at the selected precision.
 ///
-/// Published voyages allow anonymous reads; drafts require the owner (D6).
-///
-/// Two queries regardless of photo count (T6/T9): the voyage, then all of its
-/// photographs in one statement. A loop of `await`s over photo ids looks
-/// concurrent and is not, and the cost would scale with photo count on the
-/// product's most-visited endpoint.
+/// Published voyages allow anonymous reads; drafts require the owner. Loads
+/// the voyage and its photos in two queries, regardless of photo count.
 async fn read(
     State(state): State<AppState>,
     MaybeUser(user): MaybeUser,
@@ -701,11 +576,7 @@ async fn read(
     Ok(Json(VoyageResponse::build(voyage, photos)))
 }
 
-/// The map payload (T9).
-///
-/// Same visibility rule and same granularity as [`read`] — this is the endpoint
-/// it would be easiest to leave out of the check, and it is the one the map
-/// calls most.
+/// Returns map data with the same visibility and precision rules as voyage detail.
 async fn map(
     State(state): State<AppState>,
     MaybeUser(user): MaybeUser,
@@ -753,20 +624,13 @@ struct ListQuery {
     /// Requires a session; the feed itself does not.
     #[serde(default)]
     mine: bool,
-    /// Cursor. A published-at timestamp for the feed, a voyage id for `mine` —
-    /// a string here because the two modes key on different columns, and it is
-    /// opaque to the caller either way.
+    /// Opaque cursor: publication timestamp plus ID for the public feed,
+    /// or a voyage ID for the owner list.
     before: Option<String>,
     limit: Option<i64>,
 }
 
-/// The discovery feed, and the caller's own list.
-///
-/// Cursor rather than offset pagination (T7): a voyage published between two
-/// requests shifts every offset by one, so a page boundary skips or repeats a
-/// voyage — and on a feed that is actively being published to that is the
-/// common case, not the rare one. Keyset on the column the ordering uses costs
-/// an index seek however deep the page is.
+/// Lists public voyages or the signed-in owner's voyages using cursor pagination.
 async fn list(
     State(state): State<AppState>,
     MaybeUser(user): MaybeUser,
@@ -848,12 +712,8 @@ pub(crate) async fn summaries(
 // Visibility
 // ---------------------------------------------------------------------------
 
-/// Loads a voyage the caller may read.
-///
-/// A draft is **404** to everyone but its owner, never 403 (T6). "Forbidden"
-/// confirms that a voyage exists at that id, which turns id probing into an
-/// enumeration oracle for unpublished work — and unpublished work is precisely
-/// what somebody probing would be looking for.
+/// Loads a visible voyage. Missing voyages and drafts requested by non-owners
+/// both return 404.
 async fn visible(
     state: &AppState,
     user: Option<&CurrentUser>,
@@ -893,12 +753,7 @@ async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Voyage,
 // Validation
 // ---------------------------------------------------------------------------
 
-/// The design's only publish precondition.
-///
-/// A field-level error rather than a generic one, because the edit screen
-/// attaches the message to the title input. A banner saying "something is
-/// wrong" on a form with four fields is a worse answer than a sentence beside
-/// the one that is.
+/// Rejects publication with a blank title using a field-level validation error.
 fn publishable(title: &str, published: bool) -> Result<(), Rejection> {
     if published && title.trim().is_empty() {
         return Err(Rejection::field("title", TITLE_REQUIRED));
@@ -911,8 +766,7 @@ fn publishable(title: &str, published: bool) -> Result<(), Rejection> {
 fn clean_title(title: Option<&str>) -> Result<String, Rejection> {
     let title = title.unwrap_or_default().trim();
 
-    // Counted in characters rather than bytes: a limit that rejects a Japanese
-    // title a third the length of an English one is a bug, not a policy.
+    // Count Unicode characters so multibyte titles use the same length limit.
     if title.chars().count() > MAX_TITLE_LEN {
         return Err(Rejection::field("title", TITLE_TOO_LONG));
     }
@@ -940,12 +794,8 @@ fn parse_granularity(spelling: &str) -> Result<Granularity, Rejection> {
     Granularity::parse(spelling).ok_or_else(|| Rejection::field("granularity", UNKNOWN_GRANULARITY))
 }
 
-/// De-duplicates and bounds a list of photo ids.
-///
-/// De-duplication first, because the attach path compares the number of rows
-/// inserted against the number requested: a caller who names the same
-/// photograph twice would otherwise look exactly like one attaching a
-/// photograph they do not own.
+/// Removes duplicate photo IDs while preserving request order. Returns a
+/// validation error for an empty list or an input longer than `MAX_PHOTO_IDS`.
 fn clean_photo_ids(photo_ids: Vec<Uuid>) -> Result<Vec<Uuid>, Rejection> {
     if photo_ids.len() > MAX_PHOTO_IDS {
         return Err(Rejection::field("photo_ids", TOO_MANY_PHOTOS));
@@ -973,16 +823,8 @@ fn bad_cursor() -> Rejection {
 // Rejections
 // ---------------------------------------------------------------------------
 
-/// A failure from one of these handlers.
-///
-/// Response details beyond [`AppError`]: a 422 carrying
-/// the **name of the field** that failed, which is what lets the edit screen
-/// put "A title is required before publishing" beside the title input rather
-/// than in a banner; and a 403 whose message is chosen at the call site.
-///
-/// Every message is a `&'static str`. That is not a style preference — it is
-/// how "an error must never echo a coordinate" is enforced. There is no
-/// `String` for a `format!` to build one into.
+/// Handler errors: shared application errors, field-specific 422 validation
+/// errors, and 403 responses. Validation and forbidden messages are static strings.
 #[derive(Debug)]
 enum Rejection {
     App(AppError),

@@ -32,12 +32,7 @@ pub(crate) mod testutil {
         }
     }
 
-    /// An image with no two quadrants alike.
-    ///
-    /// Asymmetry in *both* axes is the whole point: a square of one color, or
-    /// a pattern symmetric about either axis, cannot tell a rotation from a
-    /// mirror, which is exactly the confusion the orientation tests exist to
-    /// catch.
+    /// Asymmetric colored quadrants distinguish rotations from reflections.
     pub(crate) fn asymmetric_image(width: u32, height: u32) -> DynamicImage {
         let mut buffer = RgbImage::new(width, height);
         for (x, y, pixel) in buffer.enumerate_pixels_mut() {
@@ -82,12 +77,8 @@ pub(crate) mod testutil {
         path
     }
 
-    /// Runs `exiftool` and returns its stdout.
-    ///
-    /// Failing rather than skipping is deliberate. The D6 guarantee is asserted
-    /// with this tool; a test that quietly passes because the tool is missing
-    /// would report "metadata is stripped" without having looked, which is the
-    /// precise failure the acceptance criterion exists to prevent.
+    /// Runs exiftool and returns stdout. Fails the test if the tool is unavailable
+    /// or exits unsuccessfully.
     pub(crate) fn exiftool(args: &[&str]) -> String {
         let output = Command::new("exiftool").args(args).output().expect(
             "exiftool must be installed to run the photo pipeline tests \
@@ -406,16 +397,8 @@ fn decodes_heic_through_libheif() {
     );
 }
 
-/// **The double-rotation guard.**
-///
-/// libheif applies the container's own orientation during decode. If
-/// `extract` also reported the EXIF orientation tag, the caller would
-/// rotate a second time and every iPhone portrait would come out face
-/// down — a bug that produces a plausible-looking image and so survives
-/// casual review.
-///
-/// Asserting on the composition rather than on `decode` alone is the point:
-/// it is the pair that has to turn the photo exactly once.
+/// HEIC pipeline decoding does not apply EXIF orientation after libheif
+/// has applied the container transformation.
 #[test]
 fn a_heic_is_never_rotated_twice() {
     let (width, height) = (64u32, 32u32);

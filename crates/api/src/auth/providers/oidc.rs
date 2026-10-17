@@ -1,10 +1,9 @@
 //! The OIDC machinery shared by Google, Microsoft and Apple.
 //!
-//! Discovery happens **once**, in [`OidcCore::discover`], and the resulting
-//! metadata — endpoints, supported algorithms, and the JWKS — is kept for the
-//! process lifetime. A discovery round trip per sign-in would add a hop to every
-//! authorization and put avoidable load on the provider for a document that
-//! changes about once a year.
+//! `OidcCore::discover` fetches endpoints, supported algorithms, and signing keys
+//! at startup. Endpoints and algorithms remain cached for the process lifetime.
+//! An unknown signing key triggers a JWKS refresh and one verification retry;
+//! refresh attempts are at least five minutes apart.
 
 use std::sync::{Arc, RwLock};
 
@@ -40,30 +39,20 @@ type DiscoveredClient = CoreClient<
     EndpointMaybeSet,
 >;
 
-/// Floor on how often a provider's JWKS may be refetched.
-///
-/// The refetch is triggered by an ID token whose `kid` is not in the cached key
-/// set, which is exactly what a legitimate key rotation looks like — and also
-/// exactly what an attacker posting garbage tokens looks like. Without a floor,
-/// unauthenticated requests to our callback would turn into unbounded requests
-/// to the provider's JWKS endpoint, which is a way to get rate-limited by (or
-/// blamed by) the provider.
+/// Minimum interval between attempts to refresh signing keys after an unknown
+/// key ID. The initial discovery fetch also starts this interval.
 const JWKS_MIN_REFETCH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 /// Where the `client_secret` presented at the token endpoint comes from.
 ///
-/// Three of the providers have a static string. Apple's is a JWT that this
+/// Google and Microsoft use a static string. Apple's is a JWT that this
 /// service mints and that expires, so it cannot be captured once at startup —
 /// hence the indirection rather than a `ClientSecret` field.
 pub(crate) trait ClientSecretSource: Send + Sync {
     fn client_secret(&self) -> Result<ClientSecret, AuthError>;
 }
 
-/// A secret that came out of configuration and never changes.
-///
-/// Held as `oauth2`'s `ClientSecret` rather than `SecretString` because that is
-/// what the token request wants and because `SecretString` is deliberately not
-/// `Clone`. Both redact themselves in `Debug`, so nothing is given up.
+/// Configured provider client secret stored in the OAuth client's redacted type.
 pub(crate) struct StaticClientSecret(ClientSecret);
 
 impl StaticClientSecret {
@@ -103,18 +92,11 @@ pub(crate) struct OidcCore {
     metadata: RwLock<CachedMetadata>,
 }
 
-/// Turns a configured issuer into the form discovery will accept.
+/// Converts the configured issuer to the spelling used for discovery.
 ///
-/// `Url` normalizes `https://accounts.google.com` into
-/// `https://accounts.google.com/`, and OIDC requires the `issuer` in the
-/// discovery document to equal the identifier it was fetched for *exactly* —
-/// `openidconnect` compares the raw strings. Google returns the form without the
-/// slash, so passing the normalized `Url` straight through fails discovery for
-/// the most ordinary configuration imaginable, with an error about issuer
-/// mismatch that reads like a security problem rather than a typo.
-///
-/// Trimming is safe: an issuer identifier is defined as having no trailing
-/// slash.
+/// Removes trailing slashes to match discovery issuer spelling, including
+/// Google's. Returns a configuration error unless the URL uses HTTP or HTTPS
+/// and has a host.
 fn issuer_url(issuer: &Url) -> Result<IssuerUrl, AuthError> {
     if !matches!(issuer.scheme(), "http" | "https") || issuer.host_str().is_none() {
         return Err(AuthError::Configuration(
@@ -192,7 +174,7 @@ fn microsoft_token_issuer(token: &str) -> Result<IssuerUrl, AuthError> {
 }
 
 impl OidcCore {
-    /// Fetches the discovery document and the JWKS, once.
+    /// Fetches discovery metadata and signing keys for the initial cache.
     pub(crate) async fn discover(
         kind: ProviderKind,
         issuer: &Url,
@@ -232,13 +214,8 @@ impl OidcCore {
         })
     }
 
-    /// Builds a client from the cached metadata.
-    ///
-    /// Cheap and local — no I/O. It is done per request rather than once at
-    /// startup because both inputs can change underneath it: Apple's client
-    /// secret expires, and the JWKS is replaced when a provider rotates keys.
-    /// Rebuilding is a few clones; caching it would mean invalidation logic for
-    /// no measurable gain next to a network round trip.
+    /// Builds a client from cached metadata and the supplied secret without I/O.
+    /// Each exchange uses current signing keys and, for Apple, a current secret.
     fn client(&self, secret: Option<ClientSecret>) -> DiscoveredClient {
         let metadata = {
             let cached = self
@@ -445,8 +422,7 @@ impl OidcCore {
             .metadata
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        // `set_jwks` consumes the metadata, so this is clone-modify-replace.
-        // It happens at most once per rotation, not per request.
+        // Clone and replace metadata because `set_jwks` consumes its input.
         cached.metadata = cached.metadata.clone().set_jwks(jwks);
         cached.microsoft_jwks = raw_keys;
 

@@ -25,15 +25,9 @@ use uuid::Uuid;
 
 use crate::config::ServerConfig;
 
-/// Outermost ceiling on a request body, in bytes.
-///
-/// This is a hard cap, not a default: the layer wraps the whole router, and an
-/// outer limit can only ever be *tightened* by an inner one. Photo uploads
-/// therefore have to fit under it — D8 talks about 25 MB JPEGs, so 32 MiB
-/// leaves headroom for multipart framing while still refusing a body that
-/// could only be an attack or a mistake. Routes that want less (every JSON
-/// endpoint) apply their own limit inside; axum's `DefaultBodyLimit` of 2 MiB
-/// already covers the buffering extractors.
+/// Global request body limit: 32 MiB, including multipart framing. Uploads
+/// also enforce their configured request limit; buffered JSON extractors use
+/// axum's smaller default limit.
 const MAX_REQUEST_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 /// Applies the middleware stack. Order matters: request id is outermost so
@@ -42,28 +36,9 @@ const MAX_REQUEST_BODY_BYTES: usize = 32 * 1024 * 1024;
 /// Takes the server config because two of the layers are configured from it.
 /// [`crate::http::router`] is the only caller, and it has the state to hand.
 pub fn apply(router: Router, config: &ServerConfig) -> Router {
-    // `ServiceBuilder` composes top-down: the first layer listed is the
-    // outermost, which is the reverse of chained `Router::layer` calls. Using
-    // it here means the written order is the request order, and this stack is
-    // one where the order carries meaning.
-    //
-    //   1. set request id      — so everything below it, including rejections
-    //                            produced by the layers below, has an id.
-    //                            Note `SetRequestId` keeps a client-supplied
-    //                            `x-request-id` rather than overwriting it,
-    //                            which is what makes an id survive across
-    //                            services but also means the value is only as
-    //                            trustworthy as the caller. Harmless today
-    //                            (a `HeaderValue` cannot contain CR/LF, so it
-    //                            cannot forge a log line); revisit when there
-    //                            is a proxy in front worth trusting.
-    //   2. propagate           — copies that id onto the response, whatever
-    //                            produced the response
-    //   3. trace               — inside the id layers, so the span can read
-    //                            the id; outside timeout and limit, so a 408
-    //                            or a 413 is still logged as a request
-    //   4. timeout             — a request that hangs is bounded here
-    //   5. body limit          — innermost, closest to the handler
+    // ServiceBuilder lists layers from outermost to innermost: set request ID,
+    // propagate it to the response, trace, time out, then limit the body.
+    // Client-supplied request IDs are preserved; they are not trusted identifiers.
     let stack = ServiceBuilder::new()
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuidV7))
         .layer(PropagateRequestIdLayer::x_request_id())

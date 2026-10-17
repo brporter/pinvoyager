@@ -126,10 +126,8 @@ describe("metersPerPixel", () => {
 
 describe("areaDiameterPx", () => {
   /**
-   * A ~1 km voyage means "within one kilometer of this point", so the circle is
-   * two kilometers across. Drawing it at one kilometer across would understate
-   * the imprecision by half, which is the direction that matters — it would
-   * claim more accuracy than the data has.
+   * The precision value is the per-axis half-width. Circle diameter uses
+   * the cell diagonal: 2 * sqrt(2) * precision, converted to pixels.
    */
   it("draws a circle of twice the precision radius", () => {
     const zoom = 12;
@@ -256,8 +254,10 @@ describe("clusterPins", () => {
     expect(clusters[0].members.map((member) => member.id)).toEqual(["a", "b"]);
   });
 
-  /** The same two pins, four zoom levels closer: now about 116px apart, so they
-   *  separate. This is target 7 — clusters expand as the camera zooms in. */
+  /**
+   * The same pair separates at a higher zoom because its projected distance
+   * exceeds the clustering radius.
+   */
   it("separates the same pins once the camera is close enough", () => {
     const pins = [pin("a", 0, 0), pin("b", 0, 0.01)];
 

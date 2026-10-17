@@ -231,10 +231,7 @@ fn ground_error_is_bounded_by_half_a_cell_at_every_latitude() {
 
 #[test]
 fn a_cell_is_as_wide_on_the_ground_as_advertised() {
-    // The test that catches the missing cos correction. A fixed-degree grid
-    // measures 10 km at the equator, 7.1 km at 45°, 5 km at 60° and 3.4 km
-    // at 70° — the product promising less precision than it delivers, which
-    // is the direction that gets someone found.
+    // Ground-width checks detect a missing longitude cosine correction.
     for g in COARSE {
         let cell = cell_km(g);
 
@@ -269,7 +266,7 @@ fn precision_m_is_half_the_cell_in_meters() {
     );
     assert_eq!(Granularity::Exact.apply(0.0, 0.0).precision_m(), None);
 
-    // The published precision and the drawn radius are one claim.
+    // Published precision is the nominal per-axis half-width in meters.
     for g in [
         Granularity::Exact,
         Granularity::Km1,

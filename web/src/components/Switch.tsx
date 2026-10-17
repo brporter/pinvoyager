@@ -1,4 +1,4 @@
-/** Switch uses the shared runtime styles and accessible native controls. */
+/** Renders a labeled switch with pointer and keyboard activation. */
 
 import type { KeyboardEvent, ReactNode } from "react";
 

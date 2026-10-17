@@ -139,38 +139,14 @@ async fn the_same_subject_under_a_different_provider_is_allowed() {
 }
 
 // ---------------------------------------------------------------------------
-// D1 — no credential is stored. Asserted against the live schema, because the
-// decision says to verify by inspecting rather than by intent, and because a
-// future migration is exactly how this would regress.
-// ---------------------------------------------------------------------------
+// Check the live schema for prohibited credential columns, allowing the
+// explicitly listed hashes used for sessions, browser binding, and image storage.
 
-/// The one column permitted to look like a credential, and why.
+/// Allowed table/column pairs for the credential-name schema check.
 ///
-/// `sessions.token_hash` is the SHA-256 of a session token **this service
-/// mints**, not a credential a user or a provider gave us. D1 forbids storing
-/// passwords, hashes of them, and long-lived provider access or refresh tokens;
-/// a session identifier is none of those. It is stored hashed precisely so that
-/// a database leak yields nothing usable — the raw token exists only in the
-/// user's cookie.
-///
-/// The exception is written as an exact (table, column) pair rather than by
-/// relaxing the pattern, so that a future `users.password_hash` or
-/// `identities.refresh_token` still fails this test. A broad pattern would have
-/// quietly permitted both.
-/// `auth_attempts.binding_hash` is the SHA-256 of a browser-binding value this
-/// service mints at the start of a sign-in. Like a session token it is ours,
-/// not a user's or a provider's; unlike one it is single-use and expires in
-/// minutes. Stored hashed so that a database reader cannot complete somebody
-/// else's in-flight authorization.
-/// `photos.content_hash` is a SHA-256 of image bytes — a storage address and a
-/// deduplication key, not a secret of any kind. It matches the pattern only
-/// because the word "hash" appears in it.
-///
-/// Three exemptions now, and every one of them was added because this test
-/// failed and forced the question. That is the design working: a broad pattern
-/// with narrow, written exceptions makes each new credential-shaped column a
-/// deliberate decision, where a pattern tuned to pass would make the next one
-/// invisible.
+/// Session and browser-binding hashes represent service-issued random values.
+/// Photo content hashes address image bytes. Other matching columns fail the
+/// check, and each exemption is checked for continued existence.
 const PERMITTED: &[(&str, &str)] = &[
     ("sessions", "token_hash"),
     ("auth_attempts", "binding_hash"),
@@ -249,11 +225,8 @@ async fn the_dev_login_route_is_absent_from_release_builds() {
 }
 
 // ---------------------------------------------------------------------------
-// T6 / D8 — pool exhaustion must surface as a timeout, not as a hang. This is
-// the criterion the phase doc says to verify rather than assume, because
-// sqlx's default is no timeout at all and the failure mode is a service that
-// looks alive while serving nothing.
-// ---------------------------------------------------------------------------
+// Pool acquisition returns an error within the configured timeout when all
+// connections are occupied.
 
 #[tokio::test]
 async fn pool_exhaustion_times_out_rather_than_hanging() {
@@ -283,9 +256,7 @@ async fn pool_exhaustion_times_out_rather_than_hanging() {
     );
 }
 
-/// The other half of T6: that timeout has to reach the client as a retryable
-/// 503, not a 500. Pool exhaustion is load, not a fault, and counting it as a
-/// server error is how a busy afternoon turns into a page.
+/// Pool acquisition timeouts map to an HTTP 503 response.
 #[tokio::test]
 async fn pool_timeout_maps_to_503_not_500() {
     use axum::response::IntoResponse;
@@ -340,8 +311,7 @@ async fn migrations_apply_cleanly_to_an_empty_database() {
             .await
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
-        // The unique index is the load-bearing part of D3; assert it exists by
-        // name rather than assuming the migration ran to completion.
+        // Verify the provider/subject unique index exists after migration.
         let index_exists: bool = sqlx::query_scalar(
             "SELECT EXISTS (
                  SELECT 1 FROM pg_indexes

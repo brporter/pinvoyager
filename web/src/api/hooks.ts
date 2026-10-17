@@ -1,17 +1,8 @@
 /**
- * React Query bindings for the API client.
- *
- * The client in `./client` knows how to make a request; this file knows what a
- * request means to the cache. Two decisions run through all of it:
- *
- *  * **Keys are hierarchical**, so invalidation can be coarse where coarse is
- *    correct. `["voyages"]` is a prefix of every voyage key, which means
- *    publishing a voyage can invalidate the feed, the detail and the map with
- *    one call instead of three that have to be kept in step with the routes.
- *  * **A 4xx is not retried.** React Query's default is three attempts, which
- *    for a 404 or a 401 means three identical failures and a screen that takes
- *    a second and a half to say "not found". Only 5xx and network faults are
- *    worth a second try.
+ * React Query keys, queries, and mutations for the API client.
+ * Keys share prefixes for related voyage reads. Mutations update detail data
+ * and invalidate affected lists, profiles, and discovery queries. Retries are
+ * limited to server errors and network failures.
  */
 
 import {
@@ -66,14 +57,7 @@ import type {
 // Keys
 // ---------------------------------------------------------------------------
 
-/**
- * Every cache key in the application, in one place.
- *
- * Written as prefix-sharing tuples rather than strings so that
- * `invalidateQueries({ queryKey: keys.voyages.all })` reaches the feed, every
- * detail read and every map. A flat `"voyage-detail-<id>"` scheme cannot
- * express that, and the invalidation lists then drift from the routes.
- */
+/** Shared query keys. Prefixes let callers invalidate related voyage queries. */
 export const keys = {
   me: ["me"] as const,
 
@@ -85,12 +69,8 @@ export const keys = {
     map: (id: string) => [...keys.voyages.all, "map", id] as const,
   },
 
-  /** The discovery map, keyed by the rectangle and zoom it was asked for.
-   *
-   *  Deliberately outside `voyages`, even though it draws voyages. Publishing
-   *  one voyage invalidates `["voyages"]`, and every rectangle of the world map
-   *  a user had panned across would be thrown away with it — while the answer
-   *  they are looking at changed by at most one marker. */
+  /** Discovery queries use their own prefix and include the viewport and zoom.
+   *  `invalidatePublicViews` invalidates them after voyage/photo mutations. */
   discoverMap: (window: MapWindow) => ["discover-map", window] as const,
 
   photos: {
@@ -105,14 +85,7 @@ export const keys = {
 // Shared policy
 // ---------------------------------------------------------------------------
 
-/**
- * Retry only what a retry could fix.
- *
- * A 404 does not become a 200 on the third attempt, and a 401 certainly does
- * not. Retrying them costs the user the latency of every attempt before the
- * designed empty or signed-out state appears. 5xx and network faults are
- * genuinely transient, so those keep the usual budget.
- */
+/** Retries errors up to twice, except API responses with a status below 500. */
 export function retryOnlyTransient(failureCount: number, error: Error): boolean {
   if (isApiError(error) && error.status < 500) return false;
   return failureCount < 2;
@@ -124,15 +97,7 @@ const queryDefaults = { retry: retryOnlyTransient } as const;
 // Session
 // ---------------------------------------------------------------------------
 
-/**
- * The current user, or `null` when signed out.
- *
- * The 401 is swallowed on purpose. Most of this application is readable
- * without an account, so "not signed in" is an ordinary state of the shell and
- * not an error for it to render — a `useMe` that surfaced a 401 as `isError`
- * would put an error boundary in front of the discovery feed for every visitor
- * who has not signed in.
- */
+/** Reads the current user. HTTP 401 becomes null; other failures remain query errors. */
 export function useMe(): UseQueryResult<Me | null> {
   return useQuery({
     queryKey: keys.me,
@@ -149,12 +114,8 @@ export function useMe(): UseQueryResult<Me | null> {
 }
 
 /**
- * Signs out, then empties the cache.
- *
- * `clear` rather than a list of invalidations: anything fetched while signed in
- * may have been visible only to that session — the caller's own drafts, their
- * owner-only photos and exact coordinates — and a cache that kept them would leave
- * the previous user's data on screen for the next one.
+ * Signs out and clears all query data on success, including cached drafts
+ * and exact owner metadata. Failures leave the cache unchanged.
  */
 export function useSignOut(): UseMutationResult<void, Error, void> {
   const client = useQueryClient();
@@ -179,14 +140,7 @@ export interface VoyageFeedParams {
   limit?: number;
 }
 
-/**
- * The discovery feed, or the caller's own list, paged.
- *
- * Infinite rather than page-numbered because the API is cursor-paginated: it
- * hands back an opaque `next_before`, and there is no page number to ask for.
- * That is deliberate server-side — a voyage published between two requests
- * shifts every offset, so an offset boundary skips or repeats a voyage.
- */
+/** Reads public or owner voyages using the API's next_before cursor. */
 export function useVoyages(
   params: VoyageFeedParams = {},
 ): UseInfiniteQueryResult<InfiniteData<VoyageList, string | null>> {
@@ -252,16 +206,8 @@ export function useVoyageMap(id: string | undefined): UseQueryResult<VoyageMap> 
 }
 
 /**
- * The discovery map for one rectangle.
- *
- * `enabled` because the rectangle is not known until the map has laid itself
- * out and reported where it is looking — asking before then would request an
- * irrelevant window from our own discovery API. These marker requests are
- * separate from MapLibre's requests to OSM's tile server.
- *
- * `placeholderData` keeps the previous rectangle's markers on screen while the
- * next one loads. Without it every pan blanks the map and redraws it, which
- * reads as the pins flickering rather than as data arriving.
+ * Fetches discovery clusters once a viewport is available. Keeps the previous
+ * viewport's results visible while the next request loads.
  */
 export function useDiscoverMap(window: MapWindow | null): UseQueryResult<DiscoverMap> {
   return useQuery({
@@ -277,16 +223,6 @@ export function useDiscoverMap(window: MapWindow | null): UseQueryResult<Discove
  *  so the key is a stable shape rather than sometimes containing null. */
 const EMPTY_WINDOW: MapWindow = { west: 0, south: 0, east: 0, north: 0, zoom: 0 };
 
-/**
- * Puts a freshly read voyage into the cache and invalidates what it changed.
- *
- * Every mutating voyage endpoint answers with the whole voyage, so seeding the
- * detail key means the edit screen re-renders from the response rather than
- * from a second round trip. The lists and the map are invalidated rather than
- * written: a patch can change the title (the feed), the granularity (every
- * pin) or the published flag (whether it is in the feed at all), and guessing
- * which is how a stale list survives an edit.
- */
 /** Public maps and profile pages can change after any voyage/photo mutation. */
 function invalidatePublicViews(client: QueryClient): void {
   void client.invalidateQueries({ queryKey: ["discover-map"] });
@@ -294,6 +230,8 @@ function invalidatePublicViews(client: QueryClient): void {
   void client.invalidateQueries({ queryKey: keys.voyages.lists() });
 }
 
+/** Creation, edits, and reordering return a complete voyage. Store that detail
+ *  response and invalidate related lists and maps so they fetch current data. */
 function voyageChanged(client: QueryClient, voyage: Voyage): void {
   invalidatePublicViews(client);
   client.setQueryData(keys.voyages.detail(voyage.id), voyage);
@@ -403,15 +341,8 @@ export interface UploadVariables extends UploadOptions {
 }
 
 /**
- * Uploads a batch.
- *
- * Not retried, ever. A retry would re-send the bytes, and the failure that
- * makes an upload worth retrying — a 413, a 415, a 429 — is one where sending
- * them again is either pointless or the thing being rate-limited.
- *
- * The uploaded photos belong to their voyage with `variant_status: "pending"`, so
- * a caller that immediately renders their thumbnails will get a 409 until the
- * worker catches up. That is a state to draw, not a race to avoid.
+ * Uploads without automatic retries; callers control per-file retry actions.
+ * Accepted photos can remain pending until the worker generates their variants.
  */
 export function useUploadPhotos(): UseMutationResult<UploadResult, Error, UploadVariables> {
   const client = useQueryClient();
@@ -438,8 +369,7 @@ export function useDeletePhoto(): UseMutationResult<void, Error, string> {
       invalidatePublicViews(client);
       client.removeQueries({ queryKey: keys.photos.detail(id) });
       void client.invalidateQueries({ queryKey: keys.photos.lists() });
-      // A deleted photograph disappears from every voyage it was in, so no
-      // voyage read that mentioned it is still correct.
+      // Invalidate voyage data that may include the deleted photo.
       void client.invalidateQueries({ queryKey: keys.voyages.all });
     },
   });

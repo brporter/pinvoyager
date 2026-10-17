@@ -1,14 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# PinVoyager API — multi-stage build.
-#
-#   builder  compiles a release binary against the full Rust toolchain
-#   runtime  carries the binary, the migrations, and nothing else
-#
-# Both stages share a Debian codename so the glibc the binary is linked
-# against is the glibc it runs against. Change DEBIAN_CODENAME in one place
-# and they stay in lockstep. (If `rust:<version>-slim-bookworm` is not
-# published for the pinned toolchain, switch both to `trixie`.)
+# PinVoyager API multi-stage build. The builder compiles the release binary;
+# the runtime includes the binary, native image libraries, certificates, and curl.
+# Both stages use the same Debian codename for runtime library compatibility.
 ARG RUST_VERSION=1.94
 ARG DEBIAN_CODENAME=trixie
 
@@ -30,10 +24,8 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# sqlx's query macros are checked against the committed `.sqlx` offline cache
-# rather than a live database, so the build needs neither network access nor a
-# DATABASE_URL. Regenerate the cache with `cargo sqlx prepare --workspace`
-# whenever a query changes, and commit it.
+# Compile checked SQL queries using committed .sqlx metadata without a live database.
+# Regenerate the metadata after query changes and commit it.
 ARG SQLX_OFFLINE=true
 ENV SQLX_OFFLINE=${SQLX_OFFLINE}
 
@@ -51,13 +43,10 @@ RUN mkdir -p crates/api/src \
     && rm -rf crates/api/src
 
 # --- application layer ----------------------------------------------------
-# Whole-context copy rather than per-path COPYs: .dockerignore already keeps
-# the context small, and paths that do not exist yet (`.sqlx`, `migrations/`)
-# would otherwise turn a missing directory into a build failure.
+# Copy source and offline query metadata; .dockerignore excludes artifacts and secrets.
 COPY . .
 
-# `sqlx::migrate!` resolves against crates/api/migrations. Ensure the
-# directory exists so the runtime stage's COPY is unconditional.
+# Ensure the migrations directory exists for compile-time embedding.
 RUN mkdir -p crates/api/migrations
 
 # Docker preserves source mtimes from the build context, so the real sources
@@ -127,7 +116,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=15s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8080/health || exit 1
 
-# Exec form, no init shim: the binary runs as PID 1 and installs its own
-# SIGINT/SIGTERM handlers, which is what makes `docker stop` drain in-flight
-# requests instead of severing them.
+# Run the API as PID 1 so it receives SIGINT/SIGTERM and starts shutdown.
 ENTRYPOINT ["/usr/local/bin/pinvoyager-api"]

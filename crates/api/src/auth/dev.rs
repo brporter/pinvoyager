@@ -1,34 +1,9 @@
-//! Forged sign-in, for development only.
+//! Development sign-in without provider verification.
 //!
-//! # This is an authentication bypass
-//!
-//! Everything in this module skips the provider entirely: no authorization
-//! redirect, no `state`, no PKCE, no ID token, no signature. A caller names an
-//! identity and receives a session for it. Anyone who can reach the endpoint
-//! can become any account.
-//!
-//! It exists because obtaining credentials for three providers is a serialized,
-//! manual process — Apple alone needs a paid developer account — and the
-//! rest of the product cannot be built or tested while that is outstanding.
-//!
-//! ## Why it cannot reach production
-//!
-//! The whole module, and the route that reaches it, are behind
-//! `#[cfg(debug_assertions)]`. Cargo disables `debug_assertions` in the release
-//! profile, and the container image builds `--release`, so **this code is not
-//! in the shipped binary**. Not disabled in it — absent from it.
-//!
-//! That is the guarantee worth relying on. The `auth.dev_login` flag and the
-//! startup warning are second and third lines for the case where someone runs a
-//! debug build somewhere it was not expected.
-//!
-//! ## On the identifier
-//!
-//! The caller supplies a `subject`, and an email-shaped string is the natural
-//! thing to type. It is stored as the provider subject — an opaque identifier
-//! that merely looks like an email — because this service stores no email
-//! address anywhere (D3). Nothing parses it,
-//! nothing mails it, and it never appears in a response.
+//! A caller supplies a provider and subject and receives a session for that
+//! identity, creating an account if needed. This bypass can impersonate existing
+//! accounts. It is compiled only with debug assertions and additionally requires
+//! `auth.dev_login` to be enabled.
 
 use axum::Json;
 use axum::extract::State;
@@ -58,12 +33,9 @@ pub struct DevLoginRequest {
     pub display_name: Option<String>,
 }
 
-/// Signs in as `subject`, creating the account on first use.
-///
-/// Mirrors the real callback's identity mapping deliberately: same
-/// `(provider, subject)` lookup, same find-or-create in one transaction, same
-/// session issuance. A dev login that took a different path would let the real
-/// path rot untested behind it.
+/// Finds or creates the supplied provider identity and issues a session in one
+/// transaction. Returns 404 when development login is disabled and propagates
+/// database failures.
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,

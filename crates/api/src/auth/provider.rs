@@ -13,9 +13,7 @@ use crate::auth::providers::apple::AppleProvider;
 use crate::auth::providers::oidc::StandardOidcProvider;
 use crate::db::repo::identities::Provider as DbProvider;
 
-/// Which provider. Distinct from the database's `Provider` enum so the storage
-/// representation and the protocol layer can move independently, with one
-/// conversion point rather than a scattering of matches.
+/// Provider identifier used by authentication and converted to the repository enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProviderKind {
     Google,
@@ -24,8 +22,7 @@ pub enum ProviderKind {
 }
 
 impl ProviderKind {
-    /// URL path segment, and the value stored in the database. Must match the
-    /// migration's CHECK constraint.
+    /// Lowercase name used in URL paths and stored provider values.
     pub fn as_str(self) -> &'static str {
         match self {
             ProviderKind::Google => "google",
@@ -54,11 +51,7 @@ impl From<ProviderKind> for DbProvider {
     }
 }
 
-/// What a provider tells us about someone, after verification.
-///
-/// Note the absence of an email field. This service does not store email
-/// (D3), and not having it on the struct
-/// means no handler can casually start.
+/// Verified provider identity. Contains no email address or provider credentials.
 #[derive(Debug, Clone)]
 pub struct VerifiedIdentity {
     pub provider: ProviderKind,
@@ -84,13 +77,9 @@ pub trait AuthProvider: Send + Sync {
     /// verifier that the callback will need.
     fn authorize(&self) -> Result<AuthorizationRedirect, AuthError>;
 
-    /// Exchanges the code and returns a **verified** identity.
-    ///
-    /// "Verified" means, for the OIDC providers: signature checked against the
-    /// provider's JWKS, and `iss`, `aud`, `exp` and `nonce` all validated.
-    /// Decoding a token is not verifying it, and an unverified token looks
-    /// identical in a debugger.
-    ///
+    /// Exchanges an authorization code and returns the verified identity.
+    /// Verification checks the signature, issuer, audience, expiry, and nonce.
+    /// Exchange or verification failures return an authentication error.
     async fn exchange(
         &self,
         code: &str,
@@ -107,11 +96,7 @@ pub struct ProviderRegistry {
     providers: HashMap<ProviderKind, Box<dyn AuthProvider>>,
 }
 
-/// The order providers are offered in.
-///
-/// Fixed, because [`ProviderRegistry::configured`] feeds the sign-in screen and
-/// a `HashMap`'s iteration order would reshuffle the buttons on every restart —
-/// a UI that moves under a user who has learned where their provider is.
+/// Stable order used when reporting configured providers.
 const DISPLAY_ORDER: [ProviderKind; 3] = [
     ProviderKind::Google,
     ProviderKind::Microsoft,
@@ -126,17 +111,9 @@ impl ProviderRegistry {
         }
     }
 
-    /// Builds the registry, performing OIDC discovery once per configured
-    /// provider.
-    ///
-    /// Discovery and JWKS are fetched here and cached for the process lifetime,
-    /// not per sign-in — a discovery round trip on every authorization would
-    /// add latency to every sign-in and hammer the provider. Key rotation is
-    /// handled by refetching on an unknown `kid`, rate-limited so that bogus
-    /// `kid`s cannot be used to drive traffic at the provider.
-    ///
-    /// A provider that fails discovery at startup must not take the whole
-    /// service down: log it, disable that provider, and keep serving.
+    /// Discovers configured providers at startup. Failed providers are logged and
+    /// omitted; the service can start with none. Endpoints remain cached, while
+    /// unknown signing keys can trigger rate-limited JWKS refreshes.
     pub async fn from_config(config: &crate::config::AuthConfig) -> Self {
         Self::from_config_with_apple_issuer(config, super::providers::apple::APPLE_ISSUER).await
     }
@@ -148,9 +125,7 @@ impl ProviderRegistry {
         let base_url = &config.base_url;
         let configured = &config.providers;
 
-        // Discovery is three sequential HTTPS round trips if done one at a time,
-        // and they are independent, so they are not done one at a time. This is
-        // in the startup path, before the listener binds.
+        // Discover configured providers concurrently before binding the HTTP listener.
         let (google, microsoft, apple) = tokio::join!(
             async {
                 match &configured.google {
@@ -197,11 +172,7 @@ impl ProviderRegistry {
                     tracing::info!(provider = kind.as_str(), "provider ready");
                     providers.insert(kind, provider);
                 }
-                // A provider whose discovery document is
-                // unreachable — an outage, a proxy, a typo'd issuer — must not
-                // stop the other providers from serving. It is logged at warn and
-                // its endpoints will 404 until the next restart, which is a
-                // partial outage rather than a total one.
+                // Log discovery failure and omit this provider until the next startup.
                 Some(Err(err)) => {
                     let provider_name = kind.as_str();
                     tracing::warn!(
@@ -225,11 +196,7 @@ impl ProviderRegistry {
         Self { providers }
     }
 
-    /// A registry with nothing configured.
-    ///
-    /// Not only for tests: it is the honest representation of a deployment
-    /// that has no provider credentials yet, and the service is required to
-    /// start in that state rather than refuse to boot.
+    /// Returns an empty provider registry for deployments without credentials and tests.
     pub fn empty() -> Self {
         Self {
             providers: HashMap::new(),

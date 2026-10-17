@@ -1,10 +1,4 @@
-/**
- * Shared scaffolding for the authentication tests.
- *
- * `fetch` is stubbed rather than a server being stood up: what these tests are
- * about is how the client interprets a status code, and a real server would
- * make "what does a 401 mean here" harder to ask, not easier.
- */
+/** Shared session fixtures, fetch stubs, and render helpers for auth tests. */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
@@ -69,13 +63,8 @@ export function stubMe(status: number, body?: unknown): void {
 }
 
 /**
- * A client that does not wait between retries.
- *
- * `useMe` sets its own `retry` — a 5xx is retried twice, deliberately — so the
- * client default cannot switch that off, and should not: the retry is part of
- * what "failed" means. What it can do is remove the backoff, which otherwise
- * spends three seconds of wall clock reaching a state the test is asserting on
- * immediately.
+ * Creates a query client with zero retry delay. Hook-specific retry rules
+ * still apply, so tests can reach settled error states without waiting for backoff.
  */
 export function testQueryClient(): QueryClient {
   return new QueryClient({

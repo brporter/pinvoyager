@@ -1,10 +1,6 @@
 /**
- * Behavior of the voyage create/edit screen.
- *
- * The two things worth protecting here are the ones that are silently wrong
- * rather than visibly broken: a validation message that lands in a banner
- * instead of beside the input it is about, and a precision control that
- * displays a value it is not actually holding.
+ * Checks owner editing, field-level validation, precision changes, publication,
+ * and deletion through the screen's controls.
  */
 
 import "@testing-library/jest-dom/vitest";

@@ -1,4 +1,4 @@
-/** Checkbox uses the shared runtime styles and accessible native controls. */
+/** Renders a labeled checkbox and mirrors uncontrolled state for its tick graphic. */
 
 import { useId, useState } from "react";
 import type { ChangeEvent, InputHTMLAttributes, ReactNode } from "react";

@@ -25,16 +25,8 @@ export interface LayoutProps {
 }
 
 /**
- * The pins for a voyage, built from the photographs it already carries.
- *
- * Photographs with no coordinate are dropped here and picked up by
- * {@link UnplacedSection} instead — the map genuinely cannot draw them, and
- * they are accounted for in the rail rather than silently lost.
- *
- * The label is {@link photoAlt}, the same string the photograph carries in the
- * rail. That is deliberate: it is the only accessible name a pin has, and
- * sharing it is what lets a screen-reader user tell which pin belongs to which
- * photograph.
+ * Builds pins from photos with coordinates. Unplaced photos are rendered
+ * separately. Each pin shares its accessible label with the photo in the rail.
  */
 export function pinsFor(voyage: Voyage): VoyagePin[] {
   return voyage.photos
@@ -82,12 +74,8 @@ interface DateGroup {
 }
 
 /**
- * Groups by capture date, in the order the photographs arrive.
- *
- * Chronology is the only ordering a travelogue needs no explanation for, and
- * the API already returns photographs in voyage position order. Photographs
- * with no capture time land in one trailing group rather than being hidden —
- * the same principle as unplaced photographs.
+ * Groups photos by capture date while preserving order within each group.
+ * Photos with no capture time form the final group.
  */
 export function groupByCaptureDate(photos: readonly VoyagePhoto[]): DateGroup[] {
   const groups: DateGroup[] = [];

@@ -1,37 +1,13 @@
 /**
- * Drift detection: the captured responses, checked against the hand-written
- * types.
+ * Checks API response types against committed router-response fixtures.
  *
- * This is the second half of the scheme described at the top of `../types.ts`.
- * The first half is `crates/api/tests/api_fixtures.rs`, which drives the real
- * router against a real database and writes each response body into
- * `../__fixtures__/`. **Neither half is worth anything alone**: fixtures with no
- * types are just JSON, and types checked against types the same author wrote
- * only prove that person was consistent with themselves.
+ * Assignments detect missing or incompatible fields, ExtraKeys detects added
+ * fields, and separate checks validate enum spellings widened by JSON imports.
+ * The runtime test invokes tsc because Vitest alone strips types.
  *
- * To regenerate the fixtures, from the repository root:
- *
- * ```text
+ * To regenerate fixtures from the repository root:
  * DATABASE_URL=postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager \
- *   cargo test --test api_fixtures
- * ```
- *
- * # How a change is caught
- *
- * Three mechanisms, because no one of them catches everything:
- *
- *  * **A removed or renamed field** fails the assignment in `assigned` below —
- *    the fixture no longer has a property the type requires.
- *  * **An added field** fails `ContractHasNoExtraFields`. Assignment alone does
- *    *not* catch this: TypeScript's excess-property check only fires on fresh
- *    object literals, and an imported JSON module is not one. `ExtraKeys` walks
- *    the two shapes and produces the dotted path of anything the server sent
- *    that the type does not declare.
- *  * **A changed set of enum spellings** fails `ContractEnumsMatch` at compile
- *    time and `it("...only spellings the types allow")` at runtime. The types
- *    declare these as unions of string literals, and TypeScript widens every
- *    literal in an imported `.json` file to `string`, so this one cannot be
- *    done by assignment.
+ *   PINVOYAGER_UPDATE_FIXTURES=1 cargo test --test api_fixtures
  */
 
 import { execFileSync } from "node:child_process";
@@ -171,15 +147,8 @@ export const assigned: {
   errorNotFound: FromJson<ApiError>;
   errorUnauthorized: FromJson<ApiError>;
   errorBadRequest: FromJson<ApiError>;
-  // NOT `ApiError`, and the reason is a real gap rather than a convenience:
-  // `types.ts` gives `ApiError.code` seven spellings — the ones `AppError`
-  // produces — and no `errors` field. The two handler-local `Rejection` types
-  // in `http::voyages` and `http::photos` produce six more (`validation_failed`,
-  // `too_large`, `not_an_image`, `unprocessable_image`, `rate_limited`,
-  // `variants_pending`), and the first of those also carries an `errors` array
-  // so an edit form can put a message beside the input that failed. Until
-  // `types.ts` widens, this fixture is checked against the client's own body
-  // type, which is deliberately wider — see `client.ts`.
+  // Check this validation fixture against the transport error-body type,
+  // which accepts arbitrary codes and optional field errors.
   errorValidation: ApiErrorBody;
 } = {
   me,
@@ -317,13 +286,8 @@ describe("the captured fixtures", () => {
   });
 
   /**
-   * Runs the type checks above for real.
-   *
-   * Every mechanism in this file is a compile-time one, and `vitest` strips
-   * types without checking them — so without this the whole contract would be
-   * enforced only by whoever remembered to run `tsc`, which over a year is
-   * nobody. Scoped to `src/api` by its own tsconfig so an unrelated screen
-   * mid-edit cannot fail it; see `../tsconfig.contract.json`.
+   * Runs the contract type checks with tsc using the API-specific tsconfig.
+   * Vitest does not type-check these assignments itself.
    */
   it("still fit src/api/types.ts", () => {
     // Relative to the working directory, which is the `web/` package: that is

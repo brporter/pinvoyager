@@ -11,9 +11,7 @@ use pinvoyager_api::{AppState, Config, db, http, telemetry};
 #[tokio::main]
 async fn main() -> ExitCode {
     if let Err(err) = run().await {
-        // Telemetry may not be initialized yet, so this goes to stderr
-        // directly. Losing a startup failure to an uninitialized subscriber is
-        // a genuinely annoying way to spend an afternoon.
+        // Report startup failures even if telemetry initialization failed.
         eprintln!("fatal: {err}");
         let mut source = std::error::Error::source(&*err);
         while let Some(cause) = source {
@@ -42,12 +40,8 @@ async fn run_service(config: Config) -> Result<(), Box<dyn std::error::Error + S
     let pool = db::connect(&config.database).await?;
     db::migrate(&pool).await?;
 
-    // Discovery happens once, here. A provider that fails to come up is logged
-    // and disabled rather than fatal — one provider's outage must not stop the
-    // service from serving the other three.
-    // Third line of defense behind `#[cfg(debug_assertions)]` and the flag
-    // itself. Loud because a forged-login endpoint reachable by accident is the
-    // whole game, and a warning nobody notices is the same as no warning.
+    // Initialize providers independently; a discovery failure disables only
+    // the affected provider. Warn if the development login bypass is enabled.
     #[cfg(debug_assertions)]
     if config.auth.dev_login {
         tracing::warn!("════════════════════════════════════════════════════════════════");

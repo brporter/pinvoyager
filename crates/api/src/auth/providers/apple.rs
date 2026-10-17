@@ -18,29 +18,17 @@ use crate::auth::provider::{AuthorizationRedirect, ProviderKind, VerifiedIdentit
 use crate::auth::providers::oidc::{ClientSecretSource, OidcCore};
 use crate::config::AppleProviderConfig;
 
-/// Apple's issuer. Unlike the other OIDC providers this is not configurable —
-/// there is exactly one Apple, and a configurable issuer would only be a way to
-/// point the flow somewhere else by mistake.
+/// Fixed issuer for Sign in with Apple.
 pub(crate) const APPLE_ISSUER: &str = "https://appleid.apple.com";
 
 /// `aud` of the client-secret JWT. Fixed by Apple, and *not* the same thing as
 /// the `aud` of the ID token, which is our Services ID.
 const CLIENT_SECRET_AUDIENCE: &str = "https://appleid.apple.com";
 
-/// How long a minted client secret is valid for.
-///
-/// Apple's ceiling is six months. Nothing is gained by going near it: the secret
-/// is regenerated in-process for free, and a shorter life bounds how long a
-/// leaked one is useful. Two weeks is comfortably longer than any deployment
-/// gap and comfortably shorter than the limit.
+/// Lifetime of a generated client-secret JWT: two weeks.
 const CLIENT_SECRET_LIFETIME: Duration = Duration::days(14);
 
-/// Regenerate this long before expiry.
-///
-/// Without a margin the secret is renewed at the instant it stops working, so a
-/// slow clock at Apple, a request already in flight, or the seconds between the
-/// check and the token endpoint reading it all turn into a failed sign-in. The
-/// failure mode of renewing early is one extra signature.
+/// Renew the cached secret this far ahead of its expiration.
 const CLIENT_SECRET_RENEW_BEFORE: Duration = Duration::hours(1);
 
 pub(crate) struct AppleProvider {
@@ -55,11 +43,7 @@ impl AppleProvider {
     ) -> Result<Self, AuthError> {
         let secret = Arc::new(AppleClientSecret::new(config)?);
 
-        // Mint one now rather than at the first sign-in. A malformed `.p8`, a
-        // key that is not actually ES256, or a missing signing backend is a
-        // configuration error, and configuration errors belong at startup where
-        // they disable this one provider with a log line — not in a user's
-        // callback where they are a 500.
+        // Validate signing at startup so a broken key disables Apple before any callback.
         secret.probe()?;
 
         let issuer = Url::parse(issuer)
@@ -149,16 +133,8 @@ impl AppleClientSecret {
         })
     }
 
-    /// Mints one secret at startup so that a broken key is a startup problem.
-    ///
-    /// The `catch_unwind` covers a failure mode that cannot be typed away:
-    /// `jsonwebtoken` 11 picks its signing backend from a *process-global*
-    /// `CryptoProvider` selected by crate features, and if a future dependency
-    /// change leaves none compiled in it does not return an error — `encode`
-    /// panics. That panic would otherwise happen inside a user's callback, on
-    /// every attempt, forever. Here it costs one call at startup and turns into
-    /// the same outcome as any other provider misconfiguration: Apple disabled,
-    /// reason logged, everything else still serving.
+    /// Mints a secret to validate the signing key and backend at startup.
+    /// Converts signing errors and encoder panics to an authentication error.
     fn probe(&self) -> Result<(), AuthError> {
         catch_secret_probe(|| self.client_secret())
     }
@@ -204,9 +180,7 @@ impl AppleClientSecret {
             sub: self.client_id.clone(),
         };
 
-        // ES256 over a payload this small is microseconds and happens at most
-        // once a fortnight per process, so it does not need `spawn_blocking`
-        // (D8 is about the image pipeline, not about a single P-256 signature).
+        // Sign synchronously; secrets are cached and renewed near expiration.
         jsonwebtoken::encode(&header, &claims, &self.key).map_err(|err| {
             AuthError::Configuration(format!("could not sign the Apple client secret: {err}"))
         })

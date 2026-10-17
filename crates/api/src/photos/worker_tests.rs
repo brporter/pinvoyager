@@ -31,8 +31,7 @@ fn an_unknown_format_is_refused_rather_than_guessed() {
     assert!(parse_format("").is_err());
 }
 
-/// The statuses have to match the migration's CHECK constraint exactly; a
-/// mismatch is a constraint violation on a row nobody is watching.
+/// Checks the three stored status strings: pending, ready, and failed.
 #[test]
 fn statuses_match_the_schema() {
     assert_eq!(STATUS_PENDING, "pending");

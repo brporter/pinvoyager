@@ -6,8 +6,7 @@ export function voyagesOf(pages: { pages: VoyageList[] } | undefined): VoyageSum
   return pages?.pages.flatMap((page) => page.voyages) ?? [];
 }
 
-/** "August 2026". The month is enough — a voyage is not a news item, and a
- *  precise timestamp invites reading a publication time as a travel date. */
+/** Formats publication time as a localized month and year. */
 export function monthYear(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

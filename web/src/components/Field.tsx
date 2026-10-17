@@ -1,4 +1,4 @@
-/** Field uses the shared runtime styles and accessible native controls. */
+/** Connects a control to its label, hint, required indicator, and validation message. */
 
 import type { ReactNode } from "react";
 

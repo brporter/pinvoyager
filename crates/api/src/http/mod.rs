@@ -39,11 +39,9 @@ pub fn router(state: AppState) -> Router {
     middleware::apply(routes, &config.server)
 }
 
-/// Binds the listener and serves until a shutdown signal, then drains.
-///
-/// Graceful shutdown means in-flight requests finish. A hard drop mid-upload
-/// is precisely the failure the design's "your queued photos are still here"
-/// message is trying to avoid having to show.
+/// Serves until SIGINT or SIGTERM, then waits for active requests up to the
+/// configured timeout. The timeout stops waiting for axum; it does not abort
+/// axum's independently spawned connection tasks.
 pub async fn serve(state: AppState) -> Result<(), std::io::Error> {
     serve_with_shutdown(state, shutdown_signal()).await
 }
@@ -96,11 +94,10 @@ where
         // returned on its own.
         result = server => result,
 
-        // Backstop: `axum::serve` waits for in-flight requests *indefinitely*,
-        // so one wedged handler would keep the process alive forever — and a
-        // container runtime that sent SIGTERM will SIGKILL it after its own
-        // grace period, which is a worse ending than this one. Dropping the
-        // server future here closes the remaining connections.
+        // Stop waiting after the deadline. Axum spawns connection tasks that
+        // outlive this future, so requests may continue during worker shutdown.
+        // Enforcing connection cancellation requires owning those tasks or
+        // signaling them explicitly.
         () = drain_timeout(drain_clock, drain_deadline) => {
             let timeout_secs = drain_deadline.as_secs();
             tracing::warn!(

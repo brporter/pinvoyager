@@ -1,28 +1,8 @@
 /**
- * A voyage drawn on the map: pins, clusters, granularity areas, and selection.
- *
- * Everything here is about photographs. Nothing here knows about MapLibre —
- * `MapCanvas.tsx` is the only file that does — so the pin behavior survives a
- * change of mapping library, and more immediately survives the swap from
- * openstreetmap.org's raster tiles to the self-hosted vector archive that
- * decision D4 describes.
- *
- * ## What is drawn
- *
- * One marker per cluster. A cluster of one is a pin; a cluster of several is a
- * numbered bubble at one of the design's three size tiers. When the voyage
- * publishes rounded coordinates, each marker also carries the circle that says
- * how rounded — that is target 10, and the reasoning is in
- * {@link GranularityArea}.
- *
- * ## Selection
- *
- * The camera moves only for a selection that came from the photo list. A
- * selection that came from clicking a pin does not move the camera, because the
- * pin the user just clicked is already under their pointer and sliding the map
- * out from under it is disorienting. This is the same `source` distinction the
- * voyage detail screen uses to decide whether to scroll the photo rail, applied
- * to the other half of the same interaction.
+ * Draws voyage pins, clusters, precision circles, and selection using MapCanvas.
+ * Clusters are computed in the browser. Photo-list selections move the camera;
+ * map selections keep it in place. Marker activation opens the gallery when a
+ * callback is supplied, otherwise clusters expand by zooming.
  */
 
 import { useEffect, useMemo, type CSSProperties } from "react";
@@ -69,9 +49,8 @@ export interface MapSelection {
 export interface VoyageMapProps {
   pins: readonly VoyagePin[];
   /**
-   * The radius, in meters, that the voyage's coordinates were rounded to —
-   * `Coordinate.precision_m` from the API. Null when the voyage publishes exact
-   * positions, which is the only case where a bare pin tells the truth.
+   * Nominal per-axis half-width in meters from Coordinate.precision_m.
+   * Null indicates exact coordinates; coarse settings draw approximate circles.
    */
   precisionM: number | null;
   selection: MapSelection | null;
@@ -90,14 +69,8 @@ export interface VoyageMapProps {
    ========================================================================== */
 
 /**
- * How much of the viewport a granularity circle should take up when the camera
- * is fitted to a voyage with only one location in it.
- *
- * Without a cap the camera fits a single point by zooming to the maximum, which
- * would show a named street corner for a position known only to within fifty
- * kilometers — the map would be making a claim the data cannot support, which
- * is the same defect target 10 is about, expressed as a camera rather than as a
- * marker.
+ * Target pixel diameter for the precision circle when fitting a single place.
+ * Limits the initial zoom for coarse coordinates.
  */
 const FITTED_AREA_DIAMETER_PX = 320;
 
@@ -164,9 +137,7 @@ interface VoyageMarkersProps {
   onOpenGallery?: (photoIds: string[]) => void;
 }
 
-/** How much closer a cluster click takes the camera. Two levels quarters the
- *  area a cluster covers, which is usually enough to break it apart without
- *  losing the surrounding context in one jump. */
+/** Zoom levels added when expanding a cluster. */
 const CLUSTER_EXPAND_STEPS = 2;
 
 function VoyageMarkers({

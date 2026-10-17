@@ -48,10 +48,8 @@ export function useUploadBatch(destination: RefObject<string | null>, traceConte
               return;
             }
             const percent = Math.round(fraction * 100);
-            // The bytes are gone but the response has not come back: the
-            // server is decoding the header and reading EXIF. The design draws
-            // that as its own state — "reading location data" — rather than a
-            // bar that sits at 100% looking stuck.
+            // All bytes have been sent; wait for server validation and acceptance
+            // while displaying the processing state.
             patch(
               item.id,
               percent >= 100
@@ -95,9 +93,7 @@ export function useUploadBatch(destination: RefObject<string | null>, traceConte
     [patch, send, destination, traceContext],
   );
 
-  /** Sequential on purpose. Six parallel uploads race the per-user rate
-   *  limiter into a 429 that has nothing to do with the files, and the design
-   *  draws one row in flight at a time. */
+  /** Uploads files sequentially, with cancellation checked before each file. */
   const runBatch = useCallback(
     async (batch: readonly Item[]): Promise<void> => {
       const signal = batchController.current.signal;

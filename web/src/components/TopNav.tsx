@@ -1,4 +1,4 @@
-/** TopNav uses the shared runtime styles and accessible native controls. */
+/** Renders the site identity, navigation links, and account or sign-in controls. */
 
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router";

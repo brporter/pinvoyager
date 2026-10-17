@@ -28,15 +28,8 @@ pub(super) struct DiscoverMapQuery {
 /// A group of photographs the discovery map draws as one marker.
 #[derive(Debug, Serialize)]
 struct DiscoverCluster {
-    /// **A real photograph's published position**, not a computed center.
-    ///
-    /// That is a deliberate constraint rather than a convenience. [`Coordinate`]
-    /// has private fields and one constructor, so the only way to put a
-    /// latitude in a response is to have rounded it through a granularity —
-    /// and a centroid averaged from several photographs is not the output of
-    /// that constructor. Taking the representative's own coordinate keeps
-    /// [`place`] the single call to `Granularity::apply` in this module, and
-    /// means every position the map draws is one a voyage already publishes.
+    /// Representative photo's already-rounded coordinate, not an average of
+    /// the group's positions.
     coordinate: Coordinate,
     /// How many photographs the marker stands for, the representative
     /// included.
@@ -62,21 +55,13 @@ struct DiscoverVoyage {
 #[derive(Debug, Serialize)]
 pub(super) struct DiscoverMapResponse {
     clusters: Vec<DiscoverCluster>,
-    /// True when there were more photographs in the rectangle than
-    /// [`DISCOVER_MAP_LIMIT`] and some were left out.
-    ///
-    /// Stated rather than hidden. A map that silently drops half a continent
-    /// looks exactly like a map of a continent with fewer photographs in it,
-    /// and the reader has no way to tell which they are looking at.
+    /// True if more than `DISCOVER_MAP_LIMIT` photos matched the viewport
+    /// after rounding and some were omitted.
     truncated: bool,
 }
 
-/// The most photographs one discovery-map request will consider.
-///
-/// A cap is unavoidable: at the world view the rectangle is the whole planet,
-/// and the answer would otherwise be every published photograph in the
-/// database. Rows past the cap are dropped rather than merged, which is why
-/// exceeding it is reported.
+/// Maximum matching photos grouped in one response. Additional matches set
+/// the response's `truncated` flag.
 const DISCOVER_MAP_LIMIT: i64 = 20_000;
 
 /// How far apart, in screen pixels, two photographs must be to get their own
@@ -88,24 +73,11 @@ const DISCOVER_MAP_LIMIT: i64 = 20_000;
 /// nothing.
 const DISCOVER_CLUSTER_CELL_PX: f64 = 44.0;
 
-/// Photographs from every **published** voyage, clustered, inside a rectangle.
+/// Returns clusters of published photo locations in the requested viewport.
 ///
-/// Clustering happens on the server: a rectangle at a world view
-/// covers every published photograph there is, and no client can be sent them
-/// all to group for itself. A single voyage is the opposite case — it fits in
-/// one response, and `GET /api/voyages/{id}/map` sends it whole.
-///
-/// No session is required and none is consulted. Only published voyages are
-/// considered, so the answer is the same for everyone, which is also what makes
-/// it cacheable.
-///
-/// # What is rounded, and when
-///
-/// Each photograph is rounded to **its own voyage's** granularity before
-/// anything else happens — the same `place_pair` call every other endpoint here
-/// uses. Clustering then groups already-published positions. Doing it the other
-/// way round, grouping exact coordinates and rounding the group, would make the
-/// marker a function of coordinates that were never allowed out.
+/// Rounds each photo using its voyage's granularity before checking viewport
+/// membership, applying the response cap, or clustering. No session is required.
+/// Invalid bounds or zoom return a validation error; database failures propagate.
 pub(super) async fn discover_map(
     State(state): State<AppState>,
     Query(query): Query<DiscoverMapQuery>,
@@ -182,16 +154,7 @@ const MAX_QUERY_ZOOM: f64 = 20.0;
 
 impl Bbox {
     fn parse(query: &DiscoverMapQuery) -> Result<Self, Rejection> {
-        // Non-finite values first, and explicitly.
-        //
-        // The range checks below happen to catch NaN already, because
-        // `RangeInclusive::contains` compares with `PartialOrd` and every
-        // comparison against NaN is false — so `!contains(&NaN)` is true and the
-        // value is refused. That is a subtlety rather than a design. Written the
-        // other obvious way, `south < -90.0 || south > 90.0`, both halves are
-        // false for NaN and it sails through, to become a pixel coordinate with
-        // no grid cell. This loop is what makes the refusal survive that
-        // rewrite.
+        // Reject non-finite bounds and zoom before projection or range comparisons.
         for value in [query.west, query.south, query.east, query.north] {
             if !value.is_finite() {
                 return Err(Rejection::field("bounds", BAD_BOUNDS));
@@ -225,21 +188,11 @@ impl Bbox {
     }
 }
 
-/// Groups already-rounded positions into one marker per grid cell.
+/// Groups rounded positions into a fixed world-pixel grid at the requested zoom.
 ///
-/// A fixed grid rather than the greedy nearest-neighbor grouping the browser
-/// uses for a single voyage. Both are defensible; the grid is chosen here
-/// because it is linear in the number of photographs rather than quadratic, and
-/// this endpoint's input is bounded by [`DISCOVER_MAP_LIMIT`] rather than by
-/// how many photographs one person put in one voyage. The visible cost is that
-/// two photographs either side of a cell boundary stay apart when they are
-/// close enough to overlap; zooming in separates them anyway, and at the scale
-/// this endpoint is read at the difference is not noticeable.
-///
-/// The grid is anchored at zero in world-pixel space, so it is the same grid
-/// for every request at a given zoom. A grid anchored on the rectangle would
-/// regroup the same photographs differently on every pan, and markers would
-/// visibly reshuffle as the map moved.
+/// Each cell uses one photo as representative. The grid is independent of the
+/// viewport, so panning does not move its cell boundaries. Photos on opposite
+/// sides of a boundary can remain separate even if their markers overlap.
 fn cluster_for_discovery(rows: &[repo::DiscoverPhoto], zoom: f64) -> Vec<DiscoverCluster> {
     // Insertion-ordered, so the output follows the input's `ORDER BY photo_id`
     // and the response is byte-identical for an unchanged rectangle.

@@ -1,12 +1,7 @@
-//! Server-side sessions.
+//! Server-side sessions identified by hashed bearer tokens.
 //!
-//! Sessions are server-side so they can be **revoked**. A self-contained signed
-//! cookie cannot be invalidated before it expires, which matters more here than
-//! in a typical application: with social-only sign-in the account *is* the
-//! identity, and there is no password to change if something goes wrong.
-//!
-//! Expiry is sliding with an absolute ceiling. Sliding alone means a stolen
-//! cookie lives forever provided it keeps being used.
+//! Each valid lookup updates activity for the idle timeout. The absolute
+//! expiration remains fixed, and deleting the row revokes the session.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -19,16 +14,11 @@ use uuid::Uuid;
 
 use crate::config::SessionConfig;
 
-/// 256 bits. The token is a bearer credential with no structure to guess at, so
-/// entropy is the whole of its security; 256 bits puts brute force beyond
-/// reach and costs 43 characters in a cookie.
+/// Number of random bytes used to generate a session token.
 const TOKEN_BYTES: usize = 32;
 
-/// A raw session token. Exists in exactly two places: this type, and the user's
-/// cookie. **Never** written to the database — only its hash is.
-///
-/// Deliberately has no `Debug` that reveals its contents and no `Display`, so
-/// it cannot reach a log line by accident.
+/// Raw bearer token used in the session cookie. Only its hash is persisted.
+/// `Debug` redacts the value; reading it requires `expose`.
 pub struct SessionToken(String);
 
 impl std::fmt::Debug for SessionToken {
@@ -38,15 +28,11 @@ impl std::fmt::Debug for SessionToken {
 }
 
 impl SessionToken {
-    /// Generates a new token with at least 256 bits of entropy from the OS CSPRNG.
+    /// Generates a token from 32 OS-random bytes. Panics if the OS random source fails.
     pub fn generate() -> Self {
         let mut bytes = [0u8; TOKEN_BYTES];
 
-        // `SysRng` is the operating system's generator, not a userspace PRNG
-        // seeded from it. It can only fail if the OS entropy source is
-        // unavailable, and the sole alternative to panicking there would be to
-        // issue a session token of unknown quality — which is worse than not
-        // issuing one at all.
+        // Fail token generation if the OS random source is unavailable.
         SysRng
             .try_fill_bytes(&mut bytes)
             .expect("OS CSPRNG unavailable; refusing to issue a session token");
@@ -68,10 +54,7 @@ impl SessionToken {
 
     /// SHA-256 of the token. This is the database key.
     pub fn hash(&self) -> Vec<u8> {
-        // A plain digest, deliberately: unlike a password this is 256 bits of
-        // uniform randomness, so there is no dictionary to stretch against and
-        // a KDF here would only add per-request cost. What the hash buys is
-        // that a database leak yields no usable session.
+        // Hash the random bearer token so the database stores no usable raw token.
         Sha256::digest(self.0.as_bytes()).to_vec()
     }
 }
@@ -84,10 +67,7 @@ pub struct Session {
     pub absolute_expires_at: DateTime<Utc>,
 }
 
-/// Timeouts are configured as `u64` seconds but bind as `bigint`. A value large
-/// enough to saturate here is already far past what Postgres can hold in an
-/// `interval`, so it fails loudly at query time rather than silently wrapping
-/// into a short — or negative — timeout.
+/// Converts seconds to the SQL parameter type, saturating at `i64::MAX`.
 fn secs(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
@@ -100,9 +80,7 @@ pub async fn create(
 ) -> Result<SessionToken, sqlx::Error> {
     let token = SessionToken::generate();
 
-    // The ceiling is computed by the database rather than in Rust so that it is
-    // on the same clock as every later comparison against it. Anything else
-    // makes session lifetime depend on the drift between app host and database.
+    // Use the database clock for both expiration creation and later comparisons.
     sqlx::query!(
         "INSERT INTO sessions (token_hash, user_id, absolute_expires_at)
          VALUES ($1, $2, now() + ($3::bigint * interval '1 second'))",
@@ -116,15 +94,10 @@ pub async fn create(
     Ok(token)
 }
 
-/// Looks a session up and, if valid, slides its expiry forward.
+/// Looks up a token and updates `last_seen_at` if both timeouts allow it.
 ///
-/// Returns `Ok(None)` for absent, idle-expired, or past-absolute-ceiling — the
-/// caller cannot distinguish them and does not need to. An expired row should
-/// be deleted on the way past rather than left to the sweeper.
-///
-/// Note this is called on every authenticated request, so it must be a single
-/// round trip: do the expiry check and the touch in one statement rather than
-/// a SELECT followed by an UPDATE.
+/// Deletes expired matches and returns `Ok(None)` for missing or expired sessions.
+/// The absolute expiration is unchanged. Database failures return an error.
 pub async fn lookup_and_touch(
     executor: impl PgExecutor<'_>,
     token: &SessionToken,
@@ -132,17 +105,8 @@ pub async fn lookup_and_touch(
 ) -> Result<Option<Session>, sqlx::Error> {
     let idle = secs(config.idle_timeout_secs);
 
-    // One statement, one round trip, on every authenticated request.
-    //
-    // The two arms are exact complements: `now()` is the transaction timestamp
-    // and so is a single instant for the whole statement, which means the
-    // deleting CTE and the touching UPDATE can never match the same row. That
-    // is what makes combining two data-modifying statements safe here — the
-    // "unpredictable results" warning in the Postgres manual is about two
-    // sub-statements racing to modify one row, which these cannot do.
-    //
-    // Both conditions must hold for a session to be live: the sliding idle
-    // window *and* the absolute ceiling. The ceiling is never extended.
+    // The DELETE and UPDATE use complementary expiry conditions and the same
+    // transaction timestamp, so they cannot modify the same row.
     sqlx::query_as!(
         Session,
         "WITH expired AS (
@@ -164,8 +128,8 @@ pub async fn lookup_and_touch(
     .await
 }
 
-/// Destroys one session. Used by logout — which must delete the row, not
-/// merely clear the cookie.
+/// Deletes the session row. Missing sessions succeed; database failures return
+/// an error.
 pub async fn revoke(
     executor: impl PgExecutor<'_>,
     token: &SessionToken,
@@ -193,10 +157,8 @@ pub async fn revoke_all_for_user(
 
 /// Deletes rows past their absolute ceiling. Returns how many.
 pub async fn sweep_expired(executor: impl PgExecutor<'_>) -> Result<u64, sqlx::Error> {
-    // Only the ceiling, because that is the one bound that does not depend on
-    // configuration: the idle window is a `SessionConfig` value this signature
-    // does not receive, and an idle-expired row is already unusable — the next
-    // lookup deletes it, and this sweep collects it at the ceiling regardless.
+    // This sweep checks absolute expiry only. Idle-expired sessions are rejected
+    // and deleted by lookup, or removed here once their absolute expiry passes.
     let result = sqlx::query!("DELETE FROM sessions WHERE absolute_expires_at <= now()")
         .execute(executor)
         .await?;

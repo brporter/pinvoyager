@@ -8,18 +8,8 @@
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-/// Maps to a plain `text` column, not a Postgres enum type.
-///
-/// `type_name = "text"` is what makes that work: the derive turns it into
-/// `PgTypeInfo::with_name("text")`, which sqlx compares against the column's
-/// type by name (case-insensitively, so it matches the built-in `TEXT`) and
-/// resolves to an OID once per connection when binding. Reading it as an enum
-/// on the Rust side while storing text keeps the provider list a code-level
-/// decision — adding another provider needs no `ALTER TYPE`, only the CHECK
-/// constraint in the migration.
-///
-/// `rename_all` gives the lowercase spellings the migration's CHECK constraint
-/// expects; the two must be changed together.
+/// Provider names encoded as lowercase text: `google`, `microsoft`, or `apple`.
+/// The sqlx text type annotation lets queries decode the column into this enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
 #[sqlx(type_name = "text", rename_all = "lowercase")]
 pub enum Provider {
@@ -37,12 +27,8 @@ pub struct Identity {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Links a provider identity to an existing account.
-///
-/// A unique violation on `(provider, subject)` is the expected failure and is
-/// returned as-is: it means the identity is already attached to some account,
-/// and D3 requires that to be refused rather than merged. The callback decides what
-/// the user sees; the repository's job is to not paper over it.
+/// Links a provider and subject to an account. Returns database errors,
+/// including a unique violation when that identity is already linked.
 pub async fn create(
     executor: impl PgExecutor<'_>,
     user_id: Uuid,

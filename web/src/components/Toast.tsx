@@ -1,4 +1,4 @@
-/** Toast uses the shared runtime styles and accessible native controls. */
+/** Displays status feedback with tone, optional details, and dismissal. */
 
 import type { ReactNode } from "react";
 
@@ -17,9 +17,7 @@ export type ToastTone = "info" | "success" | "error" | "warning";
 export interface ToastProps {
   tone?: ToastTone;
   title: ReactNode;
-  /** The sentence under the title. Worth writing carefully: the session-expiry
-   *  toast in the design says the queued photos survived, and without that
-   *  sentence the honest assumption is that everything was lost. */
+  /** Additional explanatory content below the title. */
   children?: ReactNode;
   onDismiss?: () => void;
   className?: string;

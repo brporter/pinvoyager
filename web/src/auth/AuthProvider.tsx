@@ -1,17 +1,7 @@
 /**
- * Establishes the current-user state for the whole application (T5).
- *
- * Thin on purpose. The read itself is `useMe` in `src/api/hooks.ts` — one
- * query, one cache entry, one retry policy — and this component's job is to
- * turn that query's four booleans into the four states the interface actually
- * branches on, and to hold them at the root so the answer is fetched once
- * rather than once per screen that wonders.
- *
- * Sign-out goes through `useSignOut` for a reason that is not obvious: it
- * empties the query cache afterwards. Anything fetched while signed in may have
- * been visible only to that session — the caller's drafts, their owner-only photos, the
- * exact coordinates in it — and a cache that survived sign-out would leave the
- * previous user's data on screen for the next one.
+ * Maps the shared current-user query to loading, failed, anonymous, or
+ * authenticated session state. Successful sign-out clears query data; failed
+ * sign-out requests are suppressed by the action below.
  */
 
 import { useCallback, useMemo } from "react";
@@ -37,10 +27,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await mutateAsync();
     } catch {
-      // The endpoint answers 204 even when there was no session, so a failure
-      // here is the network rather than a refusal. Raising it would leave the
-      // interface claiming the user is still signed in while the cookie may
-      // well be gone; the next `/api/me` settles it either way.
+      // Request failures are currently suppressed without refreshing the
+      // session. Callers therefore cannot distinguish failure from success;
+      // docs/architecture/auth-flow.md records this unresolved behavior.
     }
   }, [mutateAsync]);
 

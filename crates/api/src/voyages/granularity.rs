@@ -3,76 +3,31 @@
 //! Published voyages expose rounded locations (D6). The database preserves
 //! exact coordinates for owners, so changing precision does not lose source data.
 //!
-//! Enforcing that per endpoint guarantees that the one endpoint somebody adds
-//! at six o'clock on a Friday becomes the leak. So it is enforced by the type
-//! system instead: [`Coordinate`] has **private fields** and exactly one
-//! constructor, which requires a [`Granularity`]. There is no way to put a
-//! latitude into a response body without having stated a precision, and Rust's
-//! module privacy makes that unforgeable rather than conventional.
-//!
-//! The row type that carries raw coordinates — `db::repo::photos::Photo` —
-//! deliberately does not implement `Serialize`. Returning one from a handler is
-//! a compile error, not a review comment.
+//! [`Coordinate`] has private fields and is constructed by
+//! [`Granularity::apply`]. Public response types use it to record the selected
+//! precision. Repository rows do not implement `Serialize`, but handlers can
+//! still copy raw numbers into other response types. Review new public
+//! endpoints and test their coordinates; this type does not enforce the
+//! privacy policy across every possible response.
 //!
 //! # The rounding
 //!
-//! Grid rounding to the **center** of a cell, which gives three properties the
-//! plan asks for:
-//!
-//! * **Stable.** The same input always yields the same output. Re-sampling per
-//!   request would make pins jitter between page loads and, far worse, would
-//!   let repeated observation average the noise away and recover the true
-//!   position.
-//! * **Clustering.** Photos that fall in one cell collapse to one point, which
-//!   is the "lump them together" behavior the plan specifies — and it is also
-//!   what stops a coarse voyage from displaying a suspiciously even scatter of
-//!   distinct pins.
-//! * **Bounded error.** The center is at most half a cell from the truth on
-//!   each axis, rather than up to a full cell as flooring would give.
-//!
-//! ## Longitude is not latitude
-//!
-//! A degree of latitude is ~111.32 km everywhere. A degree of longitude is
-//! 111.32 km at the equator and shrinks with `cos(latitude)` — about 55 km at
-//! 60°N, and near zero at the poles.
-//!
-//! So a fixed-degree grid would produce cells that are *narrower* than
-//! advertised at high latitudes: a "~10 km" voyage in northern Norway would
-//! actually be pinned to about 5 km. That is the dangerous direction to be
-//! wrong in — the product would be promising less precision than it delivers.
-//!
-//! The longitude cell is therefore divided by `cos(latitude)` so its ground
-//! width stays close to the target. It is computed from the **rounded**
-//! latitude, not the raw one, so the cell a point lands in does not depend on
-//! the very value being hidden.
-//!
-//! ## Near the poles
-//!
-//! `cos` runs to zero at the pole, so the correction runs to infinity: a
-//! literal `cell_km / cos(89.999°)` is a cell tens of thousands of degrees
-//! wide, which is not a grid so much as a floating-point accident. The scaling
-//! is therefore frozen at 85° — see `longitude_cell_scale` for why that
-//! latitude, and why stopping there is safe in the direction that matters.
+//! Rounds coordinates to fixed cell centers. Identical inputs produce identical
+//! outputs, photos in the same cell share a position, and each axis moves by
+//! at most half its cell width before longitude wrapping.
 
 use serde::Serialize;
 
-/// Kilometers per degree of latitude.
-///
-/// Constant to about half a percent between the equator and the pole on the
-/// real spheroid, which is two orders of magnitude finer than the smallest cell
-/// this module offers, so a single spherical figure is used rather than a
-/// geodetic one.
+/// Approximate kilometers per degree of latitude used by the spherical grid.
 const KM_PER_DEG_LAT: f64 = 111.32;
 
 /// The latitude past which the longitude cell stops being widened.
 ///
-/// See [`longitude_cell_scale`]. 85° is chosen rather than something closer to
-/// the pole because the widening factor there is already 11.5×, and because
-/// there is nothing above it to protect: the northernmost land on Earth is
-/// around 83°N and the northernmost inhabited place around 82.5°N.
+/// Caps the widening factor at approximately 11.5. Beyond ±85°, east-west
+/// cells become narrower on the ground than the selected kilometer size.
 const MAX_SCALED_LATITUDE_DEG: f64 = 85.0;
 
-/// The four precision steps. Values match the migration's CHECK constraint.
+/// Supported public location precision settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Granularity {
     /// As recorded. The coordinate leaves the server unchanged.
@@ -118,14 +73,12 @@ impl Granularity {
         self.cell_km().map(|km| (km * 500.0) as u32)
     }
 
-    /// **The only way to build a [`Coordinate`].**
-    ///
-    /// Takes the exact values and returns what the world is allowed to see.
+    /// Constructs a coordinate at the selected precision. Exact preserves input;
+    /// coarse settings round to a cell center, clamp latitude, and wrap longitude.
+    /// Inputs are expected to have been validated; this method returns no error.
     pub fn apply(self, latitude: f64, longitude: f64) -> Coordinate {
         let Some(cell_km) = self.cell_km() else {
-            // Exact means exact: no rounding, no clamping, no wrapping. Any
-            // "tidying" here would be a second, undeclared transformation of
-            // the one value the user asked us not to touch.
+            // Preserve exact coordinates without rounding, clamping, or wrapping.
             return Coordinate {
                 latitude,
                 longitude,
@@ -157,48 +110,15 @@ impl Granularity {
     }
 }
 
-/// The center of the `cell`-wide grid cell containing `value`, on a grid
-/// anchored at zero.
-///
-/// The center rather than the lower edge: both collapse a cell to one point,
-/// which makes grouping deterministic, but nothing is further than half
-/// a cell from the center where a point just short of the upper edge is a whole
-/// cell from the lower one.
-///
-/// Anchoring at zero makes the grid the same for every user and every request —
-/// there is no per-voyage or per-photo offset to average away — and makes it
-/// symmetric about the equator and the prime meridian: `floor` rounds toward
-/// negative infinity, so `-x` lands exactly opposite `x` instead of the
-/// southern and western hemispheres getting a differently shaped grid.
+/// Returns the center of the `cell`-wide interval containing `value`.
+/// The grid is anchored at zero and uses floor division for negative values.
 fn cell_center(value: f64, cell: f64) -> f64 {
     (value / cell).floor() * cell + cell / 2.0
 }
 
-/// `cos(latitude)`, floored at [`MAX_SCALED_LATITUDE_DEG`].
-///
-/// Dividing the longitude cell by this is what keeps its *ground* width near
-/// the advertised size instead of shrinking with the meridians. Without the
-/// floor the factor is unbounded, and a cell wider than the globe is both
-/// meaningless and numerically hopeless.
-///
-/// Freezing the scaling above 85° means cells there are narrower on the ground
-/// than advertised — normally the dangerous direction — and it is nonetheless
-/// the right trade:
-///
-/// * The latitude axis is untouched, so the reported point is still up to half
-///   a cell from the truth north-south. Total displacement, the thing privacy
-///   actually depends on, is unchanged.
-/// * East-west ground distance is what vanishes at the pole in the first place.
-///   At 89° the frozen `Km50` cell is still 5.2° of longitude wide — a third of
-///   a time zone — and that is 10 km of ground. Buying the missing 40 km would
-///   take a cell 26° wide, which moves the pin a sixth of the way round the
-///   Arctic for ambiguity the latitude axis is already supplying.
-///
-/// The floor also bounds a subtler error. The cell width is set by the rounded
-/// latitude while the point sits at the true one, so its real ground width is
-/// off by `cos(true) / cos(rounded)`. For the widest cell that ratio is 1.007 at
-/// 60°, 1.011 at 70° and 1.045 at 85°, and it is unbounded as the pole is
-/// approached; the clamp is what stops it running away.
+/// Returns the cosine of absolute latitude, clamping latitude to 85° first.
+/// Longitude cell widths divide by this value. Beyond the cap, east-west
+/// ground widths shrink toward the poles; the nominal width is approximate.
 fn longitude_cell_scale(latitude_deg: f64) -> f64 {
     latitude_deg
         .abs()
@@ -219,32 +139,22 @@ fn wrap_longitude(degrees: f64) -> f64 {
     (degrees + 180.0).rem_euclid(360.0) - 180.0
 }
 
-/// A coordinate that has passed through the granularity boundary.
-///
-/// Private fields, no public constructor, no `From<f64>`. The only way to
-/// obtain one is [`Granularity::apply`], so a latitude cannot reach a response
-/// body without a precision having been chosen for it.
-///
-/// `precision_m` travels with the value on purpose: showing a rounded
-/// coordinate without saying it is rounded invites the reader to treat it as
-/// exact, which is the misreading the whole feature exists to prevent.
+/// Coordinates produced by [`Granularity::apply`], with the nominal precision.
+/// Private fields keep construction within this module; other response types
+/// still need to apply granularity before exposing public coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Coordinate {
     latitude: f64,
     longitude: f64,
-    /// Half the cell size — the maximum error on either axis. `None` when
-    /// exact.
-    ///
-    /// A cell corner is approximately sqrt(2) times this distance from its
-    /// center. Clients must account for both axes when drawing a circle.
+    /// Nominal per-axis half-width in meters, or `None` for exact coordinates.
+    /// A cell corner is approximately sqrt(2) times this distance from its center.
+    /// Longitude widths vary with latitude, especially beyond the scaling cap.
     #[serde(skip_serializing_if = "Option::is_none")]
     precision_m: Option<u32>,
 }
 
 impl Coordinate {
-    /// Read access for the map endpoint, which needs the numbers rather than
-    /// the serialized form. Still only obtainable from an already-rounded
-    /// value, so this is not a way around the boundary.
+    /// Returns the latitude after applying the selected precision.
     pub fn latitude(&self) -> f64 {
         self.latitude
     }

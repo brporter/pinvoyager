@@ -41,10 +41,7 @@ where
     F: FnOnce() -> AppResult<T> + Send + 'static,
     T: Send + 'static,
 {
-    // The outer `Result` is the join result: `Err` here means the closure
-    // panicked (a blocking task cannot be canceled, so `JoinError` is always
-    // a panic in practice). Flatten it into the caller's error type so a panic
-    // is a 500 with the real cause on the `#[source]` chain, not a lost thread.
+    // Map a failed blocking task join to an internal application error.
     let span = tracing::Span::current();
     let dispatch = tracing::dispatcher::get_default(Clone::clone);
     match tokio::task::spawn_blocking(move || {
@@ -57,16 +54,8 @@ where
     }
 }
 
-/// Runs infallible CPU-bound or blocking work on the blocking thread pool.
-///
-/// The separate entry point exists because the fallible form cannot express
-/// "this cannot fail" without an awkward turbofish — a closure ending in
-/// `Ok(hash)` leaves the error type unconstrained, so every hashing call site
-/// would have to write `Ok::<_, AppError>(hash)`. Content hashing and resizing
-/// an already-decoded image are common uses.
-///
-/// The returned `AppResult` is still fallible: a panic in `f` is the only way
-/// this returns `Err`.
+/// Runs an infallible closure on the blocking thread pool.
+/// The returned result reports task join failures, including panics.
 pub async fn run_blocking_infallible<F, T>(f: F) -> AppResult<T>
 where
     F: FnOnce() -> T + Send + 'static,

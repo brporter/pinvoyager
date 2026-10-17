@@ -1,12 +1,4 @@
-/**
- * Which of the four callback states is chosen, and what the conflict one says.
- *
- * The copy is asserted rather than eyeballed for one sentence only: "Nothing
- * has been changed on either account" is a promise about server state that the
- * link handler is written to keep, and a user whose link attempt failed is
- * afraid they have half-merged something. It is the one line on this screen
- * that must not quietly drift.
- */
+/** Checks callback outcome selection, conflict feedback, and return navigation. */
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

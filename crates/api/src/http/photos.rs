@@ -46,13 +46,8 @@ const MAX_PAGE: i64 = 100;
 /// Shared caches must never reuse a response authorized for one caller.
 const IMAGE_CACHE_CONTROL: &str = "private, no-cache, must-revalidate";
 
-/// All photo routes.
-///
-/// The variant segment is resolved through [`VariantKind::parse`] inside the
-/// handler rather than interpolated into a path, which is what makes path
-/// traversal a non-category here (T9): `../` in that position is simply not one
-/// of the three names, and the path that is built comes from a hex hash and an
-/// enum, never from a caller's string.
+/// Registers upload, owner metadata, deletion, and variant routes. Variant
+/// names are parsed into the supported enum before constructing storage paths.
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/voyages/{id}/photos", post(upload_to_voyage).get(list))
@@ -69,23 +64,8 @@ struct UploadResponse {
     photos: Vec<PhotoResponse>,
 }
 
-/// Accepts one or many files (T1).
-///
-/// The body is **streamed**: each part goes to a temporary file through
-/// `tokio::fs` as it arrives, so a 25 MB upload costs a 64 KiB buffer rather
-/// than 25 MB of resident memory, and fifty of them do not multiply that.
-///
-/// Validation runs cheapest-first, and the order is the design (T2): the size
-/// cap before the body is read, the magic bytes as soon as enough leading bytes
-/// exist and before any decoder is handed the file, the dimensions from the
-/// header before anything is fully decoded. The filename and the client's
-/// `Content-Type` are consulted for nothing.
-///
-/// **A batch is not a transaction.** A file rejected part-way through fails the
-/// request with the status that names the reason, and files accepted before it
-/// stay in their voyage. They are photographs that passed every check, were
-/// stored and were enqueued; discarding them would make a user re-upload good
-/// files because of a bad one.
+/// Returns 404 for a missing voyage or one not owned by the caller.
+/// Database failures propagate.
 async fn owned_voyage(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<(), Rejection> {
     let voyage = voyages_repo::find_by_id(&state.pool, id)
         .await?
@@ -108,6 +88,12 @@ async fn upload_to_voyage(
     upload(State(state), user, voyage_id, headers, body).await
 }
 
+/// Streams multipart files into temporary storage and accepts validated photos.
+///
+/// Enforces the request size limit, detects format from bytes, and checks image
+/// dimensions before decoding. Client filenames and MIME types do not choose the
+/// format. Each accepted file is saved and queued independently; a later failure
+/// does not roll back files already accepted in the same request.
 async fn upload(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -190,11 +176,8 @@ async fn upload(
     ))
 }
 
-/// One file, from the wire to a row and a queued job.
-///
-/// Wraps [`ingest_part`] only so that the temporary file is removed on every
-/// failure path. A `Drop` guard would be the tidier shape but cannot `await`,
-/// and a synchronous unlink on a runtime worker thread is the thing D8 forbids.
+/// Ingests one file and attempts to remove its temporary path after success
+/// or failure. Cleanup failures are logged without replacing the ingest result.
 async fn ingest(
     state: &AppState,
     owner_id: Uuid,
@@ -218,8 +201,7 @@ async fn ingest(
 }
 
 async fn discard_failed_upload(path: &FsPath) {
-    // Best effort: a leaked temporary is a disk-space problem, and reporting
-    // an upload that failed as though it had not is a correctness one.
+    // Attempt temporary-file cleanup without replacing the upload result.
     match tokio::fs::remove_file(path).await {
         Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -370,9 +352,7 @@ async fn ingest_part(
             height: i32::try_from(height).unwrap_or(i32::MAX),
             original_format: format.as_str().to_owned(),
             captured_at: exif.captured_at,
-            // Exact, as recorded. Granularity is applied at the serialization
-            // boundary when building public responses; rounding here would discard the precision
-            // irreversibly and make that decision unmakeable.
+            // Preserve exact EXIF coordinates; public responses apply granularity later.
             latitude: exif.latitude,
             longitude: exif.longitude,
         },
@@ -527,22 +507,9 @@ async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Photo, 
     Ok(photo)
 }
 
-/// Resolves a photo the caller is allowed to **look at**, which is a wider set
-/// than the one they own.
-///
-/// Used only for serving image bytes. Published voyages are public (D6), so a
-/// photograph attached to a published voyage is public too — and without this
-/// the product is a public gallery with the pictures painted out: the voyage
-/// JSON is world-readable while every `thumbnail_url` in it 404s for anyone but
-/// the owner.
-///
-/// Metadata endpoints deliberately do **not** use this. They return exact
-/// coordinates to an owner, and the granularity boundary lives in
-/// `http::voyages`; widening those would route around it.
-///
-/// The ownership check comes first because it needs no second query, and a
-/// draft never grants visibility — attaching a photo to an unpublished voyage
-/// must not make it fetchable.
+/// Loads an image the caller owns or that belongs to a published voyage.
+/// Returns 404 for missing or inaccessible photos. Used for variant bytes only;
+/// exact metadata requires ownership. Database failures propagate.
 async fn viewable(
     state: &AppState,
     user: Option<&CurrentUser>,
@@ -569,12 +536,9 @@ async fn viewable(
 // Serving — where D7 is enforced
 // ---------------------------------------------------------------------------
 
-/// Serves one variant (T9).
-///
-/// This handler is the entire reason files are not served from disk. Every
-/// header below is one that a static file server would either take from the
-/// upload or not set at all, and the combination is what makes an uploaded file
-/// unable to execute as a document on this origin.
+/// Authorizes and serves a WebP variant with controlled response headers.
+/// Checks access before conditional validators. Pending variants return 409;
+/// missing or failed variants return 404. Successful bodies stream from disk.
 async fn image(
     State(state): State<AppState>,
     MaybeUser(user): MaybeUser,
@@ -642,13 +606,8 @@ async fn variant_body(
     Ok((file, metadata.len(), metadata.modified().ok()))
 }
 
-/// Whether a variant can be served at all, given the row's status.
-///
-/// Split out, and total over the string, because "the variants are not ready
-/// yet" is the state most easily reached by accident: an upload returns before
-/// its variants exist, so a client that follows the id straight to the image
-/// hits it every time. Answering that with a 500 would make an ordinary race
-/// look like a fault.
+/// Returns success for ready variants, a retryable 409 for pending variants,
+/// and 404 for failed or unrecognized processing states.
 fn availability(status: &str) -> Result<(), Rejection> {
     match status {
         STATUS_READY => Ok(()),
@@ -661,17 +620,8 @@ fn availability(status: &str) -> Result<(), Rejection> {
     }
 }
 
-/// The entity tag for a variant.
-///
-/// Content-derived: the same bytes under the same variant always produce the
-/// same tag, and two different originals cannot collide without a SHA-256
-/// collision. That is also what makes `immutable` honest — the response at this
-/// URL cannot change, so there is nothing for a year-long cache to get wrong.
-///
-/// It deliberately does not cover the encoder settings: changing `webp_quality`
-/// does not change the tag. With a one-year `immutable` cache that is academic,
-/// since no client would re-fetch in any case — but it is the reason a quality
-/// change is a new storage generation rather than a silent re-encode.
+/// Builds an ETag from the original content hash and variant name.
+/// It does not include encoder settings or hash the encoded output.
 fn etag(hash: &str, kind: VariantKind) -> String {
     format!("\"{hash}-{}\"", kind.as_str())
 }
@@ -742,13 +692,9 @@ fn http_date(time: SystemTime) -> String {
 // Delete
 // ---------------------------------------------------------------------------
 
-/// Deletes a photo, owner only (T11).
-///
-/// Files are unlinked **only** when the row delete reports the content
-/// unreferenced. Deduplication means two users can share one file, so an
-/// unqualified unlink here removes another user's photograph — and the count
-/// and the delete happen in one statement inside the repository, because a
-/// concurrent upload of the same bytes can otherwise slip between them.
+/// Deletes an owned photo and schedules content cleanup in the same transaction.
+/// After commit, cleanup locks the content and removes files only if no photo
+/// still references them. Missing or foreign photos return 404.
 pub(super) async fn destroy(
     State(state): State<AppState>,
     user: CurrentUser,

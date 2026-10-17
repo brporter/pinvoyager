@@ -1,4 +1,4 @@
-/** icons uses the shared runtime styles and accessible native controls. */
+/** Shared SVG icons with configurable size, stroke, and accessibility attributes. */
 
 import type { ReactNode, SVGProps } from "react";
 
@@ -30,7 +30,7 @@ function icon(viewBox: string, body: ReactNode, defaults: SVGProps<SVGSVGElement
   };
 }
 
-/* -- buttons.html ------------------------------------------------------- */
+/* Button icons */
 
 export const EditIcon = icon(
   "0 0 24 24",
@@ -76,7 +76,7 @@ export const ArrowRightIcon = icon("0 0 24 24", <path d="m10 6 6 6-6 6" />);
 
 export const CloseIcon = icon("0 0 24 24", <path d="M18 6 6 18M6 6l12 12" />);
 
-/* -- forms.html / feedback.html ----------------------------------------- */
+/* Form and feedback icons */
 
 export const AlertCircleIcon = icon(
   "0 0 24 24",
@@ -114,7 +114,7 @@ export const WarningTriangleIcon = icon(
   </>,
 );
 
-/* -- navigation.html ---------------------------------------------------- */
+/* Navigation icons */
 
 export const PinIcon = icon(
   "0 0 24 24",
@@ -140,7 +140,7 @@ export const PersonIcon = icon(
   </>,
 );
 
-/* -- feedback.html ------------------------------------------------------ */
+/* Feedback icons */
 
 export const ImageIcon = icon(
   "0 0 24 24",
@@ -151,9 +151,9 @@ export const ImageIcon = icon(
   </>,
 );
 
-/* -- granularity.html --------------------------------------------------- */
+/* Location privacy icons */
 
-/** The stripping guarantee's shield. */
+/** Shield icon used beside the image-metadata privacy message. */
 export const ShieldCheckIcon = icon(
   "0 0 24 24",
   <>

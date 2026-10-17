@@ -35,8 +35,7 @@ url = "postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager"
 max_connections = 10
 min_connections = 1
 
-# D8: never unset, and deliberately short. This is what turns pool exhaustion
-# into a 503 the caller can retry instead of a request that hangs forever.
+# Maximum seconds to wait for an available database connection before returning an error.
 acquire_timeout_secs = 5
 
 [telemetry]
@@ -59,27 +58,21 @@ service_name = "pinvoyager-api"
 # headers. Gitignored.
 storage_root = "data"
 
-# 25 MB. Comfortably above a modern phone's HEIC or JPEG.
+# 25 MiB request limit, including multipart framing.
 max_upload_bytes = 26214400
 
-# The decompression-bomb guard, checked from the image header BEFORE any full
-# decode. A 50,000 x 50,000 PNG is a few hundred kilobytes on disk and about
-# 10 GB decoded, so a byte-size limit does not catch it — only a pixel count does.
+# Maximum decoded pixel count in decimal megapixels, checked from image headers.
 max_megapixels = 100
 
 upload_rate_per_minute = 60
 
-# Bounded on purpose: an unbounded queue turns an upload burst into unbounded
-# memory. Backpressure showing up as a slower upload beats an OOM kill.
+# Maximum queued conversion jobs. Uploads wait when the queue is full.
 variant_queue_depth = 256
 
-# Separate from queue depth, and the number that actually protects the machine.
-# Image work is CPU-bound and runs on the blocking pool (D8); unbounded width
-# starves everything else on the host.
+# Maximum concurrent conversions on the blocking pool, independent of queue depth.
 variant_concurrency = 4
 
-# 82 is the usual sweet spot for photographic WebP — visually indistinguishable
-# at normal viewing sizes, roughly a third of an equivalent JPEG.
+# Lossy WebP quality, clamped to 0–100 during encoding.
 webp_quality = 82.0
 
 [auth]
@@ -108,14 +101,10 @@ base_url = "http://127.0.0.1:8080"
 dev_login = true
 
 [auth.session]
-# Sliding: two weeks of inactivity ends the session. Generous on purpose — this
-# is a photo-browsing site, being signed out is pure friction, and there is no
-# money or admin surface behind the cookie.
+# Expire sessions after two weeks without activity.
 idle_timeout_secs = 1209600
 
-# But not unbounded. Sliding expiry alone means a stolen cookie lives forever
-# provided it keeps being used; this ceiling eventually forces a fresh sign-in
-# regardless of activity.
+# Expire sessions after ninety days regardless of activity.
 absolute_timeout_secs = 7776000
 
 cookie_name = "pv_session"

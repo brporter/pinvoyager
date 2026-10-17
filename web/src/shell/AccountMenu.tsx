@@ -55,9 +55,8 @@ export function AccountMenu({ user }: { user: CurrentUser }) {
   const onSignOut = useCallback(async () => {
     setOpen(false);
     await signOut();
-    // Back to Discover. Staying put would leave a signed-out visitor on a route
-    // the guard is about to bounce them off anyway, and that redirect would
-    // hand them a sign-in screen they did not ask for.
+    // Return to Discover after the sign-out action resolves, including when
+    // AuthProvider suppresses a failed logout request.
     void navigate("/", { replace: true });
   }, [navigate, signOut]);
 

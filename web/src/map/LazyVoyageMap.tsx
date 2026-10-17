@@ -1,15 +1,6 @@
 /**
- * The map, loaded only when a screen actually shows one.
- *
- * This is target 12. MapLibre plus its stylesheet is a substantial download,
- * and every module reachable from the entry chunk is downloaded, parsed and
- * executed before first paint — including on the discovery feed, the upload details/picker
- * steps, and the settings screen, none of which draw a map. The dynamic
- * `import()` below is what puts it in its own chunk instead.
- *
- * The fallback is the design system's own `.pv-map` surface at the exact
- * dimensions the map will occupy, so the layout does not shift when the real
- * map arrives — the box is already the right size and the tiles fill it in.
+ * Loads the voyage map on demand so other screens do not load MapLibre.
+ * The Suspense fallback reserves the map's space while its chunk loads.
  */
 
 import { Suspense, lazy } from "react";

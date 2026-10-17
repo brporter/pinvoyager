@@ -74,12 +74,8 @@ fn photo_with_everything(dir: &ScratchDir, name: &str) -> std::path::PathBuf {
     path
 }
 
-/// Every public image must strip original metadata.
-///
-/// Every variant of a photograph that carried GPS, a timestamp, a camera
-/// identity and an XMP packet is run through exiftool, and none of it may
-/// come back out. Re-encoding is assumed to strip; this is the assertion
-/// that it actually did.
+/// Checks every generated variant for original EXIF, GPS, XMP, and profile data
+/// using exiftool and direct RIFF chunk inspection.
 #[test]
 fn exiftool_finds_no_metadata_on_any_generated_variant() {
     let dir = ScratchDir::new("variant-strip");
@@ -129,9 +125,7 @@ fn exiftool_finds_no_metadata_on_any_generated_variant() {
             kind.as_str()
         );
 
-        // And a belt-and-braces pass over everything exiftool can see,
-        // ignoring only the groups that describe the file on disk rather
-        // than its contents.
+        // Check all remaining metadata families except filesystem and container details.
         let everything = exiftool(&["-a", "-u", "-s", "-G1", file]);
         for line in everything.lines() {
             let describes_the_file_itself = line.starts_with("[File]")

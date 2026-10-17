@@ -1,15 +1,12 @@
-//! Photos repository.
-//!
-//! Every function takes an executor, so the callback can create a photo and
-//! record it inside one transaction, and tests can roll back.
+//! Photo rows and async queries. Executor parameters let callers use a pool
+//! or combine operations in a transaction.
 
 use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-/// A photo row. Coordinates here are **exact** — granularity is applied at the
-/// serialization boundary when building public responses, never in the repository, so that there is
-/// exactly one place to get it right.
+/// Photo row with exact stored coordinates. Public response construction
+/// applies the voyage's granularity; owner metadata retains these values.
 #[derive(Debug, Clone)]
 pub struct Photo {
     pub id: Uuid,
@@ -41,24 +38,14 @@ pub struct NewPhoto {
     pub longitude: Option<f64>,
 }
 
-/// Scale of the `latitude`/`longitude` columns. Six decimal places is about
-/// 11 cm at the equator — far finer than any consumer GPS — and it is what the
-/// migration declares, so rounding here rather than letting Postgres do it
-/// means the value read back is the value that was bound.
+/// Decimal places stored for latitude and longitude. Round before binding
+/// so the bound value matches the column's six-decimal scale.
 const COORDINATE_SCALE: u32 = 6;
 
-/// Converts an EXIF coordinate to the column's `numeric` type.
+/// Converts an optional coordinate to a six-decimal `Decimal`.
 ///
-/// EXIF gives degrees as a float; the column is `numeric(9, 6)` because "the
-/// number we were given" is a better thing to hold than "a number very close to
-/// it" when the whole privacy model is about controlling precision (see the
-/// migration).
-///
-/// `None` for a non-finite input, which is the only value `Decimal` cannot
-/// represent. A finite but out-of-range coordinate — beyond ±90 or ±180 — is
-/// *not* silently dropped here: it exceeds `numeric(9, 6)`'s three integer
-/// digits and surfaces as a database error, which is the honest outcome. Range
-/// checking belongs to the EXIF extractor, which knows what it read.
+/// Returns `None` for absent or unrepresentable input. Does not check geographic
+/// bounds; upload EXIF validation checks latitude and longitude before storage.
 fn to_numeric(degrees: Option<f64>) -> Option<rust_decimal::Decimal> {
     degrees
         .and_then(rust_decimal::Decimal::from_f64_retain)
@@ -184,13 +171,8 @@ pub async fn set_variant_status(
     id: Uuid,
     status: &str,
 ) -> Result<(), sqlx::Error> {
-    // The permitted spellings are enforced by the migration's CHECK constraint
-    // rather than re-stated here — one definition of the state machine, in the
-    // place that can actually hold the line against a bad write.
-    //
-    // A row that no longer exists is not an error: the worker finishes a photo
-    // its owner deleted while it was being processed, and that is an ordinary
-    // race, not a failure to report.
+    // The database rejects unsupported status strings. Updating a deleted row
+    // succeeds without changing anything.
     sqlx::query!(
         "UPDATE photos SET variant_status = $2, updated_at = now() WHERE id = $1",
         id,
@@ -202,8 +184,7 @@ pub async fn set_variant_status(
     Ok(())
 }
 
-/// Photos left `pending` by a previous run, for the worker to pick up at
-/// startup. Without this a process that died mid-batch strands them forever.
+/// Returns a page of pending photos for recovery, ordered by ascending ID.
 pub async fn pending(executor: impl PgExecutor<'_>, limit: i64) -> Result<Vec<Uuid>, sqlx::Error> {
     // Ascending, unlike metadata pagination: this is a drain, and the oldest
     // stranded photo is the one whose owner has been staring at a placeholder
@@ -217,22 +198,12 @@ pub async fn pending(executor: impl PgExecutor<'_>, limit: i64) -> Result<Vec<Uu
     .await
 }
 
-/// Deletes a photo, returning whether its content is now unreferenced.
+/// Deletes an owned photo and reports whether its content has other references.
 ///
-/// The caller unlinks files only when this says `true`. Deduplication means two
-/// users can share one file, so an unqualified unlink deletes someone else's
-/// photograph — and the count and the delete must be in the same transaction,
-/// or a concurrent upload of the same bytes can slip between them.
-///
-/// `Ok(None)` means "no such photo, or not yours". The two are deliberately
-/// indistinguishable: telling a caller that a photo exists but belongs to
-/// someone else is an enumeration oracle, and the ownership predicate lives in
-/// the `WHERE` clause rather than in a preceding `SELECT` so there is no window
-/// between the check and the delete.
-///
-/// The caller locks the voyage and content hash, deletes in a transaction,
-/// then schedules cleanup. Cleanup rechecks references after commit under the
-/// same content lock before unlinking. The CTE snapshot alone is insufficient.
+/// Returns `Ok(None)` for a missing or foreign photo and propagates SQL errors.
+/// The returned reference check alone does not authorize file removal: the caller
+/// must schedule cleanup in the deletion transaction. Cleanup locks the content
+/// and checks references again after commit before removing files.
 pub async fn delete_returning_orphaned(
     executor: impl PgExecutor<'_>,
     id: Uuid,

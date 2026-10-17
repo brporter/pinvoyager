@@ -240,15 +240,7 @@ const STEP_LABEL: Record<Step, string> = {
   review: "Review",
 };
 
-/**
- * Voyage details · Upload photos · Process · Review.
- *
- * The design file styles this with rules local to that file rather than with
- * anything in `design/components.css`, so the geometry is mirrored inline here.
- * Nothing new is invented — the values are the ones drawn — but if this pattern
- * appears on a second screen it belongs in the design system rather than in two
- * copies of these objects.
- */
+/** Displays the four upload steps and marks the current one. */
 function Steps({ current }: { current: Step }) {
   const index = STEP_ORDER.indexOf(current);
 
@@ -338,10 +330,7 @@ function ChooseStep({
         maxSizeLabel={MAX_SIZE_LABEL}
       />
 
-      {/* The stripping guarantee appears here as well as at the granularity
-          control. This is the moment someone decides whether to trust the
-          product with their camera roll, so it is the moment it is worth the
-          space. */}
+      {/* Explain the image metadata and location handling before file selection. */}
       <div className="pv-gran-guarantee" style={{ marginTop: "var(--pv-space-5)" }}>
         <ShieldCheckIcon size={16} />
         <div>
@@ -455,13 +444,7 @@ function detailFor(item: Item): string {
   }
 }
 
-/**
- * The batch summary — every outcome, failures included.
- *
- * "4 of 6 photos uploaded" on its own would let someone walk away believing the
- * batch completed. The second line is the part that makes the mixed result
- * legible, so there is no variant of this component without it.
- */
+/** Reports successful uploads, failures, cancellations, and missing locations. */
 function Summary({ counts }: { counts: BatchTally }) {
   const notes: string[] = [];
   if (counts.unplaced > 0) {

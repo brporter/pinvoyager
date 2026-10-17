@@ -1,20 +1,8 @@
-//! Variant generation, off the request path.
+//! Generates variants after upload acceptance using a bounded queue.
 //!
-//! Two properties this module exists to provide, both from D8:
-//!
-//! **Uploads return before variants exist.** A fifty-file batch must not hold a
-//! request open for the minutes it takes to encode. Photos land in `pending`
-//! and become `ready` when their variants are written.
-//!
-//! **The queue is bounded.** An unbounded channel turns a burst of uploads into
-//! unbounded memory. Backpressure that surfaces as a slower upload is a much
-//! better failure than an out-of-memory kill, so a full queue makes the
-//! producer wait rather than dropping work or growing.
-//!
-//! And the rule that is easy to violate without noticing: **no pool connection
-//! is held across decoding and encoding.** Read what is needed, release, do the CPU
-//! work, reacquire to write the result. Holding one for the duration of a batch
-//! drains the pool and stalls every unrelated request in the service.
+//! Photos are saved as pending and become ready after all variants are written.
+//! Uploads wait for queue capacity. Decoding and encoding use the blocking pool
+//! without a database connection; final writes hold the content lock.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -34,9 +22,7 @@ use crate::error::{AppError, AppResult};
 use crate::photos::storage::{self, ContentHash};
 use crate::photos::{ImageFormat, PhotoError, VariantKind, decode, exif, variants};
 
-/// The three `photos.variant_status` values, matching the migration's CHECK
-/// constraint. Written out rather than derived so a typo is a compile error at
-/// exactly one place instead of a row that silently never becomes viewable.
+/// Stored processing status names: pending, ready, and failed.
 pub const STATUS_PENDING: &str = "pending";
 pub const STATUS_READY: &str = "ready";
 pub const STATUS_FAILED: &str = "failed";
@@ -76,7 +62,7 @@ impl VariantJob {
     }
 }
 
-/// Handle held in [`AppState`] so handlers can enqueue.
+/// Handle held in [`crate::state::AppState`] so handlers can enqueue.
 #[derive(Clone)]
 pub struct VariantQueue {
     sender: mpsc::Sender<VariantJob>,
@@ -116,11 +102,8 @@ impl VariantQueue {
         }
     }
 
-    /// Enqueues, applying backpressure when the queue is full.
-    ///
-    /// Returns an error only when the worker is gone, which means shutdown —
-    /// the caller should surface that as a 503 rather than pretending the
-    /// upload succeeded.
+    /// Waits for queue capacity and enqueues a job. Returns an error if the
+    /// receiver has closed.
     #[tracing::instrument(name = "photo.enqueue", skip_all, fields(photo.id = %job.photo_id), err)]
     pub async fn enqueue(&self, job: VariantJob) -> Result<(), mpsc::error::SendError<VariantJob>> {
         self.sender.send(job).await
@@ -135,12 +118,7 @@ impl VariantQueue {
         self.sender.clone().reserve_owned().await
     }
 
-    /// A queue with no worker behind it, for tests that exercise the router
-    /// rather than the pipeline.
-    ///
-    /// Enqueueing on it fails, which is the honest behavior — a test that
-    /// accidentally depends on variants being generated should notice, rather
-    /// than silently passing against a queue that swallows work.
+    /// Returns a queue with no receiver for tests. Enqueue and reservation fail.
     pub fn detached() -> Self {
         let (sender, receiver) = mpsc::channel(1);
         drop(receiver);
@@ -148,18 +126,9 @@ impl VariantQueue {
     }
 }
 
-/// Spawns the worker and returns the queue handle.
-///
-/// Takes the pool and config rather than [`AppState`] because `AppState` holds
-/// the returned handle — the worker has to exist first.
-///
-/// Concurrency is bounded by `config.photos.variant_concurrency` — separate
-/// from queue depth, and the number that actually protects the machine, since
-/// image work is CPU-bound and unbounded width starves everything else.
-///
-/// On startup the worker should also pick up any photos left `pending` by a
-/// previous run: a process that died mid-batch would otherwise leave them
-/// stranded forever, visible in its voyage and never becoming viewable.
+/// Starts conversion dispatch and periodic pending-photo recovery.
+/// Conversion concurrency is limited by `variant_concurrency`. Returns the
+/// queue handle used to enqueue jobs and shut down the worker.
 pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
     let (sender, receiver) = mpsc::channel(config.photos.variant_queue_depth.max(1));
     let permits = Arc::new(Semaphore::new(config.photos.variant_concurrency.max(1)));
@@ -227,13 +196,8 @@ async fn dispatch(
     dispatch_owned(pool, config, receiver, permits, stopped).await;
 }
 
-/// Pulls jobs off the queue and runs at most `permits` of them at once.
-///
-/// A permit is taken *before* the receive, so the channel is only drained when
-/// there is capacity to act on what comes out of it. Receiving first and then
-/// waiting for a permit would move the backlog out of the bounded channel and
-/// into an unbounded pile of spawned tasks, which is precisely the unbounded
-/// growth the bounded channel exists to prevent.
+/// Receives queued jobs only after acquiring a concurrency permit.
+/// Holds each permit until that job finishes, bounding active conversion tasks.
 async fn dispatch_owned(
     pool: PgPool,
     config: Arc<Config>,
@@ -287,12 +251,8 @@ async fn dispatch_owned(
     tracing::info!("variant worker stopped");
 }
 
-/// Requeues photos left `pending` by a previous run.
-///
-/// Without this a process that died mid-batch strands them forever: the row
-/// exists, the voyage shows it, and nothing will ever generate its variants
-/// because the only thing that ever enqueued it was the upload request that has
-/// long since returned.
+/// Scans pending photos and requeues them in pages, including uploads
+/// interrupted by an earlier process exit.
 #[tracing::instrument(name = "photo.recover", skip_all)]
 async fn recover(pool: PgPool, sender: mpsc::Sender<VariantJob>) {
     let mut after = None;
@@ -315,12 +275,9 @@ async fn recover(pool: PgPool, sender: mpsc::Sender<VariantJob>) {
     }
 }
 
-/// Processes one photo: decode the original, derive every variant, write them,
-/// and mark the row `ready`.
-///
-/// A failure marks the row `failed` rather than retrying forever — a file that
-/// cannot be decoded will not decode on the tenth attempt either, and an
-/// infinite retry loop on a poisoned job is how a queue stops draining.
+/// Processes one photo and marks it ready after all variants are written.
+/// On failure, attempts to mark it failed and returns the original error.
+/// If marking fails, the pending row remains eligible for recovery.
 pub async fn process(
     pool: &PgPool,
     config: &Config,
@@ -357,15 +314,10 @@ pub async fn process(
     .await
 }
 
-/// The fallible core of [`process`], split out so that every failure path goes
-/// through the same `failed` marking.
-///
-/// **This is where D8's connection rule is kept.** Each `photos::` call takes
-/// `&PgPool`, which acquires a connection for that one statement and returns it
-/// to the pool when the `await` completes. Between the read and the write there
-/// is no connection held, no transaction open, and no guard alive — the CPU
-/// phase in the middle can take seconds without costing the rest of the service
-/// anything.
+/// Loads the photo, decodes and encodes without a database connection, then
+/// locks its content and rechecks the row before writing variants. Missing or
+/// already-processed photos are skipped. Read, conversion, and write failures
+/// propagate to `process` for failure marking.
 #[tracing::instrument(name = "photo.generate", skip_all, fields(photo.id = %job.photo_id))]
 async fn generate(
     pool: &PgPool,
@@ -402,9 +354,7 @@ async fn generate(
     let encode_hash = hash.clone();
     let quality = config.photos.webp_quality;
 
-    // ---- CPU: decode, resize, encode, write. No connection, no runtime
-    //      worker thread (D8). One `run_blocking` around the whole sequence
-    //      rather than one per file operation, per the note in `blocking`.
+    // Decode and encode on the blocking pool without a database connection.
     let encoded = run_blocking(move || encode(&root, &encode_hash, format, quality)).await?;
 
     // Encoding holds no database connection. Only final filesystem writes are
@@ -436,14 +386,8 @@ async fn generate(
     Ok(())
 }
 
-/// Decode once, encode every size, write each to its content-addressed path.
-///
-/// Blocking and CPU-bound from top to bottom; the only caller runs it under
-/// [`run_blocking`].
-///
-/// The original is decoded exactly once and the pixel buffer reused for all
-/// three variants — decode is the expensive half, and doing it per size would
-/// triple the cost of decoding the original.
+/// Test helper that decodes once, encodes every variant size, and writes all
+/// variants to content-addressed paths. Returns conversion or filesystem errors.
 #[cfg(test)]
 fn derive(root: &Path, hash: &ContentHash, format: ImageFormat, quality: f32) -> AppResult<()> {
     write_variants(root, hash, encode(root, hash, format, quality)?)
@@ -531,10 +475,8 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> AppResult<()> {
     write.map_err(storage_failed)
 }
 
-/// Resolves the stored format string back to a decoder choice.
-///
-/// Driven off [`ImageFormat::as_str`] rather than a second `match`, so this
-/// cannot drift from the values the column's CHECK constraint permits.
+/// Parses the stored format using the accepted format names.
+/// Returns an internal error if the stored string is unrecognized.
 fn parse_format(value: &str) -> AppResult<ImageFormat> {
     [
         ImageFormat::Jpeg,

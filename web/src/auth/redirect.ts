@@ -1,28 +1,12 @@
 /**
- * Validation of caller-supplied post-sign-in destinations.
- *
- * This is the client half of the open-redirect check in
- * `crates/api/src/http/auth.rs::safe_redirect`. The server is the authority —
- * it validates a `redirect_to` before storing it and again before using it, so
- * this client check keeps navigation consistent. The client never sends a
- * destination the server would silently drop, so "sign in
- * and come back to where I was" either works or is visibly replaced by the
- * default, rather than half-working.
- *
- * The rules are deliberately transcribed rather than loosened. A value that
- * passes here and fails there would strand the user at `/` with no explanation,
- * and a value that passes there and fails here would be a needless downgrade.
- *
- * The check rejects rather than repairs, for the same reason the server does:
- * normalizing a hostile value is where the interesting bypasses live.
+ * Validates local post-sign-in destinations using the server's path rules.
+ * Rejected values fall back to the default route. The server independently
+ * validates destinations before storing or redirecting to them.
  */
 
 /**
- * Mirror of `ALLOWED_REDIRECTS`. An entry matches its own path exactly, or any
- * path beneath it — `/voyages` covers `/voyages/{id}/edit`.
- *
- * `/u/{userId}` is deliberately absent, because it is absent on the server too.
- * A profile is public, so nothing ever needs to sign in to reach one.
+ * Allowed paths and their descendants, matching the server allowlist.
+ * A following slash is required for descendant matches.
  */
 const ALLOWED_REDIRECTS = ["/", "/discover", "/settings", "/upload", "/voyages"] as const;
 

@@ -1,22 +1,8 @@
-//! Crafted-token verification.
+//! OIDC verification against a loopback provider with crafted tokens.
 //!
-//! > A token signed by the wrong key, with the wrong `aud`, expired, or with a
-//! > mismatched `nonce` is rejected in each case. Test with crafted tokens, not
-//! > only live ones.
-//!
-//! Every token here comes from [`support::MockOidcProvider`], a real OIDC
-//! provider running on loopback, because no real provider will issue a token
-//! that is wrong in a chosen way. The sabotage is always singular: one property
-//! is broken and everything else about the token is impeccable, so a rejection
-//! can only be attributed to the property under test.
-//!
-//! These are the tests that distinguish *verifying* a token from *decoding*
-//! one. An implementation that base64-decodes the payload and trusts it passes
-//! nothing here except the first test — and looks completely correct against a
-//! live provider, in a debugger, and in a log.
-//!
-//! Unlike `integration.rs` these need no database; the provider layer verifies
-//! a token before anything is persisted.
+//! Each rejection changes one token property while preserving valid defaults.
+//! The tests exercise discovery, code exchange, and signature/claim verification
+//! without a database or external provider credentials.
 
 mod support;
 
@@ -52,10 +38,7 @@ async fn registry_for(mock: &MockOidcProvider) -> ProviderRegistry {
     ProviderRegistry::from_config(&config).await
 }
 
-/// A provider that failed discovery is *disabled*, not fatal — which is correct
-/// behavior, and which would also make every rejection test below pass without
-/// verifying anything, because there would be no provider to call. So the
-/// absence of the provider is an error here, loudly.
+/// Requires successful provider discovery before testing token rejection.
 #[track_caller]
 fn provider(registry: &ProviderRegistry) -> &dyn AuthProvider {
     registry.get(UNDER_TEST).expect(
@@ -65,11 +48,8 @@ fn provider(registry: &ProviderRegistry) -> &dyn AuthProvider {
     )
 }
 
-/// Asserts that a crafted token was refused, and refused *for the right
-/// reason*. A test that accepts any error passes when the mock is unreachable,
-/// when the code exchange 400s, or when the provider was never configured —
-/// which is worse than no test, because it reports coverage that does not
-/// exist.
+/// Asserts a token verification error, rejecting setup or transport errors
+/// as evidence of a successful verification test.
 #[track_caller]
 fn assert_rejected(result: Result<VerifiedIdentity, AuthError>, what: &str) {
     match result {
@@ -339,10 +319,7 @@ async fn a_token_whose_nonce_does_not_match_the_attempt_is_rejected() {
     );
 }
 
-/// The omission case, which the mismatch test above cannot catch: comparing the
-/// nonce only when the token happens to contain one passes that test and leaves
-/// the flow replayable by anyone who can strip a claim and re-sign — which, for
-/// a provider that does not echo the nonce, is the provider itself.
+/// A token missing nonce is rejected even when all other claims are valid.
 #[tokio::test]
 async fn a_token_with_no_nonce_at_all_is_rejected() {
     let mock = MockOidcProvider::start().await;

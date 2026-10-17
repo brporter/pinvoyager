@@ -3,12 +3,8 @@
 import type { StyleSpecification } from "@maplibre/maplibre-gl-style-spec";
 
 /**
- * Where tiles come from.
- *
- * Overridable through `VITE_TILE_URL` so that pointing a developer at a local
- * tile server — or at the self-hosted archive, once it exists — needs no code
- * change. The template placeholders are MapLibre's: `{z}` zoom, `{x}` and `{y}`
- * the tile column and row.
+ * Raster tile URL template, configurable with VITE_TILE_URL.
+ * Uses MapLibre placeholders {z}, {x}, and {y}; development defaults to OSM.
  */
 export const TILE_URL: string =
   import.meta.env.VITE_TILE_URL ?? "https://tile.openstreetmap.org/{z}/{x}/{y}.png";

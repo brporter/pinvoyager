@@ -1,12 +1,6 @@
 /**
- * Tests for the two pure functions behind the upload screen.
- *
- * These are where the screen's stated purpose lives. The design's point is that
- * a real batch is mixed — some files upload, some have no location, some the
- * server rejects for different reasons — and the interface has to make each
- * outcome visible on its own row. `reasonFor` decides what a failed row says,
- * and `tally` decides what the summary counts. Both are exported precisely so
- * they can be checked without driving the whole screen.
+ * Checks upload failure messages and batch tallies, including mixed success,
+ * failure, cancellation, and missing-location outcomes.
  */
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";

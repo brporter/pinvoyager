@@ -1,4 +1,4 @@
-/** Badge uses the shared runtime styles and accessible native controls. */
+/** Renders a text badge with the selected tone and shared styles. */
 
 import type { ReactNode } from "react";
 

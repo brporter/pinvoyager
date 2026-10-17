@@ -57,11 +57,8 @@ fn fixtures_dir() -> PathBuf {
         .join("__fixtures__")
 }
 
-/// Writes one captured body.
-///
-/// The bytes are the response's own. A trailing newline is added because the
-/// files are committed and a repository full of no-newline-at-end-of-file
-/// markers is noise in every diff; JSON does not care.
+/// Validates the captured body as JSON and compares it with the committed
+/// fixture. With PINVOYAGER_UPDATE_FIXTURES=1, writes it with a trailing newline.
 fn write_fixture(name: &str, body: &str) {
     let dir = fixtures_dir();
     std::fs::create_dir_all(&dir).expect("the fixtures directory should be creatable");
@@ -162,9 +159,7 @@ fn test_state(pool: PgPool, root: &ScratchRoot, variants: VariantQueue) -> AppSt
         "telemetry": { "log_level": "warn", "json": false },
         "auth": {
             "base_url": "http://127.0.0.1:8080/",
-            // The only way to obtain a session without credentials for four
-            // providers. Compiled out of release builds; a debug test binary is
-            // the one place it is meant to be used.
+            // Enable debug-only session creation without contacting external providers.
             "dev_login": true,
             "session": { "cookie_secure": false },
         },
@@ -246,12 +241,7 @@ async fn call(
     send(app, request).await
 }
 
-/// Captures a response and writes it, asserting the status first.
-///
-/// The status check is what stops a fixture from silently becoming an error
-/// body: `{"code":"not_found","message":"..."}` type-checks perfectly well as
-/// nothing in particular, and the TypeScript side would then be validating a
-/// 404 against `Voyage` and failing for a reason no one could read.
+/// Asserts the expected HTTP status before checking or updating its JSON fixture.
 #[track_caller]
 fn capture(name: &str, expected: StatusCode, reply: &Reply) {
     assert_eq!(
@@ -383,13 +373,9 @@ fn multipart(boundary: &str, filename: &str, content: &[u8]) -> Vec<u8> {
 // The capture
 // ---------------------------------------------------------------------------
 
-/// Drives every JSON endpoint once and writes what came back.
-///
-/// One test rather than a dozen, deliberately. The fixtures describe a single
-/// coherent world — this voyage holds those photographs, and this user owns
-/// both — and `#[sqlx::test]` gives each test function its own empty database,
-/// so a dozen tests would produce a dozen unrelated worlds and a set of
-/// fixtures that never existed together.
+/// Exercises JSON endpoints in one isolated database so fixtures share
+/// consistent account, voyage, and photo relationships. Compares responses by
+/// default; the update flag regenerates committed fixtures.
 #[sqlx::test]
 async fn every_endpoint_matches_its_fixture(pool: PgPool) {
     let root = ScratchRoot::new();
@@ -768,10 +754,7 @@ async fn every_endpoint_matches_its_fixture(pool: PgPool) {
     assert_eq!(logout.status, StatusCode::NO_CONTENT);
     assert!(logout.body.is_empty(), "a 204 must carry no body");
 
-    // Finally: prove the files landed. A capture step that silently wrote
-    // nowhere would leave the TypeScript half checking whatever was committed
-    // last time, which is the one failure mode this whole arrangement exists to
-    // rule out.
+    // Confirm every expected fixture exists after comparison or regeneration.
     for name in [
         "me",
         "photo",

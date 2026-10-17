@@ -1,4 +1,4 @@
-/** Photo uses the shared runtime styles and accessible native controls. */
+/** Renders a photo frame with selection, loading, captions, and optional activation. */
 
 import type { KeyboardEvent, ReactNode } from "react";
 
@@ -87,8 +87,7 @@ export function Photo({
       ) : null}
 
       {badge != null && (
-        // The design file positions this caption block at the top inline;
-        // `design/components.css` has no `--top` modifier for it yet.
+        // Position the optional top caption above the photo.
         <div className="pv-photo-caption" style={{ top: "var(--pv-space-2)", bottom: "auto" }}>
           {badge}
         </div>

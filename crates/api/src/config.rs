@@ -26,14 +26,10 @@ const CONFIG_FILE: &str = "config.toml";
 const ENV_PREFIX: &str = "PINVOYAGER__";
 const ENV_SEPARATOR: &str = "__";
 
-// Defaults for the `database` section. These cannot live in a `Default` impl
-// the way the other sections' do, because `DatabaseConfig` deliberately has no
-// `Default` — `url` is required and there is no honest value for it. Defaulting
-// the section as a whole would invent one.
+// Defaults for individual database settings; the database URL is required.
 const DEFAULT_MAX_CONNECTIONS: u32 = 10;
 const DEFAULT_MIN_CONNECTIONS: u32 = 1;
-/// D8: finite, and short. This is the delay before pool exhaustion becomes a
-/// 503; longer values just queue more requests behind an already-saturated pool.
+/// Default seconds to wait for a free database connection before returning an error.
 const DEFAULT_ACQUIRE_TIMEOUT_SECS: u64 = 5;
 
 #[derive(Debug, Deserialize)]
@@ -59,33 +55,22 @@ pub struct PhotosConfig {
     /// through a handler that sets its own `Content-Type` and security headers.
     pub storage_root: PathBuf,
 
-    /// Largest accepted upload. Rejected before the body is read, so an
-    /// oversized request costs a header parse rather than a disk write.
+    /// Maximum upload request size in bytes, including multipart framing.
+    /// Rejects an oversized declared length before reading; also enforced while streaming.
     pub max_upload_bytes: u64,
 
-    /// Largest accepted decoded image, in megapixels.
-    ///
-    /// This is the decompression-bomb guard and it is checked from the header
-    /// alone, before any full decode: a 50,000 × 50,000 PNG is a few hundred
-    /// kilobytes on disk and about 10 GB in memory. A byte-size limit does not
-    /// catch it; only a pixel-count limit does.
+    /// Maximum decoded pixel count in decimal megapixels. Checked from image
+    /// headers before decoding the full pixel buffer.
     pub max_megapixels: u32,
 
     /// Uploads permitted per user per minute.
     pub upload_rate_per_minute: u32,
 
-    /// How many variant-generation jobs may queue before the producer blocks.
-    ///
-    /// Bounded on purpose: an unbounded channel converts a burst of uploads
-    /// into unbounded memory, and backpressure that shows up as a slow upload
-    /// is far better than an out-of-memory kill.
+    /// Maximum queued variant jobs. Uploads wait for capacity before saving a photo.
     pub variant_queue_depth: usize,
 
-    /// How many images may be processed concurrently.
-    ///
-    /// Distinct from the queue depth, and the number that actually protects the
-    /// runtime: image work is CPU-bound (D8) and runs on the blocking pool, so
-    /// letting it run unboundedly wide starves everything else on the machine.
+    /// Maximum concurrent image conversions on the blocking pool, independent
+    /// of the number of queued jobs.
     pub variant_concurrency: usize,
 
     /// Quality for the lossy WebP variants, 0–100.
@@ -95,10 +80,8 @@ pub struct PhotosConfig {
 /// Authentication configuration.
 #[derive(Debug, Deserialize)]
 pub struct AuthConfig {
-    /// Public base URL of this service, used to build provider redirect URIs.
-    /// Must match what is registered in each provider's console exactly —
-    /// a trailing-slash mismatch is rejected by every provider with an
-    /// unhelpful error.
+    /// Public base URL used to construct provider callback URIs. Register the
+    /// resulting callback URI with each configured provider.
     pub base_url: Url,
     #[serde(default)]
     pub session: SessionConfig,
@@ -107,22 +90,9 @@ pub struct AuthConfig {
     #[serde(default)]
     pub providers: ProvidersConfig,
 
-    /// Enables `POST /auth/dev/login`, which forges a sign-in without any
-    /// provider round trip.
-    ///
-    /// **This is a complete authentication bypass.** Anyone who can reach the
-    /// endpoint can become any account. It exists so the rest of the product
-    /// can be built and tested before provider credentials are in
-    /// hand, and it is defended in three independent layers:
-    ///
-    /// 1. The handler and its route are behind `#[cfg(debug_assertions)]`, so
-    ///    they are **not compiled into a release binary at all**. The container
-    ///    image builds `--release`, so the code does not exist there. This is
-    ///    the guarantee that matters; the other two are for someone running a
-    ///    debug build somewhere unexpected.
-    /// 2. This flag defaults to `false`, so a debug build still refuses unless
-    ///    it is turned on deliberately.
-    /// 3. Startup logs a loud warning whenever it is active.
+    /// Enables development sign-in without provider verification.
+    /// The route is compiled only with debug assertions and defaults to disabled.
+    /// When enabled, callers can impersonate provider identities and startup logs a warning.
     #[serde(default)]
     pub dev_login: bool,
 }
@@ -132,8 +102,7 @@ pub struct AuthConfig {
 pub struct SessionConfig {
     /// Sliding: each authenticated request extends the session by this much.
     pub idle_timeout_secs: u64,
-    /// Hard ceiling regardless of activity. A sliding timeout alone means a
-    /// stolen cookie stays valid indefinitely so long as it is used.
+    /// Maximum session lifetime in seconds, regardless of activity.
     pub absolute_timeout_secs: u64,
     pub cookie_name: String,
     /// Must be true anywhere but local plain-HTTP development.
@@ -181,16 +150,13 @@ pub struct ServerConfig {
     pub request_timeout_secs: u64,
 }
 
-/// `SecretString` has no `Debug` that reveals its contents, which is what
-/// satisfies the "printing the config does not reveal a secret" criterion.
-/// Do not replace it with `String` for convenience.
+/// Database connection settings. `SecretString` redacts the URL in Debug output.
 #[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {
     pub url: SecretString,
     pub max_connections: u32,
     pub min_connections: u32,
-    /// D8: never unset. Without it, pool exhaustion hangs requests forever
-    /// instead of surfacing as a 503.
+    /// Maximum seconds to wait for a free database connection.
     pub acquire_timeout_secs: u64,
 }
 
@@ -214,25 +180,15 @@ pub enum ConfigError {
 }
 
 impl ConfigError {
-    /// A figment error is a chain — one extraction can fail on several keys at
-    /// once — and reporting only the first sends an operator round the loop
-    /// once per mistake. Report all of them.
+    /// Include every configuration extraction error in the reported message.
     fn from_figment(err: figment::Error) -> Self {
         let messages: Vec<String> = err.into_iter().map(describe).collect();
         ConfigError::Invalid(messages.join("; "))
     }
 }
 
-/// Renders one figment error so that it names the setting the operator has to
-/// go and fix.
-///
-/// figment's own `Display` is kept for the *reason* (`missing field \`url\``,
-/// `invalid type: found string, expected u32`), but not for the key: it prints
-/// the path of the value that failed to deserialize, which for a missing field
-/// is the enclosing table (`database`, not `database.url`), profile-prefixed,
-/// and tagged with the source location of whichever provider happened to
-/// supply the parent — for a missing required key that is the defaults
-/// provider, which is exactly the wrong place to send someone looking.
+/// Formats a configuration error with its file key, environment variable name,
+/// and figment's explanation of the failure.
 fn describe(err: figment::Error) -> String {
     let mut path = err.path.clone();
     if let figment::error::Kind::MissingField(field) = &err.kind {
@@ -257,9 +213,8 @@ fn describe(err: figment::Error) -> String {
 }
 
 impl Config {
-    /// Loads configuration, failing loudly on anything missing or malformed.
-    ///
-    /// A missing required setting must produce an error naming the setting.
+    /// Loads defaults, the configuration file, and environment overrides.
+    /// Returns an error naming missing or malformed settings.
     pub fn load() -> Result<Self, ConfigError> {
         Self::from_figment(
             Figment::new()
@@ -308,12 +263,9 @@ impl Default for PhotosConfig {
     fn default() -> Self {
         Self {
             storage_root: PathBuf::from("data"),
-            // 25 MB. Comfortably above a modern phone's HEIC or JPEG, and well
-            // below what a 200-megapixel medium-format raw would need — which
-            // is fine, because raw is a declared non-goal.
+            // 25 MiB maximum upload request size.
             max_upload_bytes: 25 * 1024 * 1024,
-            // 100 MP. Above any consumer camera and far below the pixel counts
-            // that make a decode bomb interesting.
+            // Reject images over 100 million pixels before full decoding.
             max_megapixels: 100,
             upload_rate_per_minute: 60,
             variant_queue_depth: 256,
@@ -321,9 +273,7 @@ impl Default for PhotosConfig {
             // saturating every core with image work makes the service
             // unresponsive in exactly the way D8 warns about.
             variant_concurrency: 4,
-            // 82 is the usual sweet spot for photographic WebP — visually
-            // indistinguishable from the source at normal viewing sizes, and
-            // roughly a third of an equivalent JPEG.
+            // Default lossy WebP quality, clamped to 0–100 by the encoder.
             webp_quality: 82.0,
         }
     }
@@ -332,14 +282,9 @@ impl Default for PhotosConfig {
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
-            // Sliding: two weeks of inactivity ends the session. Generous,
-            // because this is a photo-browsing site and being signed out is
-            // pure friction — there is no money and no admin surface behind
-            // the cookie.
+            // Expire sessions after two weeks without activity.
             idle_timeout_secs: 14 * 24 * 60 * 60,
-            // But not unbounded. A sliding timeout on its own means a stolen
-            // cookie lives forever provided it keeps being used; the absolute
-            // ceiling is what eventually forces a fresh sign-in.
+            // Expire sessions after ninety days even if they remain active.
             absolute_timeout_secs: 90 * 24 * 60 * 60,
             cookie_name: "pv_session".to_owned(),
             // Safe default. Local plain-HTTP development sets this false

@@ -1,41 +1,10 @@
-//! Decoding, including the HEIC path.
+//! Decodes JPEG, PNG, and WebP with `image`, and HEIC with libheif.
+//! Both paths return `DynamicImage` pixel buffers without original metadata.
+//! Run decoding on the blocking pool.
 //!
-//! `image` handles JPEG, PNG and WebP. It has **no HEIC decoder at all** — not
-//! a disabled feature, the decoder does not exist, largely because HEIC wraps
-//! HEVC and carries patent encumbrance the maintainers declined. HEIC therefore
-//! goes through `libheif-rs`, and the two paths converge on `DynamicImage` so
-//! that nothing downstream has to care which was used (D9).
-//!
-//! D8: every function here is CPU-bound and must run under `spawn_blocking`.
-//!
-//! # Orientation: exactly one rotation, applied by the caller
-//!
-//! [`decode`] returns the pixels **as the file's own decoder produced them**
-//! and applies no EXIF orientation of its own. The caller pairs it with
-//! [`apply_orientation`] and the value from
-//! [`crate::photos::exif::extract`]:
-//!
-//! ```text
-//! let orientation = exif::extract(path).orientation.unwrap_or(1);
-//! let image = apply_orientation(decode(path, format)?, orientation);
-//! ```
-//!
-//! Splitting it that way keeps exactly one place that rotates, which matters
-//! because the two decode paths do not start from the same position:
-//!
-//! * JPEG/PNG/WebP — `image` decodes what is literally in the file and never
-//!   consults the EXIF orientation, so the tag still has to be applied.
-//! * HEIC — libheif carries out the container's own `irot`/`imir`
-//!   transformation properties during decode, which is what MIAF requires and
-//!   is how every libheif-based tool renders an iPhone photo the right way up.
-//!   Verified against libheif 1.23.1: a HEIC whose only orientation signal is
-//!   an EXIF tag decodes *unrotated*, so the container property is the sole
-//!   authority and the pixels arrive already upright.
-//!
-//! That asymmetry is reconciled in [`crate::photos::exif::extract`], which
-//! reports no orientation for an ISO-BMFF container precisely because the
-//! decoder has already consumed it. The caller therefore rotates by 1 — a
-//! no-op — and an iPhone portrait is turned once rather than twice.
+//! Callers apply EXIF orientation separately with [`apply_orientation`]. For
+//! HEIC, libheif applies container transformations during decoding and EXIF
+//! extraction suppresses the orientation tag to avoid applying it twice.
 
 use std::fs::File;
 use std::io::BufReader;
@@ -47,14 +16,9 @@ use libheif_rs::{ColorSpace, HeifContext, LibHeif, Plane, RgbChroma, StreamReade
 
 use crate::photos::{ImageFormat, PhotoError};
 
-/// Decodes to pixels, whatever the source format.
-///
-/// The returned image has **no metadata attached** — that is the point of
-/// converging on a pixel buffer. Orientation is not carried forward as a tag
-/// either: it is baked into the pixels by [`apply_orientation`], which the
-/// caller applies to this result, so the encoder downstream has nothing to
-/// preserve even by accident. See the module docs for why the rotation lives
-/// one level up rather than in here.
+/// Decodes an image into pixels without carrying original metadata forward.
+/// The caller applies EXIF orientation separately. File-read and decoder
+/// failures return `PhotoError`.
 pub fn decode(path: &Path, format: ImageFormat) -> Result<DynamicImage, PhotoError> {
     match format {
         ImageFormat::Heic => decode_heic(path),
@@ -62,22 +26,10 @@ pub fn decode(path: &Path, format: ImageFormat) -> Result<DynamicImage, PhotoErr
     }
 }
 
-/// Bakes an EXIF orientation into the pixels.
-///
-/// Necessary because the variant is stripped of metadata: a photo shot in
-/// portrait carries orientation 6 and looks correct only because viewers honor
-/// the tag. Strip the tag without rotating the pixels and every portrait photo
-/// in the product appears sideways — a bug that looks like a display problem
-/// and is actually a pipeline one.
+/// Applies an EXIF orientation to the pixel buffer. Handles rotations and
+/// mirroring for values 1–8; unrecognized values leave the image unchanged.
 pub fn apply_orientation(image: DynamicImage, orientation: u16) -> DynamicImage {
-    // The four mirrored values (2, 4, 5, 7) are where this goes subtly wrong.
-    // A mirrored image that is merely rotated has the right dimensions and
-    // roughly the right content, so a test that checks only the size passes
-    // while text in the photograph reads backwards. Each of the eight is
-    // written out rather than derived, because the derivation is the bug.
-    //
-    // Read the EXIF names as "where row 0 and column 0 of the stored data
-    // belong in the displayed image":
+    // Handle mirrored orientations separately from rotations.
     match orientation {
         // 1, top-left: already upright.
         1 => image,
@@ -97,10 +49,7 @@ pub fn apply_orientation(image: DynamicImage, orientation: u16) -> DynamicImage 
         7 => image.rotate270().fliph(),
         // 8, left-bottom: rotated 270° clockwise. The other portrait case.
         8 => image.rotate270(),
-        // 0 and anything above 8 are not orientations. Buggy writers emit them,
-        // and guessing would be worse than leaving the pixels alone: an
-        // unrotated photo is visibly wrong and fixable, an arbitrarily rotated
-        // one is indistinguishable from a photo that was always like that.
+        // Leave pixels unchanged for invalid orientation values.
         _ => image,
     }
 }
@@ -131,9 +80,7 @@ fn image_format(format: ImageFormat) -> image::ImageFormat {
         ImageFormat::Jpeg => image::ImageFormat::Jpeg,
         ImageFormat::Png => image::ImageFormat::Png,
         ImageFormat::WebP => image::ImageFormat::WebP,
-        // Unreachable by construction — `decode` routes HEIC to libheif before
-        // this is called — but returning a lie here would be worse than the
-        // arm never being taken, so it is spelled out.
+        // HEIC is routed to libheif by `decode` before this helper is called.
         ImageFormat::Heic => image::ImageFormat::Avif,
     }
 }
@@ -195,9 +142,7 @@ fn image_from_interleaved(plane: Option<Plane<&[u8]>>) -> Result<DynamicImage, P
         )));
     }
 
-    // Rows are padded to `stride`, which is not `width * channels`. Copying the
-    // whole plane and hoping is how you get a sheared image on any file whose
-    // width is not a multiple of the decoder's alignment.
+    // Copy each row's pixels without the native plane's stride padding.
     let row_len = width as usize * channels;
     if stride < row_len {
         return Err(PhotoError::Undecodable(
@@ -225,14 +170,8 @@ fn image_from_interleaved(plane: Option<Plane<&[u8]>>) -> Result<DynamicImage, P
     Ok(image.expect("validated interleaved pixel buffer"))
 }
 
-/// The process-wide libheif handle.
-///
-/// `LibHeif::new()` calls `heif_init` and its `Drop` calls `heif_deinit`, which
-/// touch static state inside the C library. Creating one per decode would run
-/// that pair on every upload, from whichever blocking thread happened to pick
-/// the job up. One value that is created once and never dropped removes the
-/// question entirely, and the library's own documentation says a single
-/// instance is intended to serve the whole program.
+/// Initializes libheif once for all decoding calls. The shared handle remains
+/// alive for the process lifetime, avoiding repeated native init/deinit calls.
 fn libheif() -> &'static LibHeif {
     static LIBHEIF: OnceLock<LibHeif> = OnceLock::new();
     LIBHEIF.get_or_init(LibHeif::new)

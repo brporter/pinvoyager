@@ -3,25 +3,18 @@
 //! Validate inexpensive properties before decoding so oversized or unsupported
 //! input does not trigger expensive image work.
 //!
-//! 1. Size cap — before the body is read
-//! 2. Magic bytes — before any decoder is handed the file
-//! 3. Dimensions from the header — before any full decode
-//!
-//! The filename extension and the client's `Content-Type` are never consulted
-//! for anything. They are attacker-controlled strings that happen to look like
-//! metadata.
+//! 1. Request size limit, checked before reading when Content-Length is present
+//!    and enforced while streaming
+//! 2. Magic bytes, before any decoder reads the file
+//! 3. Header dimensions, before full pixel decoding
 
 use std::io::BufReader;
 use std::path::Path;
 
 use crate::photos::PhotoError;
 
-/// How many leading bytes [`sniff_format`] needs to reach a verdict.
-///
-/// Twelve would do — the longest signature checked is WebP's `RIFF....WEBP` —
-/// but the caller reads from a stream in whatever chunk it gets, so this is
-/// stated as a constant rather than left for each call site to rediscover.
-/// Passing more than this is harmless; passing less can only produce `None`.
+/// Leading-byte window used for format detection. Individual signatures may
+/// be recognized with fewer bytes; unrecognized or incomplete signatures return `None`.
 pub const HEADER_BYTES: usize = 16;
 
 /// The formats accepted on upload.
@@ -37,8 +30,7 @@ pub enum ImageFormat {
 }
 
 impl ImageFormat {
-    /// The value stored in `photos.original_format`. Must match the migration's
-    /// CHECK constraint.
+    /// Lowercase original-format name stored with photo metadata.
     pub fn as_str(self) -> &'static str {
         match self {
             ImageFormat::Jpeg => "jpeg",
@@ -66,15 +58,9 @@ const JPEG_MAGIC: &[u8] = &[0xFF, 0xD8, 0xFF];
 /// different format is a rejection, not a decode attempt.
 const HEIC_BRANDS: [&[u8; 4]; 4] = [b"heic", b"heix", b"mif1", b"msf1"];
 
-/// Identifies the format from the leading bytes of the file.
-///
-/// Returns `None` for anything not accepted — including formats that *are*
-/// images but are declared non-goals (GIF, TIFF, raw). "It is an image" is not
-/// the test; "it is an image we handle" is.
-///
-/// HEIC detection is the awkward one: it is an ISO-BMFF container, so the magic
-/// is an `ftyp` box a few bytes in with a brand of `heic`/`heix`/`mif1`/`msf1`,
-/// not a fixed prefix.
+/// Detects JPEG, PNG, WebP, or supported HEIC brands from leading bytes.
+/// Returns `None` for unsupported or incomplete signatures; filenames and
+/// client MIME types are ignored.
 pub fn sniff_format(header: &[u8]) -> Option<ImageFormat> {
     if header.starts_with(JPEG_MAGIC) {
         return Some(ImageFormat::Jpeg);
@@ -104,16 +90,9 @@ pub fn sniff_format(header: &[u8]) -> Option<ImageFormat> {
     None
 }
 
-/// Reads dimensions without decoding pixel data.
-///
-/// This is the decompression-bomb guard, and it must genuinely avoid the full
-/// decode — a 50,000 × 50,000 PNG is a few hundred kilobytes on disk and about
-/// 10 GB decoded. Checking a byte-size limit does not catch it.
-///
-/// `format` is the verdict from [`sniff_format`] and is trusted here rather
-/// than re-derived: the sniff is the one place the format is decided, and
-/// letting a second guess happen inside the decoder would mean two answers that
-/// can disagree.
+/// Reads dimensions using the already-detected format without decoding pixels.
+/// Returns file-read or malformed-image errors. Callers check the pixel budget
+/// before full decoding.
 pub fn probe_dimensions(
     path: &std::path::Path,
     format: ImageFormat,
@@ -180,11 +159,7 @@ const PIXELS_PER_MEGAPIXEL: u64 = 1_000_000;
 
 /// Rejects an image whose pixel count exceeds the configured ceiling.
 pub fn check_pixel_budget(width: u32, height: u32, max_megapixels: u32) -> Result<(), PhotoError> {
-    // u64 is the entire point of this line. PNG allows either dimension up to
-    // `u32::MAX`, so `width * height` in u32 wraps on hostile input — and a
-    // wrapped product is a *small* number, which turns the bomb this function
-    // exists to stop into a pass. There is no arithmetic here that can overflow
-    // u64: the largest possible product is under 2^64.
+    // Multiply in u64 so even the largest u32 dimensions cannot overflow.
     let pixels = u64::from(width) * u64::from(height);
     let budget = u64::from(max_megapixels) * PIXELS_PER_MEGAPIXEL;
 

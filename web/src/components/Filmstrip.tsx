@@ -1,4 +1,4 @@
-/** Filmstrip uses the shared runtime styles and accessible native controls. */
+/** Renders a labeled horizontal scrolling region for photo thumbnails. */
 
 import type { ReactNode } from "react";
 import { Children } from "react";

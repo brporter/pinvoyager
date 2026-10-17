@@ -18,12 +18,7 @@ export function SignIn() {
   const [params] = useSearchParams();
   const [starting, setStarting] = useState<Provider | null>(null);
 
-  // Validated, not trusted. This value came out of the address bar, and a
-  // sign-in link is precisely the kind of link a user is expected to click —
-  // so an unchecked destination would make this screen a credible first hop
-  // for a phishing flow. The server re-checks it against the same allowlist;
-  // agreeing with it here is what stops a legitimate destination being
-  // silently discarded on the way back.
+  // Validate the return destination using the same path rules as the server.
   const destination = destinationOr(params.get(REDIRECT_PARAM));
 
   if (status === "authenticated") {
@@ -32,11 +27,7 @@ export function SignIn() {
 
   const start = (provider: Provider) => {
     setStarting(provider);
-    // A full page navigation, not a fetch. The endpoint answers 302 to the
-    // provider's authorization page; `fetch` would follow that to another
-    // origin, be refused by the provider's CORS policy, and surface as an
-    // opaque network error that says nothing about what happened. The browser
-    // has to be the thing that follows the redirect.
+    // Navigate the browser so it follows the provider authorization redirects.
     window.location.assign(signInUrl(provider, destination));
   };
 
@@ -93,10 +84,7 @@ export function SignIn() {
         Every voyage you create is public.
       </p>
 
-      {/* Vite replaces `import.meta.env.DEV` with the literal `false` in a
-          production build, so this branch folds away, the import becomes
-          unreferenced, and the module is dropped from the bundle entirely.
-          See DevSignIn.tsx for the two stronger layers behind this one. */}
+      {/* Only render the development sign-in form in development builds. */}
       {import.meta.env.DEV ? (
         <DevSignIn
           onSignedIn={async () => {

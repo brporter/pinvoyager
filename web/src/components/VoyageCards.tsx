@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router";
 import type { VoyageSummary } from "../api/types";
 import { Badge, Button, Photo, Skeleton } from "./index";
-/** VoyageCards uses the shared runtime styles and accessible native controls. */
+/** Displays voyage cards, loading placeholders, and a pagination control. */
 const FLUSH_COVER = {
   "--pv-radius-lg": "0px",
   "--pv-radius-md": "0px",
@@ -19,10 +19,10 @@ export interface VoyageGridProps {
   children: ReactNode;
 }
 
-/** Three columns at `md` and above, one below. `minmax(0, 1fr)` rather than
- *  `1fr`: a grid track's default `min-width: auto` lets a long unbroken title
- *  push the column wider than its share, which is one of the two ways a page
- *  acquires a horizontal scrollbar at 390px. */
+/**
+ * Responsive card grid. Zero minimum track widths prevent long titles from
+ * expanding columns beyond the available space.
+ */
 export function VoyageGrid({ desktop, busy, children, ...naming }: VoyageGridProps) {
   return (
     <ul
@@ -118,13 +118,8 @@ export function VoyageGridSkeleton({ desktop, count }: { desktop: boolean; count
 }
 
 /**
- * The cursor-paginated "Load more" control.
- *
- * The API hands back an opaque `next_before` and no page number, so there is
- * nothing to number — a voyage published between two requests shifts every
- * offset, which is why the server is cursor-paginated in the first place.
- * Rendered as nothing at the end of the list rather than as a disabled button:
- * a permanently dead control is worse than no control.
+ * Shows a Load more action while another cursor page exists, and a loading
+ * state while it is fetched. Renders nothing at the end of the list.
  */
 export function LoadMore({
   hasNextPage,

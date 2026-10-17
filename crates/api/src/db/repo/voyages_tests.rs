@@ -343,9 +343,7 @@ async fn a_stranger_cannot_delete(pool: PgPool) {
     );
 }
 
-/// T3, at the repository level: the foreign photo is not attached, and the
-/// count tells the handler that the request was not honored in full so it
-/// can roll back and return 403.
+/// Moving photos ignores IDs owned by another account and reports only moved rows.
 #[sqlx::test]
 async fn attaching_another_users_photo_attaches_nothing(pool: PgPool) {
     let owner = a_user(&pool).await;
@@ -400,10 +398,7 @@ async fn attaching_to_someone_elses_voyage_attaches_nothing(pool: PgPool) {
     );
 }
 
-/// The race the doc comment is about. A check-then-insert would have a
-/// window between the `SELECT` that says "not yours" and the `INSERT`;
-/// with the predicate inside the write there is no window, so hammering it
-/// concurrently cannot produce a single row.
+/// Concurrent photo moves keep the ownership predicate inside the write.
 #[sqlx::test]
 async fn the_ownership_predicate_holds_under_concurrency(pool: PgPool) {
     let owner = a_user(&pool).await;
@@ -411,10 +406,7 @@ async fn the_ownership_predicate_holds_under_concurrency(pool: PgPool) {
     let voyage = a_voyage(&pool, owner).await;
     let mine = a_photo(&pool, owner, 0x24).await;
 
-    // The owner attaches their own photo while the stranger repeatedly
-    // tries to attach the same photo to the same voyage. Every interleaving
-    // of the two is exercised over enough rounds; none of them may leave
-    // the stranger having written anything.
+    // Race owner and foreign requests repeatedly; foreign requests must move no rows.
     let mut tasks = Vec::new();
     for _ in 0..16 {
         let a = pool.clone();

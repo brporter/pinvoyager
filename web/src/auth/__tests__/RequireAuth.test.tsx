@@ -1,10 +1,6 @@
 /**
- * Route protection, exercised through the real route table in `App.tsx` rather
- * than through a tree assembled for the test.
- *
- * That matters here: the thing most likely to break is not `RequireAuth` itself
- * but which routes are wrapped in it, and a test that builds its own routes
- * would keep passing after someone moved `/settings` outside the guard.
+ * Exercises authentication redirects through the application route table,
+ * including waiting for the initial session read.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
@@ -81,12 +77,7 @@ describe("protected routes, signed out", () => {
     stubMe(401);
     renderAt("/voyages/0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f");
 
-    // Asserted on the address, not on anything the screen rendered. What
-    // RequireAuth does is decide whether to redirect, and a public route is
-    // one it must leave alone; which heading the voyage screen happens to
-    // show while its data loads is that screen's business. An earlier version
-    // of this test looked for the routing placeholder's heading and broke the
-    // moment the real screen replaced it, without anything being wrong.
+    // Assert navigation separately from the public screen's loading content.
     await waitFor(() => {
       expect(screen.queryByText("Checking your session…")).not.toBeInTheDocument();
     });

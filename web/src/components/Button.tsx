@@ -1,4 +1,4 @@
-/** Button uses the shared runtime styles and accessible native controls. */
+/** Renders labeled or icon-only buttons with loading feedback and activation guards. */
 
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
 
@@ -9,7 +9,7 @@ export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonBase extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {
   variant?: ButtonVariant;
-  /** 32px, 40px (default), 48px. All three keep a 44px touch target. */
+  /** Visual heights: 32px, 40px (default), or 48px. Callers can enlarge touch targets. */
   size?: ButtonSize;
   /** Shows the spinner beside the label and blocks activation. The label stays,
    *  so the button keeps its width and the layout does not jump. */

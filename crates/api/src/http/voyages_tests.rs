@@ -496,10 +496,7 @@ async fn the_order_route_is_not_shadowed_by_the_photo_id_route() {
 
 // -- the granularity boundary -------------------------------------------
 
-/// The fallback direction is the whole point. A build older than the
-/// migration that added a fifth precision step must read the unknown value
-/// as the *coarsest* setting — reading it as `exact` would publish every
-/// coarse voyage's true coordinates for as long as the rollback lasted.
+/// An unrecognized stored precision logs an error and falls back to Km50.
 #[test]
 fn an_unknown_stored_granularity_fails_closed() {
     assert_eq!(stored_granularity("exact"), Granularity::Exact);
@@ -575,13 +572,8 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-/// The shape of a photo in a response, pinned.
-///
-/// This is a regression guard on the one rule rather than a formality: the
-/// assertion fails the moment somebody adds a `latitude` field to the DTO,
-/// which is the shortcut the whole design is arranged to prevent. `place`
-/// is the only route to the `coordinate` key, and `Coordinate` is the only
-/// type that fits it.
+/// Photo responses carry rounded coordinates without separate raw latitude
+/// or longitude fields.
 #[test]
 fn an_unplaced_photo_is_listed_and_flagged_with_no_bare_coordinates() {
     let voyage = a_voyage("km10", true);
@@ -622,10 +614,7 @@ fn an_unplaced_photo_is_listed_and_flagged_with_no_bare_coordinates() {
     assert!(photos[0]["coordinate"].is_null());
 }
 
-/// The endpoint nobody thinks to check. A discovery card carries the
-/// precision *label* and no location whatsoever — the label is what tells a
-/// browser what they are about to look at, and a center coordinate would
-/// leak at exactly the precision the detail view does.
+/// Discovery cards include a precision label without exposing coordinates.
 #[test]
 fn a_discovery_card_carries_a_precision_label_and_no_location() {
     let json =
@@ -655,8 +644,7 @@ fn a_discovery_card_carries_a_precision_label_and_no_location() {
     assert_eq!(json["precision_m"], 5_000);
 }
 
-/// The map payload is lean on purpose: the browser fetches it for every pin on
-/// screen, so anything the map will not draw is bandwidth spent per pin.
+/// Map responses omit photo dimensions, capture times, and processing status.
 #[test]
 fn the_map_payload_carries_only_what_a_map_draws() {
     let voyage = a_voyage("km10", true);
@@ -696,9 +684,7 @@ fn the_map_payload_carries_only_what_a_map_draws() {
         "a photograph the map cannot draw is still accounted for, and flagged"
     );
 
-    // And the detail payload carries strictly more, which is the difference
-    // the two endpoints exist to express: a pin is a point, an id and an
-    // image, and everything below is weight the map would pay per pin.
+    // Detail responses additionally include photo presentation and processing data.
     let detail =
         serde_json::to_value(VoyageResponse::build(voyage, vec![photo])).expect("serializes");
     let detail_photo = detail["photos"][0].as_object().expect("an object");
@@ -777,10 +763,7 @@ async fn an_unknown_precision_is_a_field_error_on_the_granularity() {
     assert_eq!(body["errors"][0]["field"], "granularity");
 }
 
-/// De-duplication matters because the attach path decides
-/// whether a photograph was refused by comparing the number of rows
-/// inserted with the number requested, and a caller who names one photo
-/// twice would otherwise be answered with a 403.
+/// Duplicate photo IDs are removed while retaining their first position.
 #[test]
 fn photo_ids_are_deduplicated_in_order_and_bounded() {
     let a = Uuid::now_v7();

@@ -55,9 +55,11 @@ client handles.
 
 When the server receives SIGINT or SIGTERM, it stops accepting new HTTP requests and
 lets requests already being processed finish. After `server.shutdown_timeout_secs` (30
-seconds by default), it drops remaining connections. `VariantQueue::shutdown` then stops
-maintenance, closes the queue to new jobs, and waits for accepted jobs to finish. This
-step has a separate timeout of the same duration; if it expires, the worker task is
+seconds by default), `serve_router` stops waiting for axum. Known defect: dropping that
+future does not abort axum's connection tasks, so active handlers can continue during
+worker shutdown. `VariantQueue::shutdown` then stops maintenance, closes the queue to
+new jobs, and waits for accepted jobs to finish. This step has a separate timeout
+of the same duration; if it expires, the worker task is
 aborted. Maintenance retries interrupted pending rows after restart. Telemetry flushes
 last. CPU-intensive work runs without a database connection. Final file writes and
 removals retain their content lock until blocking work finishes, including when the

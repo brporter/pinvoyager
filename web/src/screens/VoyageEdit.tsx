@@ -1,20 +1,9 @@
 import { useAuth } from "../auth/useAuth";
 /**
- * Owner editing with field-level validation and explicit publication.
- *
- * Metadata on the left, precision and deletion on the right; one column on
- * mobile with the same DOM order. Discard, Publish/Unpublish, and Save share
- * the header. The precision control retains its EXIF-stripping guarantee.
- *
- * ## Where validation goes
- *
- * Publishing requires a title, and the server answers a titleless publish with
- * `validation_failed` and an `errors` array of `{field, message}`. Those are
- * mapped onto the inputs they name, so "A title is required before publishing"
- * appears under the title field rather than in a banner at the top of a form
- * whose offending input may be off screen. Anything without a field — a 500, a
- * conflict — falls back to a toast beside the button that caused it, since
- * there is no input to attach it to.
+ * Owner-only voyage editing with field-level server validation.
+ * Publishing requires a title. Field errors appear beside their inputs;
+ * other mutation errors appear in a toast. The keyed form resets its state
+ * when navigation selects a different voyage.
  */
 
 import { useState } from "react";
@@ -354,9 +343,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
               <h2 className="pv-h3" style={{ ...CARD_TITLE, marginBottom: "var(--pv-space-2)" }}>
                 Delete
               </h2>
-              {/* Saying where the photographs go is the point of this
-                  sentence: the fear that deleting a voyage destroys the
-                  pictures is why dead voyages are left lying around. */}
+              {/* Explain that confirmation deletes both the voyage and its photos. */}
               <p className="pv-xs pv-muted" style={{ marginBottom: "var(--pv-space-3)" }}>
                 Deleting removes the voyage and all of its photos.
               </p>

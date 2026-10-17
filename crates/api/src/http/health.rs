@@ -1,9 +1,4 @@
-//! Liveness and readiness.
-//!
-//! These are deliberately different things. `/health` answers "is this process
-//! alive" and must not touch the database — otherwise a database blip causes
-//! orchestrators to kill healthy processes instead of routing around them.
-//! `/ready` answers "can this process serve traffic" and does check it.
+//! Liveness checks the process without dependencies. Readiness checks PostgreSQL.
 
 use axum::Json;
 use axum::extract::State;
@@ -14,30 +9,13 @@ use serde_json::json;
 use crate::db;
 use crate::state::AppState;
 
-/// Liveness. Always 200 while the process is running.
-///
-/// There is nothing to check here, and that is the point — the only honest
-/// answer to "is this process alive" from code running inside that process is
-/// "yes". Any dependency check added here turns a dependency outage into a
-/// restart loop: the orchestrator kills every replica for being unhealthy,
-/// they all come back, and none of them can reach the database either. The
-/// database check lives in [`ready`], where a failure means "stop sending me
-/// traffic" instead of "kill me".
+/// Returns 200 without contacting the database.
 pub async fn health() -> Response {
     (StatusCode::OK, Json(json!({ "status": "ok" }))).into_response()
 }
 
-/// Readiness. 200 when the database round-trips, 503 when it does not.
-///
-/// A 503 here takes this instance out of the load balancer's rotation without
-/// killing it, so it rejoins by itself when the database comes back.
-///
-/// Both probes build their response by hand rather than returning
-/// `AppResult<T>` and letting [`crate::AppError`] map it. Two reasons: the
-/// status code *is* the contract for a probe, and routing through `AppError`
-/// would tie it to a mapping table where, for instance,
-/// `AppError::Database(sqlx::Error::Io)` — a database that is simply down —
-/// renders as a 500. That would be a silently broken readiness probe.
+/// Returns 200 when the database query succeeds and 503 when it fails.
+/// Database errors are logged without exposing connection details in the body.
 pub async fn ready(State(state): State<AppState>) -> Response {
     match db::ping(&state.pool).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response(),

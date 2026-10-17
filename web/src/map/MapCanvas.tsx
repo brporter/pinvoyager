@@ -174,9 +174,7 @@ export function MapCanvas({
       // same attribution twice.
       attributionControl: false,
       maxZoom: MAX_ZOOM,
-      // Rotation and tilt are off. A travelogue map is read, not flown through,
-      // and a map that has silently rotated is one the reader cannot recover
-      // north on without a control the design does not have.
+      // Disable map rotation and tilt; the UI provides no controls to reset them.
       dragRotate: false,
       pitchWithRotate: false,
       touchZoomRotate: true,
@@ -223,11 +221,8 @@ export function MapCanvas({
       setMap(null);
       instance.remove();
     };
-    // Constructed once. `fitTo` and `maxFitZoom` are read here only to set the
-    // opening camera; later changes are handled by the effect below, which
-    // moves the existing camera rather than rebuilding the map. Listing them
-    // would rebuild the whole map — and re-download every tile — each time a
-    // voyage's pins shifted.
+    // Construct the map once with its opening camera. The next effect handles
+    // later bounds and zoom-limit changes without rebuilding the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -251,17 +246,7 @@ export function MapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, boundsKey, maxFitZoom]);
 
-  /**
-   * Stable for the lifetime of the map instance to avoid repeated camera effects.
-   *
-   * Callers put `moveTo` in an effect's dependency list — panning to a
-   * photograph chosen in the list is exactly that shape. If its identity
-   * changed whenever the camera moved, the sequence would be: the effect eases
-   * the camera, the camera settles, `moveend` updates this component's state,
-   * the callback is rebuilt, the effect's dependencies have changed, and the
-   * effect eases the camera again. That is an endless flight, and it is not a
-   * test artifact — `moveend` fires in a browser for the same reason.
-   */
+  /** Stable camera callback so camera events do not retrigger selection effects. */
   const moveTo = useCallback(
     (coordinate: LngLat, options?: { zoom?: number }) => {
       map?.easeTo({
@@ -333,23 +318,10 @@ export interface MapMarkerProps {
 }
 
 /**
- * One thing on the map, at one coordinate.
- *
- * MapLibre positions the anchor element; React renders into it through a
- * portal. The division matters for performance: MapLibre rewrites the
- * element's `transform` on every frame of a pan directly, without React
- * involved, so panning a voyage with a hundred pins does not run a hundred
- * component renders per frame.
- *
- * The anchor element is deliberately **zero-sized**. MapLibre centers it on the
- * coordinate, and a zero-sized box's center is its top-left, so the coordinate
- * ends up at the element's origin. Everything drawn inside then positions
- * itself with the same `position: absolute` and negative margins the design
- * system already uses on `.pv-map` — `.pv-pin` offsets by half its width and
- * its full height to stand its point on the spot, `.pv-cluster` by half its
- * diameter in both directions, `.pv-map-area` by its own `translate(-50%,
- * -50%)`. No marker geometry is restated here, so the pin that appears on a
- * real map is positioned by the same rules as the pin in the design specimen.
+ * Renders React marker content in a MapLibre-positioned portal.
+ * MapLibre updates its position during camera movement without React renders.
+ * A zero-sized anchor lets shared marker CSS place each visual around the
+ * coordinate; moving a marker preserves its portal host and focus.
  */
 export function MapMarker({ coordinate, children }: MapMarkerProps) {
   const map = useContext(MapContext);

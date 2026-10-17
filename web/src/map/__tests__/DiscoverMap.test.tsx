@@ -85,9 +85,10 @@ afterEach(() => {
 /* -- what it asks for ---------------------------------------------------- */
 
 describe("DiscoverMap — the question it asks", () => {
-  /** The window has to come from the map, not from a guess. Asking about a
-   *  rectangle nobody is looking at wastes a request and, on the tile server
-   *  decision D4a points at, fetches beyond what the user can see. */
+  /**
+   * Discovery requests use the viewport reported by the map. These API
+   * requests are separate from basemap tile fetching.
+   */
   it("asks about the rectangle the camera is actually showing", () => {
     answer();
     renderMap();

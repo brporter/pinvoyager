@@ -1,4 +1,4 @@
-/** PhotoGrid uses the shared runtime styles and accessible native controls. */
+/** Renders a labeled grid of photos using the shared responsive layout. */
 
 import type { ReactNode } from "react";
 

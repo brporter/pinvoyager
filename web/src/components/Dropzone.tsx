@@ -1,4 +1,4 @@
-/** Dropzone uses the shared runtime styles and accessible native controls. */
+/** Accepts chosen or dropped files and displays drag feedback; server validation is separate. */
 
 import { useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";

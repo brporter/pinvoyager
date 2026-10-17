@@ -1,32 +1,9 @@
-//! Public granularity and bounded-query checks through the production router.
+//! Public coordinate precision and query-count tests through the real router.
 //!
-//! The phase's central acceptance criterion is worded as an instruction:
-//!
-//! > With granularity set to ~10 km, grep every JSON response body across every
-//! > endpoint for the exact stored coordinate; it appears nowhere.
-//!
-//! So that is what this file does, literally: it drives the **real router**
-//! through `tower::ServiceExt::oneshot`, captures each response as text, and
-//! searches the characters that actually went on the wire. Calling
-//! `Granularity::apply` directly and asserting on the returned `f64` would test
-//! the rounding function and nothing else — and the leak this criterion exists
-//! to prevent is not a broken rounding function. It is a handler that forgot to
-//! call it, a list endpoint nobody thought about, or an error message that
-//! echoes the value back. Only a response body can show that.
-//!
-//! Two properties of the assertions are deliberate:
-//!
-//! * They compare **rendered digits**, not parsed floats. `43.061234` and
-//!   `43.0612339999` are the same number to a comparison against an epsilon and
-//!   are the same leak on the wire.
-//! * Every leak sweep is paired with a check that the endpoint returned 200 and
-//!   emitted *some* coordinate. An implementation that dropped coordinates
-//!   entirely, or 404'd everywhere, would otherwise pass the grep perfectly.
-//!
-//! Writes go through the repository (`db::repo::voyages`) rather than through
-//! the create/attach handlers, because the repository signatures are fixed by
-//! contract while the request bodies are not. Reads go through HTTP, because
-//! the serialized response *is* the thing under test.
+//! Searches serialized responses for exact coordinate digits and checks that
+//! successful coarse responses still contain rounded locations. Owner metadata
+//! is checked separately for exact coordinates. Database fixtures are created
+//! through repositories; reads exercise HTTP handlers and middleware.
 
 #[path = "support/photo_voyage.rs"]
 mod photo_voyage;
@@ -75,15 +52,8 @@ const EXACT_LON: f64 = 141.354_321;
 const EXACT_LAT_DIGITS: &str = "43.061234";
 const EXACT_LON_DIGITS: &str = "141.354321";
 
-/// What the sweep actually searches for: five decimal places, roughly one
-/// meter.
-///
-/// A prefix rather than the full value, so that a leak dressed up as a
-/// truncation — `43.06123`, or `43.061234000001` from a float round trip —
-/// still trips it. It cannot collide with a legitimately rounded value: the
-/// coarsest step this test uses is ~10 km, and a 10 km cell center agreeing
-/// with the truth to one meter would be a coincidence of one in ten million,
-/// not a rounding artifact.
+/// Five-decimal prefixes searched in responses to detect exact or truncated
+/// coordinates. These fixture values differ from the expected coarse cell centers.
 const LAT_PREFIX: &str = "43.06123";
 const LON_PREFIX: &str = "141.35432";
 
@@ -358,12 +328,8 @@ async fn set_granularity_and_publish(
 // ---------------------------------------------------------------------------
 // Reading coordinates back out of a response
 //
-// The response shapes belong to the handlers, which are being written in
-// parallel with this file, so nothing here assumes a particular nesting. These
-// walk the whole document looking for coordinate-shaped objects, which also
-// means a coordinate hiding somewhere unexpected — an embedded summary, a
-// "cover photo" — is found rather than missed.
-// ---------------------------------------------------------------------------
+// Walk response objects recursively to find coordinates, including any
+// coordinates added in nested summaries or cover data.
 
 /// The two coordinate values exactly as rendered, e.g. `"43.0741,141.3873"`.
 ///
@@ -631,14 +597,7 @@ async fn the_exact_coordinate_appears_in_no_response_at_km10(pool: PgPool) {
 // T5 — stability.
 // ---------------------------------------------------------------------------
 
-/// Two reads of the same voyage must return byte-identical coordinates.
-///
-/// If the transform were a random offset within a radius rather than a fixed
-/// grid, this fails — and both consequences are bad. Pins would visibly jitter
-/// between page loads, and, far worse, an observer who reloads the page a few
-/// hundred times can average the samples and recover the true position to a
-/// precision the user never agreed to. Determinism is what makes the radius a
-/// guarantee instead of a suggestion.
+/// Repeated voyage reads return byte-identical coordinate values.
 #[sqlx::test]
 async fn rounding_is_stable_across_reads(pool: PgPool) {
     let app = app(pool.clone());
@@ -671,14 +630,7 @@ async fn rounding_is_stable_across_reads(pool: PgPool) {
 // T5 — clustering.
 // ---------------------------------------------------------------------------
 
-/// Two photos a few hundred meters apart report the *same* coordinate at ~10 km.
-///
-/// This is the specified behavior — "granularity semantics just lump photos
-/// together in a middle-cluster for the point" — and it is also what makes the
-/// setting convincing. A coarse voyage that drew twelve distinct pins in a
-/// tight, evenly-spaced scatter would advertise that each one had been nudged
-/// independently, and the shape of the scatter would say a great deal about the
-/// shape of the truth.
+/// Nearby photos in the same rounding cell return identical coarse coordinates.
 #[sqlx::test]
 async fn nearby_photos_collapse_to_one_point_at_km10(pool: PgPool) {
     let app = app(pool.clone());
@@ -719,13 +671,8 @@ async fn nearby_photos_collapse_to_one_point_at_km10(pool: PgPool) {
 // T6 — draft visibility.
 // ---------------------------------------------------------------------------
 
-/// A draft is 404 to everyone but its owner — and specifically **404, not 403**.
-///
-/// The status code is the whole test. A 403 is an honest answer to "may I read
-/// this?" and a disastrous answer to "does this exist?": it turns id probing
-/// into an enumeration oracle for unpublished work, which for a travel diary
-/// means confirming that somebody has an unpublished trip before they have
-/// chosen to say so. Asserting merely "not 200" would accept exactly that.
+/// Draft reads return 404 for anonymous callers and other accounts; the owner
+/// can read them. Public feeds must omit them.
 #[sqlx::test]
 async fn a_draft_is_404_to_everyone_but_its_owner(pool: PgPool) {
     let app = app(pool.clone());
@@ -776,25 +723,9 @@ async fn a_draft_is_404_to_everyone_but_its_owner(pool: PgPool) {
 // ---------------------------------------------------------------------------
 // T6/T9 — no N+1.
 //
-// Counted at the PostgreSQL wire protocol, by putting a TCP proxy between the
-// pool and the server and counting frontend `Query` and `Execute` messages.
-//
-// Why not something simpler:
-//
-// * `pg_stat_statements` counts *calls per normalized statement* and is an
-//   extension that may not be installed. It also aggregates across the whole
-//   server, so a concurrently running test pollutes it.
-// * Timing is not a count. A test that asserts "loading 48 photos takes less
-//   than n times as long as loading 4" is measuring the machine it runs on, and
-//   it passes on a fast laptop against an implementation that issues 48 queries.
-// * sqlx's own query logging goes through `tracing`/`log` at a level and target
-//   that a test would have to guess at, and it would be silently disabled by a
-//   subscriber another test installed first.
-//
-// The proxy counts what actually crossed the socket, which is the thing the
-// criterion is about, and it cannot be fooled by a loop that *looks*
-// concurrent.
-// ---------------------------------------------------------------------------
+// Count PostgreSQL Query and Execute messages through a TCP proxy.
+// This measures request query counts independently of timing, tracing setup,
+// and database extensions. TLS is disabled so message framing remains readable.
 
 /// Counts statement executions on every connection routed through it.
 struct StatementCounter {
@@ -1100,14 +1031,8 @@ async fn loading_a_voyage_issues_a_bounded_number_of_queries(pool: PgPool) {
 // T6 — unplaced photos.
 // ---------------------------------------------------------------------------
 
-/// A photo without GPS is present and flagged, not silently dropped.
-///
-/// Absent coordinates are ordinary — screenshots, scans, anything shot with
-/// location services off — so a voyage full of them is a normal voyage, not an
-/// empty one. Two failure modes are being ruled out here, and dropping the
-/// photo is the milder: a user who attached twelve photographs and sees nine
-/// concludes the upload lost three. The other is inventing a position for it,
-/// which is why the assertion also requires that no coordinate came back.
+/// Unplaced photos remain present and flagged without invented coordinates.
+/// Placed photos in the same response retain their coordinates.
 #[sqlx::test]
 async fn unplaced_photos_are_present_and_flagged(pool: PgPool) {
     let app = app(pool.clone());

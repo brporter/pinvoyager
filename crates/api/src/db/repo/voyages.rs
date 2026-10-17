@@ -1,12 +1,10 @@
 //! Voyages repository.
 //!
-//! Every function takes an executor, so a handler can create a voyage and
-//! attach photos in one transaction and tests can roll back.
+//! Functions accept executors so handlers can combine operations in a
+//! transaction and tests can roll back their changes.
 //!
-//! **Nothing here applies granularity.** These types carry exact coordinates
-//! and deliberately do not implement `Serialize`; the rounding happens once, at
-//! the serialization boundary in `http::voyages`. Putting it here would spread
-//! the decision across every query and defeat the point.
+//! Repository coordinates retain stored precision. Public response construction
+//! applies granularity; these row types do not implement `Serialize`.
 
 use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
@@ -34,8 +32,7 @@ pub struct VoyagePhoto {
     pub width: i32,
     pub height: i32,
     pub variant_status: String,
-    /// Exact, straight from the column. Must pass through
-    /// `Granularity::apply` before it can be serialized.
+    /// Exact stored latitude. Round before including in a public response.
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
 }
@@ -59,30 +56,19 @@ pub struct VoyagePatch {
     pub published: Option<bool>,
 }
 
-// Every query below selects the same column list, spelled out in full each
-// time. `query_as!` needs a string literal — it reads the SQL at compile time to
-// check it against the database, so a `concat!` or a helper macro is not
-// something it can see through. The list is also positional: `query_as!` maps
-// columns to `Voyage`'s fields in order, so the four copies and the struct have
-// to be changed together.
+// Checked queries spell out the selected columns. `query_as!` maps their
+// names to struct fields; update the queries and offline metadata when the
+// row type changes.
 
 pub async fn create(
     executor: impl PgExecutor<'_>,
     voyage: &NewVoyage,
 ) -> Result<Voyage, sqlx::Error> {
-    // v7 for the same reason as `photos::create`: the ids are time-ordered, so
-    // `voyages_owner_id_idx` — declared `(owner_id, id DESC)` — serves "my
-    // voyages, newest first" as an index scan with no sort, and the caller
-    // holds the id before the round trip completes.
+    // Generate a time-ordered UUIDv7 for owner-list pagination.
     let id = Uuid::now_v7();
 
-    // `published` is left to its default of false. T8: a voyage must not be
-    // world-readable the instant it is created and half-populated, so
-    // publishing is a separate, deliberate act (see `update`).
-    //
-    // An unknown `granularity` spelling surfaces as a CHECK violation rather
-    // than being validated here. The migration owns the permitted set; a second
-    // copy of the list in Rust is a second thing to forget to update.
+    // New voyages default to unpublished; publication is a separate update.
+    // Unsupported granularity strings return a database CHECK-constraint error.
     sqlx::query_as!(
         Voyage,
         "INSERT INTO voyages (id, owner_id, title, description, granularity)
@@ -103,11 +89,7 @@ pub async fn find_by_id(
     executor: impl PgExecutor<'_>,
     id: Uuid,
 ) -> Result<Option<Voyage>, sqlx::Error> {
-    // Not owner-scoped: a published voyage is world-readable (D6) and this is
-    // the lookup the public detail endpoint uses. Draft visibility is the
-    // handler's decision — it has the caller's identity and it owes a 404
-    // rather than a 403, so that probing ids does not confirm that a draft
-    // exists.
+    // Visibility is checked by the HTTP handler; this lookup is not owner-scoped.
     sqlx::query_as!(
         Voyage,
         "SELECT id, owner_id, title, description, published, granularity,
@@ -133,29 +115,15 @@ pub async fn update(
     owner_id: Uuid,
     patch: &VoyagePatch,
 ) -> Result<Option<Voyage>, sqlx::Error> {
-    // `description` needs two parameters where the others need one. `COALESCE`
-    // reads "keep the old value when the new one is null", which is exactly
-    // wrong for a field whose new value may legitimately *be* null — the whole
-    // reason `VoyagePatch::description` is `Option<Option<String>>`. So the
-    // presence of the outer `Option` travels as its own boolean and the CASE
-    // switches on that, leaving the inner `None` free to mean "set to null".
+    // Bind description presence separately so omission preserves the value
+    // and an explicit null clears it.
     let description_given = patch.description.is_some();
     let description = patch.description.as_ref().and_then(Option::as_deref);
 
-    // One statement, so a PATCH that both publishes and retitles cannot land
-    // half-applied, and so there is no read-modify-write window in which a
-    // concurrent PATCH's changes are silently reverted.
-    //
-    // The `published_at` CASE is the rule in the doc comment, written as a
-    // predicate rather than as branching Rust: it fires only when the row is
-    // ending up published *and* has never been published before. Unpublishing
-    // leaves the timestamp in place, so republishing finds it non-null and does
-    // not touch it — the voyage returns to the feed at its original position
-    // instead of jumping to the front. Nothing here ever clears it.
-    //
-    // The casts on the parameters are required: a bare `$3` that only ever
-    // appears inside `COALESCE(..., title)` gives Postgres nothing to infer a
-    // type from, the same reason `photos::list_for_owner` writes `$2::uuid`.
+    // Apply all supplied fields in one statement.
+    // Set `published_at` only on the first publication; preserve it when
+    // unpublishing or republishing.
+    // Explicit casts give nullable parameters their SQL types.
     sqlx::query_as!(
         Voyage,
         "UPDATE voyages
@@ -193,10 +161,9 @@ pub async fn delete(
     id: Uuid,
     owner_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    // The cascade that matters is the one the migration declares on
-    // `voyage_photos.voyage_id`. There is deliberately no cascade from here to
-    // `photos`: tidying up a draft is not a request to destroy the
-    // photographs in it.
+    // `photos_voyage_owner_fkey` deletes the voyage's photo rows. The HTTP
+    // handler records their content hashes for cleanup in this transaction;
+    // cleanup removes unreferenced files after commit.
     let result = sqlx::query!(
         "DELETE FROM voyages WHERE id = $1 AND owner_id = $2",
         id,
@@ -237,11 +204,7 @@ pub async fn detach_photo(
     owner_id: Uuid,
     photo_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    // Ownership is the voyage's, not the photo's: a photo can be removed from a
-    // voyage by the person whose voyage it is. The predicate is in the `WHERE`
-    // clause for the usual reason — `false` covers "no such voyage", "not
-    // yours", and "that photo was not in it" alike, so a caller learns nothing
-    // by probing.
+    // Return false for a missing voyage, a foreign voyage, or a photo outside it.
     let result = sqlx::query!(
         "DELETE FROM voyage_photos
           WHERE voyage_id = $1
@@ -257,57 +220,24 @@ pub async fn detach_photo(
     Ok(result.rows_affected() > 0)
 }
 
-/// Sets an explicit order. The slice is the desired sequence.
+/// Reorders voyage photos and returns database errors.
 ///
-/// **Ids not in the voyage are ignored, and photos the caller omitted keep
-/// their relative order at the end.** Both cases are ordinary rather than
-/// exceptional. The client sends the list it rendered, and between that render
-/// and this call a photo can be uploaded by another tab or deleted by the
-/// same one; rejecting the whole reorder because the list is one row stale
-/// turns a routine race into a visible failure. Ignoring unknown ids also keeps
-/// this consistent with every other function here: a foreign photo id behaves
-/// exactly like an id that does not exist, so reorder is not an oracle for
-/// which photos are real.
-///
-/// The alternative — leaving omitted photos at their old positions — is worse
-/// than it looks: the listed photos are renumbered from 1, so an omitted photo
-/// would keep a number that now collides with a listed one and the two would
-/// order arbitrarily. Renumbering everything makes the result total and
-/// gap-free whatever the caller sent.
+/// Known IDs come first in request order; the first occurrence of a duplicate
+/// wins. Unknown IDs are ignored. Omitted photos follow in their previous order,
+/// with photo ID breaking ties. Positions are renumbered from one. A missing
+/// or foreign voyage changes no rows.
 pub async fn reorder(
     executor: impl PgExecutor<'_>,
     voyage_id: Uuid,
     owner_id: Uuid,
     photo_ids: &[Uuid],
 ) -> Result<(), sqlx::Error> {
-    // One statement, so the voyage is never observably half-reordered. Note
-    // that a partial reorder would not violate a constraint even if it did
-    // happen — `position` has no unique index, the primary key is
-    // the photo id and this statement does not touch either column —
-    // which is precisely why atomicity has to be arranged rather than relied on
-    // to fail loudly. The failure mode of doing this row by row is a voyage
-    // that reads in a nonsensical order, not an error.
-    //
-    // The ranking is a `LEFT JOIN` from the voyage's rows to the caller's list,
-    // not the other way round: driving from `voyage_photos` is what makes the
-    // result cover every photo in the voyage rather than only the mentioned
-    // ones. `ordinality` is null for an unmentioned photo, `NULLS LAST` sends
-    // it to the back, and the previous `position` keeps that tail in the order
-    // it already had. `photo_id` breaks any remaining tie so the outcome is
-    // deterministic. `row_number()` over that order yields 1..n with no gaps.
-    //
-    // The `DISTINCT ON` is not decoration. A repeated id in the caller's list
-    // would make the join produce two rows for one photo, and `UPDATE ... FROM`
-    // with a multiply-matching join does not error in Postgres — it picks one
-    // of the candidate rows arbitrarily and shifts every subsequent row number.
-    // Keeping the first occurrence of each id makes a duplicate mean "the
-    // earlier place in the list", which is the only reading that is not a
-    // surprise.
-    //
-    // Like the rest of the file the ownership predicate is in the statement.
-    // The signature has no way to report "not yours", so this is defense in
-    // depth under a handler that has already established ownership, not the
-    // handler's only check — see the note in the module's report.
+    // Update every position in one statement so readers see a complete order.
+    // Start with all voyage photos. Requested ordinality comes first, followed
+    // by omitted photos ordered by their previous position and ID.
+    // Keep the first occurrence of each requested ID to avoid multiple ranking
+    // rows for one photo.
+    // The SQL ownership check supplements the handler's owner check.
     sqlx::query!(
         "UPDATE voyage_photos vp
             SET position = ranked.position
@@ -337,28 +267,14 @@ pub async fn reorder(
     Ok(())
 }
 
-/// Every photo in a voyage, in order, in **one** query.
-///
-/// One query is a requirement, not a preference: `await` inside a loop looks
-/// concurrent and is not, and the cost would scale with photo count on the
-/// product's most-visited endpoint.
+/// Returns all voyage photos ordered by position and photo ID in one query.
 pub async fn photos_for_voyage(
     executor: impl PgExecutor<'_>,
     voyage_id: Uuid,
 ) -> Result<Vec<VoyagePhoto>, sqlx::Error> {
-    // A join, served by `voyage_photos_order_idx` on `(voyage_id, position)`,
-    // so the ordering is an index scan rather than a sort. The `photo_id`
-    // tiebreak costs nothing and buys a total order: two photos can share a
-    // position if concurrent reassignment calls computed the same base, and
-    // a voyage whose photos swap places between two reads for no visible reason
-    // is a bug nobody would think to look for.
-    //
-    // The coordinates are cast to `float8` because `VoyagePhoto` declares them
-    // as `f64` while the column is `numeric(9, 6)`. Six decimal places is well
-    // inside what a double represents exactly enough to print back identically,
-    // so nothing is lost — and nothing is *rounded*, which is the point: these
-    // are exact coordinates and the granularity transform happens once, at the
-    // serialization boundary.
+    // Photo ID breaks position ties deterministically.
+    // Convert stored decimal coordinates to the row type's `f64` fields.
+    // Public response construction applies granularity separately.
     sqlx::query_as!(
         VoyagePhoto,
         r#"SELECT p.id AS "photo_id!",
@@ -442,23 +358,13 @@ pub async fn list_for_owner(
     .await
 }
 
-/// Is this photograph visible to the public — that is, attached to at least one
-/// **published** voyage?
-///
-/// This is what makes D6 real rather than nominal. Without it, every voyage is
-/// public and every image inside it 404s for anyone but the owner: the JSON is
-/// world-readable and the photographs are not, which is a public gallery with
-/// the pictures painted out.
-///
-/// A draft does not count. Attaching a photo to an unpublished voyage must not
-/// make it fetchable, or "draft" would leak its contents to anyone holding a
-/// photo id.
+/// Returns whether the photo belongs to a published voyage. Drafts do not
+/// grant public image access. Database failures return an error.
 pub async fn photo_is_publicly_visible(
     executor: impl PgExecutor<'_>,
     photo_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    // `EXISTS` rather than a count: the answer is a boolean and the planner can
-    // stop at the first matching row. Served by `voyage_photos_photo_id_idx`.
+    // EXISTS can stop after finding a published voyage containing this photo.
     let visible: Option<bool> = sqlx::query_scalar!(
         r#"SELECT EXISTS (
                SELECT 1

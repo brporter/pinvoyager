@@ -1,5 +1,5 @@
 import { GRANULARITIES, GRANULARITY_LABEL } from "./granularity";
-/** GranularitySelector uses the shared runtime styles and accessible native controls. */
+/** Renders precision choices and an optional preview, including an unselected state. */
 
 import type { Granularity } from "../api/types";
 
@@ -43,10 +43,7 @@ export function GranularitySelector({
         className="pv-gran-steps"
         role="group"
         aria-label={label}
-        // Mirrors the design file, which dims the disabled set inline;
-        // `design/components.css` has no disabled treatment for
-        // `.pv-gran-step` or `.pv-gran-steps` yet. The `disabled` attribute
-        // below is what actually makes them inert.
+        // Dim disabled choices; each button's disabled attribute prevents activation.
         style={disabled ? { opacity: 0.5 } : undefined}
       >
         {GRANULARITIES.map((step) => (

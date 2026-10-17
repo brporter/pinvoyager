@@ -1,5 +1,5 @@
 import { initialsOf } from "./initials";
-/** Avatar uses the shared runtime styles and accessible native controls. */
+/** Displays a provider image or name initials, with an optional accessible label. */
 
 import { cx } from "./cx";
 import { PersonIcon } from "./icons";

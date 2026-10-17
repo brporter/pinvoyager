@@ -1,4 +1,4 @@
-/** Skeleton uses the shared runtime styles and accessible native controls. */
+/** Renders a decorative loading placeholder hidden from assistive technology. */
 
 import { cx } from "./cx";
 

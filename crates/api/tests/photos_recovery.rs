@@ -1,12 +1,5 @@
-//! Regression tests for pending-photo recovery.
-//!
-//! A process that dies mid-batch leaves rows at `variant_status = 'pending'`.
-//! Nothing will ever enqueue them again — the only thing that did was the
-//! upload request, which returned long ago — so without a startup sweep they
-//! sit in the owner's library forever, visible and never viewable.
-//!
-//! Found by hand-testing: a photo set back to `pending` was NOT picked up on
-//! restart. These tests isolate which layer is at fault.
+//! Pending-photo recovery tests. Checks which rows are eligible for requeueing
+//! and verifies worker recovery converts interrupted uploads after startup.
 
 #[path = "support/photo_voyage.rs"]
 mod photo_voyage;

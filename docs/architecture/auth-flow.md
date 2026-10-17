@@ -31,12 +31,22 @@ Secure controlled by configuration. Identity matching never merges by email.
 Provider linking starts with an authenticated account and refuses an identity
 already linked to another account.
 
+Known defect: the conflict message in `http/auth.rs::ALREADY_LINKED` and
+`web/src/auth/AuthCallback.tsx::AuthCallback` tells the user to unlink the identity
+from the other account. No unlink endpoint or UI is implemented. The message
+needs to describe the supported option of signing in to the existing account.
+
 [`session::lookup_and_touch`](../../crates/api/src/auth/session.rs) enforces idle and
 absolute expiration. Defaults are 14 days idle and 90 days absolute. Database activity
 extends idle expiry. The browser cookie's Max-Age uses the absolute session limit; the
 server still rejects sessions whose idle deadline has passed. Periodic maintenance
 removes expired sessions and authorization attempts. Logout revokes the presented
 session and clears the cookie; it accepts missing or expired sessions.
+
+Known defect: `web/src/auth/AuthProvider.tsx::signOut` suppresses request failures,
+and `web/src/shell/AccountMenu.tsx::onSignOut` then navigates to Discover. If logout
+fails before reaching the server, the session remains active and the UI gives no
+failure message. The failure path also does not explicitly refresh `/api/me`.
 
 Provider callback failures redirect to the frontend result screen. Client-side
 [`AuthCallback`](../../web/src/auth/AuthCallback.tsx) presents the status and a

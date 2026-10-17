@@ -1,4 +1,4 @@
-/** TextField uses the shared runtime styles and accessible native controls. */
+/** Renders an input with shared field labeling and validation feedback. */
 
 import { useId } from "react";
 import type { InputHTMLAttributes } from "react";

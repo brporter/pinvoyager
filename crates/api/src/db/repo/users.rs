@@ -1,11 +1,10 @@
-//! Users — the account. Owns voyages. Holds no credential of any kind (D1).
+//! User accounts and profile names. Provider identities and session hashes
+//! are stored separately.
 
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-/// Column set is deliberately narrower than the table: `updated_at` exists in
-/// the schema but nothing reads it yet, and a field no caller uses is a field
-/// every query has to keep selecting.
+/// User fields read by account handlers; excludes the unused `updated_at` column.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct User {
     pub id: Uuid,
@@ -14,22 +13,14 @@ pub struct User {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Creates an account.
-///
-/// There is no separate registration path — D2 makes a first successful
-/// sign-in the signup — so the callback handler calls this,
-/// in the same transaction that inserts the identity row. That is why this
-/// takes an executor rather than a pool.
+/// Creates an account with a UUIDv7 ID. Callers can include identity creation
+/// in the same transaction. Database failures return an error.
 pub async fn create(
     executor: impl PgExecutor<'_>,
     display_name: Option<&str>,
     avatar_url: Option<&str>,
 ) -> Result<User, sqlx::Error> {
-    // v7 rather than v4: the ids are time-ordered, so inserts land at the right
-    // edge of the primary key index instead of scattering across it. Generated
-    // here rather than by the database so the caller holds the id before the
-    // round trip completes and can build dependent rows without a RETURNING
-    // read-back on every one.
+    // Generate a time-ordered UUIDv7 for the primary key.
     let id = Uuid::now_v7();
 
     sqlx::query_as!(

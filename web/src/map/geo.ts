@@ -1,24 +1,8 @@
 /**
- * Map geometry, as pure functions.
- *
- * Everything the map has to *calculate* lives here, and nothing here touches
- * MapLibre, the DOM, or React. That is deliberate: MapLibre cannot run in the
- * test environment at all — it needs a WebGL context, which jsdom does not
- * provide — so any arithmetic left inside the map component is arithmetic that
- * can only be checked by hand in a browser. Clustering, area sizing and camera
- * fitting are the three things most likely to be subtly wrong, and all three
- * are functions in this file with tests against them.
- *
- * ## The projection
- *
- * Web Mercator, the same projection MapLibre uses, expressed in **world
- * pixels**: the whole world is `512 * 2^zoom` pixels across at a given zoom.
- * Working in world pixels rather than screen pixels has one property that
- * matters a great deal here — the distance in pixels between two fixed
- * coordinates depends only on the zoom, never on where the camera is pointing.
- * So clustering can be computed from the pin list and a zoom number alone, and
- * a pan does not change the answer. That is what lets clustering be a pure
- * function instead of something that has to interrogate a live map.
+ * Pure geometry for projection, bounds, clustering, and precision display.
+ * Uses Web Mercator world pixels: world width is 512 * 2^zoom. Distances at a
+ * given zoom are independent of camera position, so panning does not require
+ * recomputing voyage clusters.
  */
 
 /** Web Mercator tile edge, in pixels, at zoom 0. */
@@ -34,13 +18,8 @@ const TILE_SIZE = 512;
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
 
 /**
- * The latitude Web Mercator stops at.
- *
- * The projection sends the poles to infinity, so every implementation cuts it
- * off somewhere; this is the standard cut, chosen because it makes the world
- * square. A coordinate past it is clamped rather than rejected — a photograph
- * taken in Antarctica is a real photograph, and refusing to draw it would be
- * worse than drawing it slightly too far north.
+ * Maximum projected latitude, approximately ±85.0511°. Coordinates beyond
+ * this range are clamped to keep projected positions finite.
  */
 export const MAX_MERCATOR_LATITUDE = 85.051129;
 
@@ -100,13 +79,8 @@ export function unproject(point: WorldPoint, zoom: number): LngLat {
 }
 
 /**
- * Ground resolution: how many meters one screen pixel covers.
- *
- * Latitude-dependent, and that is the whole point of it. Mercator stretches
- * east–west distance by `1 / cos(latitude)`, so a 10 km circle drawn in
- * Reykjavík is nearly twice as many pixels across as the same 10 km circle
- * drawn in Singapore. Sizing granularity areas with a single constant would
- * make the northern ones look far more precise than they are.
+ * Returns approximate ground meters per pixel at the latitude and zoom,
+ * using the equatorial circumference and cosine latitude correction.
  */
 export function metersPerPixel(latitude: number, zoom: number): number {
   const clamped = clamp(latitude, -MAX_MERCATOR_LATITUDE, MAX_MERCATOR_LATITUDE);
@@ -125,18 +99,8 @@ export function areaDiameterPx(precisionM: number, latitude: number, zoom: numbe
 }
 
 /**
- * The zoom at which a granularity area is `targetDiameterPx` across.
- *
- * Used to stop the camera zooming past what the coordinates actually know. A
- * voyage published at ~50 km precision with one photograph in it has a single
- * pin, and fitting a camera to a single point would otherwise zoom to street
- * level — showing a named junction for a position that is only known to within
- * fifty kilometers. Solving for the zoom that makes the *uncertainty* fill a
- * reasonable part of the viewport keeps the picture honest.
- *
- * Derived from {@link metersPerPixel}: given
- * `mpp = C·cos(lat) / (512·2^z)` and `mpp = 2·sqrt(2)·precision / target`,
- * `z = log2( C·cos(lat)·target / (512·2·sqrt(2)·precision) )`.
+ * Returns the zoom at which the approximate precision circle has the requested
+ * pixel diameter. Used to limit camera fitting for coarse locations.
  */
 export function zoomForPrecision(
   latitude: number,
@@ -148,15 +112,7 @@ export function zoomForPrecision(
   return Math.log2(numerator / (TILE_SIZE * 2 * Math.SQRT2 * precisionM));
 }
 
-/**
- * The rectangle containing every coordinate, or null for an empty list.
- *
- * Null rather than a zero-size rectangle at (0, 0), because "no pins" and "one
- * pin in the Gulf of Guinea" are different situations and the camera should
- * treat them differently — the first wants the world view, the second wants to
- * fly somewhere.
- *
- */
+/** Returns bounds containing the coordinates, or null if none are usable. */
 /** Normalize a camera viewport, including repeated worlds and wrapped bounds. */
 export function normalizeBounds(bounds: Bounds): Bounds {
   const width = bounds.east - bounds.west;
@@ -226,34 +182,14 @@ export interface MapCluster<T extends Clusterable> {
   members: T[];
 }
 
-/**
- * How close two markers have to be, in pixels, before they merge.
- *
- * `--pv-touch-min`, the 44px touch target from the design system. Two markers
- * nearer than one touch target cannot be tapped apart on a phone, so leaving
- * them separate produces taps that appear to do nothing — which reads as the
- * application being broken rather than the finger being imprecise. That is the
- * same reasoning `.pv-pin` uses to put a 44px button around a 26px marker.
- */
+/** Default clustering radius in world pixels, matching the 44px touch target. */
 export const CLUSTER_RADIUS_PX = 44;
 
 /**
- * Groups pins that would overlap on screen.
- *
- * Greedy and seeded: walk the list in order, and each pin that has not yet been
- * taken starts a cluster and absorbs every remaining pin within
- * `radiusPx` **of the seed**. Absorbed pins do not go on to absorb their own
- * neighbors; without that restriction a line of pins each 40px from the next
- * would chain into one cluster spanning the continent, and the bubble would
- * appear somewhere none of the photographs were taken.
- *
- * The result is stable for a given pin order and zoom, which is what makes it
- * testable and what keeps markers from shuffling during a pan — the distance
- * between two fixed coordinates in world pixels does not depend on where the
- * camera is.
- *
- * A spatial grid limits searches to neighboring cells. Consumed points are
- * removed so a dense cluster is visited once rather than once per seed.
+ * Groups nearby pins using input order to choose cluster seeds. A seed absorbs
+ * unconsumed pins within radiusPx; absorbed pins do not expand the search.
+ * A spatial grid restricts searches to nearby cells. Results are deterministic
+ * for the same ordered input and zoom.
  */
 export function clusterPins<T extends Clusterable>(
   pins: readonly T[],

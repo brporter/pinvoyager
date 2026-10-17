@@ -1,25 +1,8 @@
-//! `GET /api/map` — the discovery map, from outside the process.
+//! Discovery-map tests through the production router.
 //!
-//! This endpoint is the one place in the service where photographs from
-//! *different* voyages, with *different* granularity settings, are put in one
-//! response and grouped together. Two things can go wrong there that cannot go
-//! wrong anywhere else, and both are what this file is for:
-//!
-//!  * **A coordinate could be grouped before it is rounded.** Clustering exact
-//!    positions and then publishing the group's position would make what the
-//!    map draws a function of coordinates that were never allowed out. The
-//!    rounding has to happen first, per voyage, and the leak sweep below
-//!    searches the response for the exact stored digits to prove it did.
-//!  * **A draft could be drawn.** Every other endpoint decides visibility for
-//!    one voyage whose id the caller already had. This one decides it for every
-//!    voyage in the database at once, with no id and no session, which makes
-//!    "only published" a filter in a query rather than a check in a handler —
-//!    a much easier thing to leave out.
-//!
-//! Each test gets its own migrated database through `#[sqlx::test]`, which
-//! matters more here than usual: the endpoint answers for *every* published
-//! voyage there is, so a shared database would mean one test's fixtures
-//! appearing in another test's map.
+//! Checks publication filtering, per-voyage rounding before clustering, viewport
+//! validation, and marker grouping. Each test uses an isolated migrated database
+//! so other fixtures cannot appear in its discovery response.
 
 #[path = "support/photo_voyage.rs"]
 mod photo_voyage;
@@ -58,12 +41,8 @@ use pinvoyager_api::voyages::Granularity;
 const EXACT_LAT: f64 = 43.061_234;
 const EXACT_LON: f64 = 141.354_321;
 
-/// What the sweep searches for: five decimal places, roughly one meter.
-///
-/// A prefix rather than the whole value, so a leak dressed up as a truncation
-/// still trips it. It cannot collide with a legitimate ~10 km cell center —
-/// that would be an agreement to within a meter, a coincidence of one in ten
-/// million rather than a rounding artifact.
+/// Five-decimal coordinate prefix used to detect exact or truncated values
+/// in these coarse-response fixtures.
 const LAT_PREFIX: &str = "43.06123";
 const LON_PREFIX: &str = "141.35432";
 
@@ -239,10 +218,7 @@ async fn anyone_may_read_the_map(pool: PgPool) {
     assert_eq!(reply.clusters().len(), 1);
 }
 
-/// The defect this endpoint is most likely to have. Everywhere else,
-/// visibility is decided for one voyage whose id the caller already had; here
-/// it is a filter over the whole table, and leaving it out draws every draft in
-/// the database on a public map.
+/// Draft photos are omitted from the anonymous discovery map.
 #[sqlx::test]
 async fn a_draft_is_not_on_the_map(pool: PgPool) {
     let owner = a_user(&pool).await;

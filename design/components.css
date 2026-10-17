@@ -124,18 +124,7 @@
   .pv-spinner { animation-duration: 2s; }
 }
 
-/* ==========================================================================
-   Provider sign-in buttons
-
-   Google and Apple both publish mandatory branding rules — specific
-   wordmarks, minimum sizes, permitted color variants. These follow the
-   published specs rather than a house style, because non-compliance is
-   grounds for rejection during provider app review.
-
-   Shared geometry, per-provider skin. All three are the same height and the
-   same label grammar ("Continue with X") so the sign-in screen reads as one
-   set of choices rather than four vendors shouting.
-   ========================================================================== */
+/* Provider sign-in buttons share dimensions and use provider-specific colors and logos. */
 
 .pv-provider {
   display: flex;
@@ -269,9 +258,7 @@
   border-radius: var(--pv-radius-full);
   background: var(--pv-border-strong);
   position: relative; cursor: pointer;
-  /* So this can be a real <button> rather than a div with a role. A button
-     brings its own border, padding and platform appearance, all of which
-     change the size the rules above are trying to set. */
+  /* Reset native button appearance so the switch keeps its specified geometry. */
   appearance: none;
   border: 0;
   padding: 0;
@@ -357,22 +344,14 @@
 }
 .pv-avatar--lg { width: 64px; height: 64px; font-size: var(--pv-text-xl); }
 
-/* Same omission as .pv-photo-img: a provider-supplied avatar is a real image
-   and will not be clipped to the circle without this. */
+/* Clip provider avatar images to the circular frame. */
 .pv-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* ==========================================================================
-   Photos
-
-   Real images are not used in these mockups. The design project blocks
-   external hosts, so photo stand-ins are CSS gradients — deterministic, no
-   network, and they make composition legible without pretending to be art
-   direction.
-   ========================================================================== */
+/* Photo frames and optional CSS-gradient placeholders. */
 
 .pv-photo {
   position: relative;
@@ -388,11 +367,7 @@
 .pv-photo-img {
   position: absolute;
   inset: 0;
-  /* The previews in design/components/ mock photographs with CSS gradients,
-     which fill their box whatever shape it is. A real <img> does not: without
-     object-fit every photograph in the product stretches to the frame's aspect
-     ratio. The gap was invisible here precisely because nothing in this
-     directory renders an actual image. */
+  /* Crop real images to fill their frame while preserving aspect ratio. */
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -421,8 +396,7 @@
   font-size: var(--pv-text-xs);
 }
 
-/* The "No location" badge sits at the top of the frame rather than the
-   bottom; drawn inline in photo-primitives.html. */
+/* Top caption area used for the No location badge. */
 .pv-photo-caption--top { top: var(--pv-space-3); bottom: auto; }
 
 .pv-photo-grid {
@@ -690,14 +664,7 @@
   transition: width var(--pv-duration-base) var(--pv-ease-out);
 }
 
-/* ==========================================================================
-   Granularity selector
-
-   The one genuinely novel control in this product. It must make the privacy
-   consequence legible BEFORE the voyage is published, because every voyage
-   is public and this setting is the only thing standing between an EXIF
-   coordinate and the world.
-   ========================================================================== */
+/* Precision choices and preview styles for public voyage locations. */
 
 .pv-gran { display: flex; flex-direction: column; gap: var(--pv-space-3); }
 
@@ -723,9 +690,7 @@
   transition: background-color var(--pv-duration-fast) var(--pv-ease-out);
 }
 .pv-gran-step:hover { background: var(--pv-bg-hover); }
-/* Drawn inline in granularity.html; a class means the app does not have to
-   repeat the value. Inertness comes from the disabled attribute, not from
-   pointer-events, so keyboard users are excluded too. */
+/* Disabled-step appearance; the native disabled attribute blocks activation. */
 .pv-gran-step:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .pv-gran-step[aria-pressed="true"] {
@@ -746,9 +711,7 @@
   color: var(--pv-text-muted);
 }
 
-/* The stripping guarantee. Per D6, coarse granularity is meaningless if the
-   served file still carries its original GPS EXIF — so the promise is stated
-   where the choice is made, not buried in a policy page. */
+/* Metadata-stripping explanation displayed beside the precision choices. */
 .pv-gran-guarantee {
   display: flex; gap: var(--pv-space-2);
   padding: var(--pv-space-3);
@@ -804,7 +767,7 @@
   margin: 0 auto;
 }
 .pv-empty-icon { color: var(--pv-text-subtle); margin-bottom: var(--pv-space-4); }
-/* The error empty state, drawn inline in feedback.html. */
+/* Error empty-state icon color. */
 .pv-empty-icon--danger { color: var(--pv-danger); }
 
 .pv-empty-title {

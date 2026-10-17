@@ -1,21 +1,9 @@
-/* ==========================================================================
-   PinVoyager design tokens
-   --------------------------------------------------------------------------
-   The single source of truth for color, type, spacing, radii, elevation, and
-   motion. The React application imports THIS FILE. Values are never
-   transcribed into a JavaScript theme object — editing a token here must
-   change the running application, or the design system is decorative.
-
-   Structure:
-     1. Primitives   — raw ramps. Components must not use these directly.
-     2. Semantics    — role-named tokens. This is what components use.
-     3. Type / space / radius / elevation / motion
-     4. Dark theme   — semantics remapped; primitives never change.
-
-   Theme resolution is three-state: an explicit choice stamps
-   data-theme="dark" | "light" on <html>; the default "system" setting stamps
-   nothing and falls through to prefers-color-scheme.
-   ========================================================================== */
+/**
+ * Shared runtime tokens for color, typography, spacing, geometry, and motion.
+ *
+ * Components use semantic tokens. Theme selection uses data-theme="light" or
+ * "dark"; without an explicit selection, prefers-color-scheme chooses the theme.
+ */
 
 :root {
   /* ---------------------------------------------------------------------
@@ -147,14 +135,7 @@
   --pv-overlay-strong: rgb(15 13 12 / 0.88);
   --pv-scrim-gradient: linear-gradient(to top, rgb(15 13 12 / 0.78) 0%, rgb(15 13 12 / 0) 62%);
 
-  /* ---------------------------------------------------------------------
-     3a. TYPOGRAPHY
-
-     System font stack only. The design project enforces a strict CSP that
-     blocks external hosts, so a webfont would silently fail to load — and
-     a system stack is the right call for a photo product anyway: no layout
-     shift, no render-blocking request.
-     --------------------------------------------------------------------- */
+  /* Typography uses system fonts and requires no external font requests. */
 
   --pv-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
                   "Helvetica Neue", Arial, sans-serif;
