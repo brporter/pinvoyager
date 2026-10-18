@@ -100,6 +100,11 @@ build, plus Rust formatting, Clippy, and database/native-image coverage on stabl
 Rust. CI retains coverage reports as workflow artifacts. Generated reports are
 ignored and are not maintained documentation.
 
+Checks runs directly for pull requests and pushes to branches other than `main`.
+On pushes to `main`, `.github/workflows/deploy.yml` calls the same workflow and
+publishes images only after it passes. Excluding `main` from the standalone Checks
+push trigger avoids running the same checks twice for each push to `main`.
+
 The shared database used by `crates/api/tests/integration.rs::pool` is migrated
 before each pool is returned. These tests therefore run against a fresh CI
 database as well as an already migrated local database; mutations still roll
