@@ -492,14 +492,6 @@ async fn destroy(
         crate::photos::cleanup::schedule(&mut tx, hash).await?;
     }
     tx.commit().await?;
-    for hash in hashes {
-        if let Err(error) =
-            crate::photos::cleanup::clean(&state.pool, &state.config.photos.storage_root, &hash)
-                .await
-        {
-            tracing::warn!(%error, "voyage deletion committed; file cleanup will be retried");
-        }
-    }
     Ok(StatusCode::NO_CONTENT)
 }
 

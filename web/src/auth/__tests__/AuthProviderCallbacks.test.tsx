@@ -17,13 +17,15 @@ vi.mock("../../api/hooks", () => ({
   useSignOut: mocks.useSignOut,
 }));
 
+const signOutFailure = vi.fn();
+
 function CallbackProbe() {
   const { refresh, signOut, status } = useAuth();
   return (
     <>
       <span data-testid="status">{status}</span>
       <button onClick={() => void refresh()}>Refresh session</button>
-      <button onClick={() => void signOut()}>Sign out</button>
+      <button onClick={() => void signOut().catch(signOutFailure)}>Sign out</button>
     </>
   );
 }
@@ -37,6 +39,7 @@ function renderProbe() {
 }
 
 beforeEach(() => {
+  signOutFailure.mockReset();
   mocks.refetch.mockReset().mockResolvedValue({});
   mocks.mutateAsync.mockReset().mockResolvedValue(undefined);
   mocks.useMe.mockReset().mockReturnValue({
@@ -68,7 +71,7 @@ describe("AuthProvider callbacks", () => {
     await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledOnce());
   });
 
-  it("swallows a network failure while signing out so the session query can settle", async () => {
+  it("propagates a sign-out failure to the caller", async () => {
     const user = userEvent.setup();
     mocks.mutateAsync.mockRejectedValue(new Error("offline"));
     renderProbe();
@@ -76,6 +79,6 @@ describe("AuthProvider callbacks", () => {
     await user.click(screen.getByRole("button", { name: "Sign out" }));
 
     await waitFor(() => expect(mocks.mutateAsync).toHaveBeenCalledOnce());
-    expect(screen.getByTestId("status")).toHaveTextContent("anonymous");
+    expect(signOutFailure).toHaveBeenCalledWith(expect.objectContaining({ message: "offline" }));
   });
 });

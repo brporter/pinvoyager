@@ -67,7 +67,6 @@ fn test_state_with(
         },
         telemetry: TelemetryConfig::default(),
         auth: crate::config::AuthConfig {
-            initial_admins: Default::default(),
             base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
             session: Default::default(),
             providers: Default::default(),
@@ -1431,4 +1430,89 @@ async fn a_variant_path_must_be_a_regular_file() {
         .await
         .expect_err("directory is not an image");
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+}
+
+#[sqlx::test]
+async fn photo_deletion_queues_files_without_removing_them_in_the_request(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let photo = create_photo_for_test(&pool, owner.id, &"d".repeat(64)).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("background-photo-delete");
+    let path = storage::original_path(
+        scratch.path(),
+        &ContentHash::try_from(photo.content_hash.clone()).expect("hash"),
+    );
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("shard");
+    std::fs::write(&path, b"original").expect("original");
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_owned(),
+        crate::photos::worker::VariantQueue::detached(),
+    );
+    destroy(State(state), test_user(owner.id), Path(photo.id))
+        .await
+        .expect("delete");
+    assert!(path.exists(), "HTTP success precedes file removal");
+    assert!(
+        photos::find_by_id(&pool, photo.id)
+            .await
+            .expect("lookup")
+            .is_none()
+    );
+    crate::photos::cleanup::sweep(&pool, scratch.path())
+        .await
+        .expect("background removal");
+    assert!(!path.exists());
+}
+
+#[tokio::test]
+async fn canceling_an_upload_removes_its_partially_written_file() {
+    let (state, scratch) = upload_test_state();
+    let jpeg = crate::photos::decode::testutil::write_jpeg(&scratch, "source", 32, 24);
+    let mut bytes = b"--pv\r\nContent-Disposition: form-data; name=\"files\"; filename=\"photo.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".to_vec();
+    bytes.extend(std::fs::read(jpeg).expect("jpeg"));
+    let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Vec<u8>, std::io::Error>>(1);
+    sender.send(Ok(bytes)).await.expect("partial body");
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "multipart/form-data; boundary=pv".parse().expect("header"),
+    );
+    let request = tokio::spawn(upload(
+        State(state),
+        test_user(Uuid::now_v7()),
+        Uuid::now_v7(),
+        headers,
+        Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(receiver)),
+    ));
+    let temp = scratch.path().join("tmp");
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if std::fs::read_dir(&temp).ok().is_some_and(|entries| {
+                entries
+                    .flatten()
+                    .any(|entry| entry.metadata().is_ok_and(|m| m.len() > 0))
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("partial upload reaches disk");
+    request.abort();
+    assert!(request.await.expect_err("canceled").is_cancelled());
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while std::fs::read_dir(&temp)
+            .expect("temporary directory")
+            .count()
+            != 0
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("cancellation removes the temporary upload");
+    drop(sender);
 }

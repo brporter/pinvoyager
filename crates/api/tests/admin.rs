@@ -564,6 +564,20 @@ async fn deletion_removes_account_data_and_unshared_files_but_reserves_names(poo
         action(&app, &cookie, owner, json!({"action":"delete"})).await,
         StatusCode::NO_CONTENT
     );
+    assert!(
+        unique_paths.iter().all(|path| path.exists()),
+        "HTTP deletion leaves file removal to maintenance"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM photo_cleanup")
+            .fetch_one(&pool)
+            .await
+            .expect("queued"),
+        2
+    );
+    pinvoyager_api::photos::cleanup::sweep(&pool, root.path())
+        .await
+        .expect("background removal");
     assert!(unique_paths.iter().all(|path| !path.exists()));
     assert!(shared_paths.iter().all(|path| path.exists()));
     let remaining: (i64,i64,i64,i64,i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM users WHERE id=$1),(SELECT count(*) FROM voyages WHERE owner_id=$1),(SELECT count(*) FROM photos WHERE owner_id=$1),(SELECT count(*) FROM identities WHERE user_id=$1),(SELECT count(*) FROM sessions WHERE user_id=$1),(SELECT count(*) FROM auth_attempts WHERE link_user_id=$1)")
@@ -716,15 +730,9 @@ async fn storage_read_errors_are_reported_and_demoted_sessions_lose_access(pool:
 }
 
 #[sqlx::test]
-async fn development_login_applies_initial_admin_emails(pool: PgPool) {
+async fn development_login_optionally_grants_admin(pool: PgPool) {
     let mut config = Config::load().expect("config");
     config.auth.dev_login = true;
-    config.auth.initial_admins = pinvoyager_api::initial_admin::InitialAdmins::parse_args([
-        std::ffi::OsString::from("--initial-admin-email=bootstrap@example.test"),
-        std::ffi::OsString::from("--initial-admin-email=second@example.test"),
-    ])
-    .expect("arguments")
-    .expect("run");
     let configured = |config| {
         http::router(AppState::new(
             pool.clone(),
@@ -745,7 +753,9 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
                         .method("POST")
                         .uri("/auth/dev/login")
                         .header("content-type", "application/json")
-                        .body(Body::from(json!({"subject":subject}).to_string()))
+                        .body(Body::from(
+                            json!({"subject":subject,"grant_admin":true}).to_string(),
+                        ))
                         .expect("request"),
                 )
                 .await
@@ -767,7 +777,7 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
                     .0,
                 StatusCode::OK
             );
-            // Removing the role does not disable the configured grant on next sign-in.
+            // A later explicit request can grant the role again after removal.
             sqlx::query("UPDATE users SET is_site_admin=false WHERE id=$1")
                 .bind(
                     me["user"]["id"]
@@ -782,7 +792,7 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
         }
     }
 
-    // Only the subject is a forged email input; extra request claims grant nothing.
+    // Email-shaped subjects and extra claims grant nothing by themselves.
     for subject in [
         "ordinary@example.test",
         "Bootstrap@example.test",
@@ -812,7 +822,7 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
         "POST",
         "/auth/dev/login",
         None,
-        json!({"subject":"second@example.test"}),
+        json!({"subject":"second@example.test","grant_admin":true}),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -830,14 +840,14 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
                 "POST",
                 "/auth/dev/login",
                 None,
-                json!({"subject":"second@example.test"})
+                json!({"subject":"second@example.test","grant_admin":true})
             ),
             send(
                 &app,
                 "POST",
                 "/auth/dev/login",
                 None,
-                json!({"subject":"second@example.test"})
+                json!({"subject":"second@example.test","grant_admin":true})
             )
         )
     })
@@ -846,7 +856,7 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
     assert_eq!(concurrent.0.0, StatusCode::OK);
     assert_eq!(concurrent.1.0, StatusCode::OK);
 
-    // Clearing the startup list preserves existing grants and stops new ones.
+    // Omitting the grant request preserves existing roles and grants no new ones.
     let mut config = Config::load().expect("config");
     config.auth.dev_login = true;
     let unconfigured = configured(config);
@@ -910,7 +920,7 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
             "POST",
             "/auth/dev/login",
             None,
-            json!({"subject":"second@example.test"})
+            json!({"subject":"second@example.test","grant_admin":true})
         )
         .await
         .0,
@@ -930,5 +940,44 @@ async fn development_login_applies_initial_admin_emails(pool: PgPool) {
             .await
             .expect("sessions"),
         sessions_before
+    );
+}
+
+#[sqlx::test]
+async fn storage_measurement_is_reused_between_account_list_and_detail(pool: PgPool) {
+    use pinvoyager_api::photos::storage;
+    let root = ScratchRoot::new();
+    let app = app_with_storage(pool.clone(), root.path());
+    let (_, cookie) = administrator(&pool).await;
+    let (owner, _) = caller(&pool).await;
+    let voyage_id = voyage(&pool, owner, false).await;
+    let hash = "e".repeat(64);
+    photo(&pool, owner, voyage_id, &hash).await;
+    let path = storage::original_path(
+        root.path(),
+        &storage::ContentHash::try_from(hash).expect("hash"),
+    );
+    std::fs::create_dir_all(path.parent().expect("shard")).expect("directory");
+    std::fs::write(&path, [0; 10]).expect("original");
+    let (_, list) = send(&app, "GET", "/api/admin/users", Some(&cookie), Value::Null).await;
+    let entry = list["users"]
+        .as_array()
+        .expect("users")
+        .iter()
+        .find(|row| row["id"] == owner.to_string())
+        .expect("owner");
+    assert_eq!(entry["storage_bytes"], 10);
+    std::fs::write(&path, [0; 20]).expect("changed file");
+    let (_, detail) = send(
+        &app,
+        "GET",
+        &format!("/api/admin/users/{owner}"),
+        Some(&cookie),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        detail["user"]["storage_bytes"], 10,
+        "pagination and detail should reuse the recent measurement"
     );
 }

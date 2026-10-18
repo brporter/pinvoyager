@@ -42,8 +42,8 @@ pub fn router(state: AppState) -> Router {
 }
 
 /// Serves until SIGINT or SIGTERM, then waits for active requests up to the
-/// configured timeout. The timeout stops waiting for axum; it does not abort
-/// axum's independently spawned connection tasks.
+/// configured timeout. Remaining connection tasks and handlers are canceled
+/// and joined before worker shutdown begins.
 pub async fn serve(state: AppState) -> Result<(), std::io::Error> {
     serve_with_shutdown(state, shutdown_signal()).await
 }
@@ -72,7 +72,7 @@ where
 /// Listener and router injection lets drain tests own a deliberately pending
 /// request without timing races or changes to the production route surface.
 async fn serve_router<F>(
-    listener: TcpListener,
+    mut listener: TcpListener,
     routes: Router,
     shutdown: F,
     drain_deadline: Duration,
@@ -80,46 +80,48 @@ async fn serve_router<F>(
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    // `shutdown_started` fires the moment a signal arrives, which is *before*
-    // draining finishes. It is what starts the drain clock below.
-    let (shutdown_started, drain_clock) = tokio::sync::oneshot::channel::<()>();
-
-    let server = axum::serve(listener, routes).with_graceful_shutdown(async move {
-        shutdown.await;
-        // The receiver is only dropped if the server already stopped, in which
-        // case nobody is waiting on the deadline.
-        let _ = shutdown_started.send(());
-    });
-
-    tokio::select! {
-        // Normal path: every in-flight request finished and the server
-        // returned on its own.
-        result = server => result,
-
-        // Stop waiting after the deadline. Axum spawns connection tasks that
-        // outlive this future, so requests may continue during worker shutdown.
-        // Enforcing connection cancellation requires owning those tasks or
-        // signaling them explicitly.
-        () = drain_timeout(drain_clock, drain_deadline) => {
-            let timeout_secs = drain_deadline.as_secs();
-            tracing::warn!(
-                timeout_secs,
-                "shutdown drain deadline exceeded; dropping remaining connections"
-            );
-            Ok(())
+    // Own HTTP/1 connection tasks so the deadline can cancel handlers and
+    // response streams. This preserves the protocol enabled by our axum build.
+    let mut connections = tokio::task::JoinSet::new();
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    tokio::pin!(shutdown);
+    loop {
+        tokio::select! {
+            biased;
+            () = &mut shutdown => break,
+            _ = connections.join_next(), if !connections.is_empty() => {},
+            (socket, _) = axum::serve::Listener::accept(&mut listener) => {
+                let service = hyper_util::service::TowerToHyperService::new(routes.clone());
+                let mut stopped = stopped.clone();
+                connections.spawn(async move {
+                    let builder = hyper::server::conn::http1::Builder::new();
+                    let connection = builder.serve_connection(hyper_util::rt::TokioIo::new(socket), service);
+                    tokio::pin!(connection);
+                    let result = tokio::select! {
+                        result = &mut connection => result,
+                        _ = stopped.changed() => {
+                            connection.as_mut().graceful_shutdown();
+                            connection.await
+                        }
+                    };
+                    if let Err(error) = result {
+                        tracing::debug!(%error, "HTTP connection ended with an error");
+                    }
+                });
+            }
         }
     }
-}
-
-/// Resolves `deadline` after a shutdown signal is observed, and never before.
-async fn drain_timeout(started: tokio::sync::oneshot::Receiver<()>, deadline: Duration) {
-    if started.await.is_err() {
-        // The sender was dropped without signaling: the server finished for
-        // some other reason. Never resolve, so this branch cannot win the
-        // race and swallow the server's own result.
-        std::future::pending::<()>().await;
+    drop(listener);
+    let _ = stop.send(true);
+    tokio::select! {
+        () = async { while connections.join_next().await.is_some() {} } => {},
+        () = tokio::time::sleep(drain_deadline) => {
+            tracing::warn!("shutdown deadline exceeded; canceling remaining HTTP connections");
+            connections.abort_all();
+            while connections.join_next().await.is_some() {}
+        }
     }
-    tokio::time::sleep(deadline).await;
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

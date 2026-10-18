@@ -181,3 +181,12 @@ from this key; do not create a static Apple client-secret value.
 
 Sources: [Apple web configuration](https://developer.apple.com/help/account/capabilities/configure-sign-in-with-apple-for-the-web),
 [Apple private key creation](https://developer.apple.com/help/account/capabilities/create-a-sign-in-with-apple-private-key).
+
+## Granting the first administrator
+
+After the intended user signs in, obtain the UUID from `/api/me` and run
+`docker compose exec api pinvoyager-admin YOUR-ACCOUNT-UUID` from the production
+Compose directory. The image contains both release Rust binaries, with debug
+assertions disabled. See [site administration](site-administration.md#bootstrap)
+for outputs and exit status. Remove any old `--initial-admin-email` Compose
+command before recreating the API container; the API rejects that removed option.

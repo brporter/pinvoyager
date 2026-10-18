@@ -150,3 +150,16 @@ it("links administrators to administration and closes the account menu", async (
   expect(screen.getByTestId("location")).toHaveTextContent("/admin");
   expect(screen.queryByRole("link", { name: "Site administration" })).not.toBeInTheDocument();
 });
+
+it("keeps the route and offers retry after logout fails", async () => {
+  mocks.signOut.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(undefined);
+  const user = userEvent.setup();
+  renderMenu();
+  await user.click(screen.getByRole("button", { name: /Account/ }));
+  await user.click(screen.getByRole("button", { name: "Sign out" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not sign out");
+  expect(screen.getByTestId("location")).toHaveTextContent("/settings");
+  await user.click(screen.getByRole("button", { name: "Retry sign out" }));
+  await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

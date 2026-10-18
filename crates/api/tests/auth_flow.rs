@@ -38,11 +38,11 @@ impl Drop for ScratchRoot {
 }
 
 async fn app(pool: PgPool, issuer: &Url, root: &ScratchRoot) -> Router {
-    app_with_providers(pool, issuer, root, false, false).await
+    app_with_providers(pool, issuer, root, false).await
 }
 
 async fn app_with_microsoft(pool: PgPool, issuer: &Url, root: &ScratchRoot) -> Router {
-    app_with_providers(pool, issuer, root, true, false).await
+    app_with_providers(pool, issuer, root, true).await
 }
 
 async fn app_with_providers(
@@ -50,7 +50,6 @@ async fn app_with_providers(
     issuer: &Url,
     root: &ScratchRoot,
     microsoft_enabled: bool,
-    initial_admin: bool,
 ) -> Router {
     let mut config: Config = serde_json::from_value(json!({
         "server": { "bind": "127.0.0.1:0", "request_timeout_secs": 10 },
@@ -84,14 +83,6 @@ async fn app_with_providers(
     }))
     .expect("valid test config");
 
-    if initial_admin {
-        config.auth.initial_admins =
-            pinvoyager_api::initial_admin::InitialAdmins::parse_args([std::ffi::OsString::from(
-                "--initial-admin-email=bootstrap@gmail.com",
-            )])
-            .expect("arguments")
-            .expect("run");
-    }
     config.auth.dev_login = true;
     let providers = ProviderRegistry::from_config(&config.auth).await;
     http::router(AppState::new(
@@ -814,10 +805,10 @@ async fn retired_provider_start_callback_and_link_requests_return_not_found(pool
 }
 
 #[sqlx::test]
-async fn verified_bootstrap_email_grants_admin_before_the_callback_session_is_used(pool: PgPool) {
+async fn verified_email_does_not_grant_admin(pool: PgPool) {
     let mock = support::MockOidcProvider::start().await;
     let root = ScratchRoot::new();
-    let app = app_with_providers(pool, mock.issuer(), &root, false, true).await;
+    let app = app_with_providers(pool, mock.issuer(), &root, false).await;
     let flow = start_flow(&app, mock.issuer(), "/admin").await;
     let code = mock
         .token()
@@ -830,7 +821,7 @@ async fn verified_bootstrap_email_grants_admin_before_the_callback_session_is_us
         send(&app, "GET", "/api/admin/users", Some(&cookie))
             .await
             .status(),
-        StatusCode::OK
+        StatusCode::FORBIDDEN
     );
 }
 
@@ -839,7 +830,7 @@ async fn verified_bootstrap_email_grants_admin_before_the_callback_session_is_us
 async fn provider_and_development_signins_apply_the_same_account_policy(pool: PgPool) {
     let mock = MockOidcProvider::start().await;
     let root = ScratchRoot::new();
-    let app = app_with_providers(pool.clone(), mock.issuer(), &root, false, true).await;
+    let app = app_with_providers(pool.clone(), mock.issuer(), &root, false).await;
     let subject = "bootstrap@gmail.com";
     let mut account_id = None;
     for development in [false, true, false] {
@@ -865,7 +856,9 @@ async fn provider_and_development_signins_apply_the_same_account_policy(pool: Pg
                         .method("POST")
                         .uri("/auth/dev/login")
                         .header(header::CONTENT_TYPE, "application/json")
-                        .body(Body::from(json!({"subject":subject}).to_string()))
+                        .body(Body::from(
+                            json!({"subject":subject,"grant_admin":true}).to_string(),
+                        ))
                         .expect("request"),
                 )
                 .await
@@ -907,12 +900,16 @@ async fn provider_and_development_signins_apply_the_same_account_policy(pool: Pg
             id,
             "both paths use the same account"
         );
-        assert_eq!(me["user"]["is_site_admin"], true);
+        assert_eq!(me["user"]["is_site_admin"], development);
         assert_eq!(
             send(&app, "GET", "/api/admin/users", Some(&cookie))
                 .await
                 .status(),
-            StatusCode::OK
+            if development {
+                StatusCode::OK
+            } else {
+                StatusCode::FORBIDDEN
+            }
         );
         let seen_recently: bool = sqlx::query_scalar(
             "SELECT last_seen_at > now() - interval '1 minute' FROM identities WHERE user_id=$1",

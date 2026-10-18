@@ -30,13 +30,15 @@ async fn entrypoint(args: impl IntoIterator<Item = std::ffi::OsString>) -> ExitC
 async fn run(
     args: impl IntoIterator<Item = std::ffi::OsString>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let Some(initial_admins) = pinvoyager_api::initial_admin::InitialAdmins::parse_args(args)?
-    else {
-        print!("{}", pinvoyager_api::initial_admin::HELP);
+    let args: Vec<_> = args.into_iter().collect();
+    if args.len() == 1 && (args[0] == "--help" || args[0] == "-h") {
+        println!("Usage: pinvoyager-api");
         return Ok(());
-    };
-    let mut config = Config::load()?;
-    config.auth.initial_admins = initial_admins;
+    }
+    if !args.is_empty() {
+        return Err("Usage: pinvoyager-api (no startup arguments supported)".into());
+    }
+    let config = Config::load()?;
     let provider = telemetry::init(&config.telemetry)?;
     let result = run_service(config).await;
     telemetry::shutdown(provider).await;

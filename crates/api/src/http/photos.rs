@@ -177,7 +177,8 @@ async fn upload(
 }
 
 /// Ingests one file and attempts to remove its temporary path after success
-/// or failure. Cleanup failures are logged without replacing the ingest result.
+/// or failure. Cancellation drops a shared lease that schedules removal as well.
+/// Cleanup failures are logged without replacing the ingest result.
 async fn ingest(
     state: &AppState,
     owner_id: Uuid,
@@ -188,14 +189,14 @@ async fn ingest(
 ) -> Result<PhotoResponse, Rejection> {
     // Content addressing means no caller-supplied string ever reaches the
     // filesystem — including here, where the name is a fresh uuid.
-    let temp_path = temp_dir.join(format!("{}.part", Uuid::now_v7()));
+    let (temporary, file) = crate::photos::temporary::TemporaryUpload::create(temp_dir).await?;
 
     let result = ingest_part(
-        state, owner_id, voyage_id, multipart, &temp_path, upload_key,
+        state, owner_id, voyage_id, multipart, &temporary, file, upload_key,
     )
     .await;
 
-    discard_failed_upload(&temp_path).await;
+    discard_failed_upload(temporary.path()).await;
 
     result
 }
@@ -218,14 +219,13 @@ async fn ingest_part(
     owner_id: Uuid,
     voyage_id: Uuid,
     multipart: &mut Field<'_>,
-    temp_path: &FsPath,
+    temporary: &crate::photos::temporary::TemporaryUpload,
+    mut file: tokio::fs::File,
     upload_key: Option<&str>,
 ) -> Result<PhotoResponse, Rejection> {
     let limits = &state.config.photos;
 
-    let mut file = tokio::fs::File::create(temp_path)
-        .await
-        .map_err(PhotoError::Storage)?;
+    let temp_path = temporary.path();
 
     let mut header = Vec::with_capacity(SNIFF_BYTES);
     let mut format: Option<ImageFormat> = None;
@@ -268,7 +268,7 @@ async fn ingest_part(
     };
 
     let max_megapixels = limits.max_megapixels;
-    let probe_path = temp_path.to_path_buf();
+    let probe_file = temporary.clone();
 
     // D8: the dimension probe, the hash and the EXIF read are all CPU-bound or
     // blocking, and they run as **one** blocking task rather than three, per
@@ -280,20 +280,22 @@ async fn ingest_part(
     // call site decides whether it is a 415 or a 422. The outer `?` is the
     // panic case, which for a decoder handed hostile bytes is a real one.
     let probed = run_blocking_infallible(move || {
+        // Keep the temporary file and its lock alive if the request is canceled.
+        let probe_path = probe_file.path();
         // Dimension check, before any full decode: a 50,000 × 50,000 PNG is a few
         // hundred kilobytes on disk and about 10 GB decoded, so only a pixel
         // count catches it — a byte-size limit never will.
         let (width, height) = tracing::info_span!("photo.validate").in_scope(|| {
-            let dimensions = validate::probe_dimensions(&probe_path, format)?;
+            let dimensions = validate::probe_dimensions(probe_path, format)?;
             validate::check_pixel_budget(dimensions.0, dimensions.1, max_megapixels)?;
             Ok::<_, PhotoError>(dimensions)
         })?;
 
         // Only now, on bytes already known to be an image of a sane size.
         let hash =
-            tracing::info_span!("photo.hash").in_scope(|| ContentHash::of_file(&probe_path))?;
+            tracing::info_span!("photo.hash").in_scope(|| ContentHash::of_file(probe_path))?;
         // Read from the original. Absent EXIF is the normal case, not an error.
-        let exif = tracing::info_span!("photo.exif").in_scope(|| exif::extract(&probe_path));
+        let exif = tracing::info_span!("photo.exif").in_scope(|| exif::extract(probe_path));
 
         Ok::<_, PhotoError>((width, height, hash, exif))
     })
@@ -696,8 +698,9 @@ fn http_date(time: SystemTime) -> String {
 // ---------------------------------------------------------------------------
 
 /// Deletes an owned photo and schedules content cleanup in the same transaction.
-/// After commit, cleanup locks the content and removes files only if no photo
-/// still references them. Missing or foreign photos return 404.
+/// Background maintenance locks the content and removes files only if no photo
+/// still references them. The request returns after the database commit.
+/// Missing or foreign photos return 404.
 pub(super) async fn destroy(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -728,13 +731,6 @@ pub(super) async fn destroy(
         crate::photos::cleanup::schedule(&mut tx, &hash).await?;
     }
     tx.commit().await?;
-    if orphaned
-        && let Err(error) =
-            crate::photos::cleanup::clean(&state.pool, &state.config.photos.storage_root, &hash)
-                .await
-    {
-        tracing::warn!(%error, "photo deletion committed; file cleanup will be retried");
-    }
     Ok(StatusCode::NO_CONTENT)
 }
 

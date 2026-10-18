@@ -1,6 +1,6 @@
 //! Shared account policy and session creation after identity verification or
 //! the explicitly enabled development bypass. Accounts match provider/subject;
-//! eligible emails grant roles but never select or merge accounts.
+//! development requests may explicitly grant administration.
 
 use uuid::Uuid;
 
@@ -29,11 +29,13 @@ pub(crate) enum SignInIdentity<'a> {
     Development {
         provider: ProviderKind,
         subject: &'a str,
+        grant_admin: bool,
     },
 }
 
 /// Resolves or creates an account, rejects suspended accounts, records identity
-/// activity, applies the initial-admin list, and creates an opaque session atomically.
+/// activity, and creates an opaque session atomically. Debug-only development
+/// requests may grant administration in the same transaction.
 /// Returns the account ID and raw session token after commit. Concurrent first
 /// sign-ins that collide return a generic retryable 400; other database failures
 /// propagate. Development callers must first enforce `auth.dev_login`.
@@ -41,18 +43,24 @@ pub(crate) async fn sign_in(
     state: &AppState,
     identity: SignInIdentity<'_>,
 ) -> AppResult<(Uuid, SessionToken)> {
-    let (kind, subject, avatar_url, admin_email, source) = match identity {
+    #[cfg(debug_assertions)]
+    let grant_admin = matches!(
+        &identity,
+        SignInIdentity::Development {
+            grant_admin: true,
+            ..
+        }
+    );
+    let (kind, subject, avatar_url) = match identity {
         SignInIdentity::Verified(identity) => (
             identity.provider,
             identity.subject.as_str(),
             identity.avatar_url.as_deref(),
-            identity.admin_email.as_deref(),
-            "provider",
         ),
         #[cfg(debug_assertions)]
-        SignInIdentity::Development { provider, subject } => {
-            (provider, subject, None, Some(subject), "development")
-        }
+        SignInIdentity::Development {
+            provider, subject, ..
+        } => (provider, subject, None),
     };
     let provider = DbProvider::from(kind);
 
@@ -63,7 +71,7 @@ pub(crate) async fn sign_in(
     let user_id = match identities::find_by_provider_subject(&mut *tx, provider, subject).await? {
         Some(existing) => {
             // Acquire the write lock before checking status: concurrent
-            // eligible sign-ins must not both upgrade a shared lock to promote.
+            // sign-ins must not both upgrade a shared lock to promote.
             sqlx::query("SELECT id FROM users WHERE id=$1 FOR UPDATE")
                 .bind(existing.user_id)
                 .execute(&mut *tx)
@@ -94,21 +102,14 @@ pub(crate) async fn sign_in(
         }
     };
 
-    let promoted = if admin_email
-        .is_some_and(|email| state.config.auth.initial_admins.matches(email))
-    {
-        sqlx::query("UPDATE users SET is_site_admin=true,updated_at=now() WHERE id=$1 AND NOT is_site_admin AND NOT suspended")
-            .bind(user_id).execute(&mut *tx).await?.rows_affected() > 0
-    } else {
-        false
-    };
+    #[cfg(debug_assertions)]
+    if grant_admin {
+        sqlx::query("UPDATE users SET is_site_admin=true,updated_at=now() WHERE id=$1 AND NOT is_site_admin")
+            .bind(user_id).execute(&mut *tx).await?;
+    }
     let token = session::create(&mut *tx, user_id, &state.config.auth.session).await?;
 
     tx.commit().await?;
-    if promoted {
-        tracing::info!(%user_id, provider = kind.as_str(), source, "initial administrator granted");
-    }
-
     Ok((user_id, token))
 }
 

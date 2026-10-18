@@ -5,7 +5,7 @@
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError, NetworkError, createVoyage } from "../../api/client";
@@ -821,4 +821,74 @@ it("ignores a retry for an item removed from the batch", async () => {
   act(() => result.current.retry("removed-item"));
   expect(screenMocks.upload).not.toHaveBeenCalled();
   expect(result.current.items).toEqual([]);
+});
+
+it("resets the batch and aborts queued work when the upload destination changes", async () => {
+  const user = userEvent.setup();
+  let finish!: (result: { photos: Photo[] }) => void;
+  screenMocks.upload.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { container } = renderScreen(
+    <>
+      <Link to="/upload?voyage=v2">Another voyage</Link>
+      <Link to="/upload">New voyage</Link>
+      <Upload />
+    </>,
+    { path: "/upload?voyage=v1", auth: authState(ADA) },
+  );
+  await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, [
+    fileOfSize(8, "first.jpg"),
+    fileOfSize(8, "queued.jpg"),
+  ]);
+  const oldSignal = screenMocks.upload.mock.calls[0][0].signal as AbortSignal;
+  await user.click(screen.getByRole("link", { name: "Another voyage" }));
+  expect(oldSignal.aborted).toBe(true);
+  expect(screen.queryByText("first.jpg")).not.toBeInTheDocument();
+  await act(async () => finish({ photos: [photo()] }));
+  expect(screenMocks.upload).toHaveBeenCalledTimes(1);
+  await user.upload(
+    container.querySelector<HTMLInputElement>('input[type="file"]')!,
+    fileOfSize(8, "new.jpg"),
+  );
+  await waitFor(() =>
+    expect(screenMocks.upload).toHaveBeenLastCalledWith(
+      expect.objectContaining({ voyageId: "v2" }),
+    ),
+  );
+  await user.click(screen.getByRole("link", { name: "New voyage" }));
+  expect(screen.getByRole("textbox", { name: /Voyage Name/ })).toHaveValue("");
+});
+
+it("does not let an abandoned draft creation replace the selected voyage", async () => {
+  const user = userEvent.setup();
+  let finish!: (value: { id: string }) => void;
+  screenMocks.createVoyage.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { container } = renderScreen(
+    <>
+      <Link to="/upload?voyage=v2">Another voyage</Link>
+      <Upload />
+    </>,
+    { path: "/upload", auth: authState(ADA) },
+  );
+  await user.type(screen.getByRole("textbox", { name: /Voyage Name/ }), "Trip");
+  await user.type(screen.getByRole("textbox", { name: /Voyage Description/ }), "Description");
+  await user.click(screen.getByRole("button", { name: "Next: upload photos" }));
+  await user.click(screen.getByRole("link", { name: "Another voyage" }));
+  await act(async () => finish({ id: "abandoned" }));
+  await user.upload(
+    container.querySelector<HTMLInputElement>('input[type="file"]')!,
+    fileOfSize(8),
+  );
+  await waitFor(() =>
+    expect(screenMocks.upload).toHaveBeenCalledWith(expect.objectContaining({ voyageId: "v2" })),
+  );
 });

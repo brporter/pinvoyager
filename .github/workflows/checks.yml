@@ -61,7 +61,10 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo install cargo-llvm-cov --locked
       - run: cargo coverage -- --test-threads=1
-      - run: cargo test --release --test auth_build_mode
+      - name: Verify release authentication and operator CLI
+        run: cargo test --release --test auth_build_mode --test admin_cli
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "false"
       - run: cargo llvm-cov report --lcov --output-path backend-coverage.lcov
         if: always()
       - uses: actions/upload-artifact@v6

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# PinVoyager API multi-stage build. The builder compiles the release binary;
-# the runtime includes the binary, native image libraries, certificates, and curl.
+# PinVoyager API multi-stage build. The builder compiles both release binaries;
+# the runtime includes the API, operator tool, native libraries, certificates, and curl.
 # Both stages use the same Debian codename for runtime library compatibility.
 ARG RUST_VERSION=1.94
 ARG DEBIAN_CODENAME=trixie
@@ -28,17 +28,20 @@ WORKDIR /app
 # Regenerate the metadata after query changes and commit it.
 ARG SQLX_OFFLINE=true
 ENV SQLX_OFFLINE=${SQLX_OFFLINE}
+# Forging handlers and grants must be absent from deployed binaries.
+ENV CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=false
 
 # --- dependency layer -----------------------------------------------------
 # Copy only the manifests, stand up a placeholder crate with the same targets
-# as the real one (a `[lib]` and a `[[bin]]`), and build it. Every third-party
+# as the real one (a library and two binaries), and build it. Every third-party
 # crate compiles here, into a layer keyed on Cargo.toml/Cargo.lock alone — so
 # editing a .rs file below reuses this layer instead of recompiling the world.
 COPY Cargo.toml Cargo.lock ./
 COPY crates/api/Cargo.toml crates/api/Cargo.toml
-RUN mkdir -p crates/api/src \
+RUN mkdir -p crates/api/src/bin \
     && echo 'fn main() {}' > crates/api/src/main.rs \
     && : > crates/api/src/lib.rs \
+    && echo 'fn main() {}' > crates/api/src/bin/pinvoyager-admin.rs \
     && cargo build --release --locked \
     && rm -rf crates/api/src
 
@@ -55,7 +58,7 @@ RUN mkdir -p crates/api/migrations
 # placeholder fingerprint and stamp the sources so the rebuild is guaranteed.
 RUN rm -rf target/release/.fingerprint/pinvoyager-api-* \
     && touch crates/api/src/lib.rs crates/api/src/main.rs \
-    && cargo build --release --locked --bin pinvoyager-api
+    && cargo build --release --locked --bins
 
 # --------------------------------------------------------------------------
 # runtime
@@ -91,6 +94,9 @@ WORKDIR /app
 # but cannot rewrite it.
 COPY --from=builder --chown=root:root \
     /app/target/release/pinvoyager-api /usr/local/bin/pinvoyager-api
+
+COPY --from=builder --chown=root:root \
+    /app/target/release/pinvoyager-admin /usr/local/bin/pinvoyager-admin
 
 # Migrations are embedded in the binary and applied at startup.
 

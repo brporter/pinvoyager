@@ -3,8 +3,7 @@
 //! A caller supplies a provider and subject and receives a session for that
 //! identity, creating an account if needed. This bypass can impersonate existing
 //! accounts. It is compiled only with debug assertions and additionally requires
-//! `auth.dev_login` to be enabled. A subject matching an initial-admin email also
-//! grants administrator access without email verification.
+//! `auth.dev_login` to be enabled. Callers may explicitly request administration.
 
 use axum::Json;
 use axum::extract::State;
@@ -19,10 +18,11 @@ use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct DevLoginRequest {
-    /// The provider subject to sign in as. An email-shaped string is the
-    /// convenient thing to type. It remains the opaque identity key and is also
-    /// compared with configured initial-admin emails for development role grants.
+    /// Opaque provider subject to impersonate.
     pub subject: String,
+    /// Promote the account without changing suspension status. Defaults to false.
+    #[serde(default)]
+    pub grant_admin: bool,
     /// Which provider this forged identity claims to come from. Defaults to
     /// Google, which is only a convenience — nothing contacts it.
     #[serde(default)]
@@ -70,6 +70,7 @@ pub async fn login(
         SignInIdentity::Development {
             provider: kind,
             subject: &request.subject,
+            grant_admin: request.grant_admin,
         },
     )
     .await?;

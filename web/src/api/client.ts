@@ -172,33 +172,11 @@ function retryAfterOf(value: string | null): number | null {
 
 /** Reads an error body, tolerating one that is not JSON at all. */
 async function errorBodyOf(response: Response): Promise<ApiErrorBody> {
-  const fallback: ApiErrorBody = {
-    code: "unknown",
-    message: response.statusText || "The request failed.",
-  };
-
-  let text: string;
+  const fallback = response.statusText || "The request failed.";
   try {
-    text = await response.text();
+    return parseErrorText(await response.text(), fallback);
   } catch {
-    return fallback;
-  }
-  if (!text) return fallback;
-
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed === null || typeof parsed !== "object") return fallback;
-
-    const body = parsed as Partial<ApiErrorBody>;
-    return {
-      code: typeof body.code === "string" ? body.code : fallback.code,
-      message: typeof body.message === "string" ? body.message : fallback.message,
-      errors: Array.isArray(body.errors) ? body.errors : undefined,
-    };
-  } catch {
-    // An HTML error page from a proxy in front of the service, most likely.
-    // The status is still the useful part.
-    return fallback;
+    return parseErrorText("", fallback);
   }
 }
 
@@ -526,7 +504,7 @@ export function uploadPhotos(
       reject(
         errorFrom(
           xhr.status,
-          parseErrorText(xhr.responseText, xhr.statusText),
+          parseErrorText(xhr.responseText, xhr.statusText || "The upload failed."),
           requestId,
           retryAfterOf(xhr.getResponseHeader("retry-after")),
         ),
@@ -537,12 +515,11 @@ export function uploadPhotos(
   });
 }
 
-/** The `XMLHttpRequest` half of {@link errorBodyOf}, which cannot be shared
- *  because that one is async over a `Response`. */
-function parseErrorText(text: string, statusText: string): ApiErrorBody {
+/** Shared error-body parsing for fetch and XHR; transport code supplies the fallback message. */
+function parseErrorText(text: string, fallbackMessage: string): ApiErrorBody {
   const fallback: ApiErrorBody = {
     code: "unknown",
-    message: statusText || "The upload failed.",
+    message: fallbackMessage,
   };
   if (!text) return fallback;
 

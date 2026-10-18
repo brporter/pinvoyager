@@ -10,6 +10,7 @@ pub struct User {
     pub id: Uuid,
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
+    pub is_site_admin: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -27,7 +28,7 @@ pub async fn create(
         User,
         "INSERT INTO users (id, display_name, avatar_url)
          VALUES ($1, $2, $3)
-         RETURNING id, display_name, avatar_url, created_at",
+         RETURNING id, display_name, avatar_url, created_at, is_site_admin",
         id,
         display_name,
         avatar_url,
@@ -47,7 +48,7 @@ pub async fn find_by_id(
 ) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as!(
         User,
-        "SELECT id, display_name, avatar_url, created_at FROM users WHERE id = $1",
+        "SELECT id, display_name, avatar_url, created_at, is_site_admin FROM users WHERE id = $1",
         id,
     )
     .fetch_optional(executor)
@@ -61,7 +62,7 @@ pub async fn find_by_profile_name(
 ) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as!(
         User,
-        "SELECT u.id, u.display_name, u.avatar_url, u.created_at FROM users u
+        "SELECT u.id, u.display_name, u.avatar_url, u.created_at, u.is_site_admin FROM users u
          JOIN profile_names n ON n.user_id = u.id WHERE n.name = $1",
         name,
     )
@@ -84,4 +85,38 @@ pub async fn require_active(
         Some(false) => Ok(()),
         _ => Err(crate::error::AppError::Forbidden),
     }
+}
+
+/// Account metadata for administrator views. Callers must authorize the actor.
+#[derive(sqlx::FromRow)]
+pub struct AccountSummary {
+    pub id: Uuid,
+    pub display_name: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub is_site_admin: bool,
+    pub suspended: bool,
+    pub voyage_count: i64,
+    pub photo_count: i64,
+}
+
+/// Loads a descending account page or a single account using the same projection.
+/// Missing accounts return an empty vector; database failures return an error.
+pub async fn account_summaries(
+    executor: impl PgExecutor<'_>,
+    id: Option<Uuid>,
+    before: Option<Uuid>,
+    limit: i64,
+) -> Result<Vec<AccountSummary>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT u.id, u.display_name, u.created_at, u.is_site_admin, u.suspended,
+        (SELECT count(*) FROM voyages v WHERE v.owner_id=u.id) AS voyage_count,
+        (SELECT count(*) FROM photos p WHERE p.owner_id=u.id) AS photo_count
+        FROM users u WHERE ($1::uuid IS NULL OR u.id=$1) AND ($2::uuid IS NULL OR u.id<$2)
+        ORDER BY u.id DESC LIMIT $3",
+    )
+    .bind(id)
+    .bind(before)
+    .bind(limit)
+    .fetch_all(executor)
+    .await
 }

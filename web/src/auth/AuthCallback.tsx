@@ -174,8 +174,8 @@ export function AuthCallback() {
         alert
         body={
           <>
-            It is linked to a different PinVoyager account. To bring it to this account, sign in to
-            the other one first and unlink it there.
+            It is linked to a different PinVoyager account. Sign in to the account that already uses
+            this identity.
             <br />
             <br />
             {/* Link conflicts leave both accounts unchanged. */}

@@ -41,8 +41,8 @@ flowchart LR
 ## Startup, request handling, and shutdown
 
 `main::run` loads configuration, initializes telemetry, and calls `run_service`.
-Repeatable `--initial-admin-email EMAIL` startup arguments configure verified-email
-administrator grants during provider sign-in; see [site administration](site-administration.md).
+The separate `pinvoyager-admin UUID` operator binary grants administrator roles;
+see [site administration](site-administration.md).
 The service connects to PostgreSQL, runs embedded migrations, initializes
 providers, starts image workers, and serves HTTP. A failed provider is logged
 and disabled independently. Configuration uses defaults, optional `config.toml`,
@@ -57,9 +57,9 @@ client handles.
 
 When the server receives SIGINT or SIGTERM, it stops accepting new HTTP requests and
 lets requests already being processed finish. After `server.shutdown_timeout_secs` (30
-seconds by default), `serve_router` stops waiting for axum. Known defect: dropping that
-future does not abort axum's connection tasks, so active handlers can continue during
-worker shutdown. `VariantQueue::shutdown` then stops maintenance, closes the queue to
+seconds by default), `serve_router` aborts and joins remaining HTTP/1 connection
+tasks, canceling their handlers and response streams before worker shutdown. It owns
+those tasks through a `JoinSet`; the reverse proxy handles public TLS. `VariantQueue::shutdown` then stops maintenance, closes the queue to
 new jobs, and waits for accepted jobs to finish. This step has a separate timeout
 of the same duration; if it expires, the worker task is
 aborted. Maintenance retries interrupted pending rows after restart. Telemetry flushes
@@ -88,11 +88,11 @@ the absolute session limit. Periodic maintenance removes expired sessions and
 authorization attempts.
 
 After provider verification, `auth/sign_in.rs::sign_in` resolves the account,
-checks suspension, updates identity activity, applies initial-admin policy, and
+checks suspension, updates identity activity, and
 creates the opaque session in one transaction. The debug-only forging endpoint
 calls the same function with an explicitly marked development identity after
 checking configuration and request inputs. Release builds omit both that endpoint
-and the development identity variant. See the
+and the development identity variant, including its optional administrator grant. See the
 [shared sign-in pipeline](architecture/auth-flow.md#shared-sign-in-pipeline).
 
 Accounts choose unique lowercase display names. `profile_names` stores current
@@ -178,14 +178,20 @@ acceptance, not completed conversion.
 Workers decode/orient once and encode three WebP sizes without copied metadata.
 They recheck the row under the content lock before final writes and marking it
 ready. Periodic recovery walks all pending rows in pages of 1,000; a failed
-conversion is marked failed. Multiple processes can perform duplicate encoding,
+conversion changes a still-pending row to failed. A late failure from a duplicate
+job cannot overwrite ready status. Multiple processes can perform duplicate encoding,
 but final writes/deletion serialize by content hash.
 
-Deletion records cleanup in the same database transaction and removes files
-only after commit. Cleanup reacquires the content lock and rechecks references,
+Account, voyage, and photo deletion record cleanup in the same database transaction
+and return 204 after commit. Worker maintenance removes files in the background;
+HTTP handlers do not wait for storage removal. Cleanup reacquires the content lock and rechecks references,
 so another upload can adopt shared bytes safely. Failed removal stays queued
-for retry. PostgreSQL and the filesystem do not share a transaction; a process
-crash can leave unreferenced originals or temporary files.
+for retry. Maintenance selects at most 1,000 due cleanup records per pass and defers
+failed attempts for 60 seconds, allowing newer records to progress. PostgreSQL and the filesystem do not share a transaction; a process
+crash can leave unreferenced originals. Temporary upload leases arrange removal
+when canceled; maintenance also removes unlocked UUID-named `.part` files older
+than 24 hours. Active uploads retain a filesystem lock, including during blocking
+probes, so the sweep skips them across API processes.
 
 Image delivery authorizes before opening a variant, evaluates validators, and
 streams successful bodies. Responses use `private, no-cache, must-revalidate`;

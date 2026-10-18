@@ -31,10 +31,15 @@ Secure controlled by configuration. Identity matching never merges by email.
 Provider linking starts with an authenticated account and refuses an identity
 already linked to another account.
 
-Known defect: the conflict message in `http/auth.rs::ALREADY_LINKED` and
-`web/src/auth/AuthCallback.tsx::AuthCallback` tells the user to unlink the identity
-from the other account. No unlink endpoint or UI is implemented. The message
-needs to describe the supported option of signing in to the existing account.
+A linking conflict tells the user to sign in to the account that already uses that
+identity. The callback screen offers that provider sign-in when the provider is
+recognized. There is no provider-unlink endpoint or UI. The API and callback copy
+are covered by `http/auth_tests.rs::linking_conflict_offers_an_existing_account_instead_of_unlinking`
+and `web/src/auth/__tests__/AuthCallback.test.tsx`.
+
+`OidcCore::exchange` verifies signature, issuer, audience, expiry, and nonce through
+`openidconnect`. Its default verifier does not impose an additional age or clock
+check on `iat`. Issue-time validation uses the library default.
 
 [`session::lookup_and_touch`](../../crates/api/src/auth/session.rs) enforces idle and
 absolute expiration. Defaults are 14 days idle and 90 days absolute. Database activity
@@ -43,10 +48,14 @@ server still rejects sessions whose idle deadline has passed. Periodic maintenan
 removes expired sessions and authorization attempts. Logout revokes the presented
 session and clears the cookie; it accepts missing or expired sessions.
 
-Known defect: `web/src/auth/AuthProvider.tsx::signOut` suppresses request failures,
-and `web/src/shell/AccountMenu.tsx::onSignOut` then navigates to Discover. If logout
-fails before reaching the server, the session remains active and the UI gives no
-failure message. The failure path also does not explicitly refresh `/api/me`.
+`web/src/auth/AuthProvider.tsx::signOut` propagates request failures.
+`web/src/shell/AccountMenu.tsx::onSignOut` navigates to Discover only after success.
+On failure, it keeps the current route and shows an alert that the session may still
+be active, with a Retry sign out button. Pending requests disable duplicate submission.
+`AuthProviderCallbacks.test.tsx` checks error propagation and `AccountMenu.test.tsx`
+checks failure, retry, and navigation. `/api/me` reads the administrator flag with the
+account fields through `db/repo/users.rs::find_by_id`; public profile responses still
+select their own public fields.
 
 Provider callback failures redirect to the frontend result screen. Client-side
 [`AuthCallback`](../../web/src/auth/AuthCallback.tsx) presents the status and a
@@ -74,7 +83,7 @@ flowchart TD
     Dev[Debug-only Forge a session] --> Check[Check development configuration and request]
     Check --> Shared
     Shared --> Account[Resolve account by provider and subject]
-    Account --> Policy[Reject suspension, update identity activity, apply initial-admin list]
+    Account --> Policy[Reject suspension, update identity activity]
     Policy --> Session[Create opaque session and commit transaction]
     Session --> Cookie[Shared session cookie construction]
     Cookie --> Redirect[Provider callback redirects]
@@ -85,26 +94,24 @@ The shared function resolves an existing account or creates one. Returning sign-
 lock the account before checking suspension and updating `identities.last_seen_at`.
 Both paths preserve an existing account's display name and avatar. A provider's
 avatar is used only when creating an account; development identities supply none.
-The initial-admin comparison uses an eligible verified email for provider sign-in
-and the supplied subject for development sign-in. Email never selects an account.
+Provider email claims never grant roles or select an account. Development identities
+include an optional `grant_admin` boolean that defaults to false.
 
 Account creation, identity activity, administrator promotion, and opaque session
 creation commit in one database transaction. A failure rolls back all of those
 writes. A concurrent first-sign-in identity collision returns a generic 400 asking
 the caller to start again; the next attempt can find the winning account. Other
-database failures propagate through the normal error handling. After commit, a
-promotion log records account ID, provider, and whether the source was `provider`
-or `development`. Both entry points use `http/auth.rs::session_cookie`; only their
-HTTP response formats differ. Provider linking remains a separate operation and
+database failures propagate through the normal error handling. Both entry points
+use `http/auth.rs::session_cookie`; only their HTTP response formats differ. Provider linking remains a separate operation and
 neither creates a session nor grants administrator access.
 
 `auth_flow.rs::provider_and_development_signins_apply_the_same_account_policy`
 alternates signed provider callbacks and forged sessions on one account, checking
-identity activity and immediate administrator access. `auth/dev_tests.rs` checks
-rollback when session insertion fails. `http/auth_tests.rs` checks both entry
+identity activity and administrator access only when development forging requests
+it. `auth/dev_tests.rs` checks rollback when session insertion fails. `http/auth_tests.rs` checks both entry
 points' handling of first-sign-in collisions. Run
 `cargo test --release --test auth_build_mode` to verify that the forging endpoint
-returns 404 even with `auth.dev_login = true` and an initial-admin list configured.
+returns 404 even with `auth.dev_login = true` and `grant_admin: true`.
 CI runs that release check in addition to the debug-build coverage suite.
 
 ## Microsoft personal and organizational accounts
@@ -184,14 +191,10 @@ attempts. Sign-in/link transactions lock the account through commit so they cann
 issue a session after suspension has completed. Enabling requires a fresh sign-in.
 See [site administration](../site-administration.md) for bootstrap and moderation.
 
-Startup `--initial-admin-email` arguments enable automatic role grants on eligible
-verified Google/Apple sign-ins. Google requires Gmail or Workspace ownership;
-Microsoft email claims cannot grant roles. Emails are transient grant inputs and
-do not change provider/subject account matching. The allowlist persists for the
-process lifetime, grants persist in PostgreSQL, and suspended accounts remain
-blocked. Provider email scopes are requested only while bootstrap is configured.
-The debug-only `auth/dev.rs::login` passes its supplied subject to the shared
-`auth/sign_in.rs::sign_in` policy without provider or email verification. It requires
-`auth.dev_login`; the shared function checks suspension and commits promotion with
-the forged session. The route does not exist in release builds.
-See [bootstrap security](../site-administration.md#security-assessment).
+The operator-only `pinvoyager-admin UUID` binary grants a role to an existing
+account directly in PostgreSQL. It leaves suspended accounts suspended and reports
+existing roles without changing the row. Provider sign-in never grants roles.
+The debug-only `auth/dev.rs::login` accepts `grant_admin: true`; the shared
+`auth/sign_in.rs::sign_in` checks suspension and commits promotion with the forged
+session. The development identity, optional grant code, and route do not exist in
+release builds. See [bootstrap security](../site-administration.md#security-assessment).

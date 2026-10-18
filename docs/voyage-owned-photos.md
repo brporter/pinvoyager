@@ -103,8 +103,9 @@ including after unpublishing. See [image processing and serving](photo-pipeline.
 `photos.voyage_id` is non-null; a composite foreign key enforces matching voyage
 and photo ownership. `voyage_photos` is a compatibility view over `photos`.
 Physical files use content hashes and can be shared by separate records. Deletion
-records cleanup in the row-deletion transaction and removes files only after
-commit. Cleanup locks the content hash and rechecks references; failures remain
+records cleanup in the row-deletion transaction and returns 204 after commit.
+Worker maintenance removes files in the background; the request does not wait
+for filesystem work. Cleanup locks the content hash and rechecks references; failures remain
 queued for retry. A failed database commit leaves referenced files intact.
 
 [`20261006000001_photos_belong_to_voyages.sql`](../crates/api/migrations/20261006000001_photos_belong_to_voyages.sql)

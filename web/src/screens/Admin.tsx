@@ -86,7 +86,7 @@ function AdminContent({ id, actorId }: { id?: string; actorId: string }) {
         <h1 className="pv-h2">{id ? "User administration" : "Site administration"}</h1>
         <p className="pv-muted">
           Storage includes original uploads and generated images. Shared content counts once per
-          account.
+          account. Totals may be up to a minute old.
         </p>
       </header>
       {notice && <p role="status">{notice}</p>}

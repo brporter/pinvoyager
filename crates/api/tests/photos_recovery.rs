@@ -43,7 +43,6 @@ fn worker_config(root: &ScratchRoot) -> Config {
         },
         telemetry: TelemetryConfig::default(),
         auth: AuthConfig {
-            initial_admins: Default::default(),
             base_url: "http://127.0.0.1:8080".parse().expect("valid base URL"),
             session: Default::default(),
             providers: Default::default(),
@@ -217,4 +216,29 @@ async fn processing_a_corrupt_original_marks_the_photo_failed(pool: PgPool) {
         .expect("read failed photo")
         .expect("photo remains in the library");
     assert_eq!(updated.variant_status, "failed");
+}
+
+#[sqlx::test]
+async fn delayed_failure_cannot_replace_a_successful_conversion(pool: PgPool) {
+    let id = a_pending_photo(&pool).await;
+    let mut success = pool.begin().await.expect("transaction");
+    photos::set_variant_status(&mut *success, id, "ready")
+        .await
+        .expect("ready");
+    let failure_pool = pool.clone();
+    let failure = tokio::spawn(async move {
+        photos::set_variant_status(&failure_pool, id, "failed")
+            .await
+            .expect("late failure");
+    });
+    success.commit().await.expect("commit success");
+    failure.await.expect("failure attempt");
+    assert_eq!(
+        photos::find_by_id(&pool, id)
+            .await
+            .expect("query")
+            .expect("photo")
+            .variant_status,
+        "ready"
+    );
 }

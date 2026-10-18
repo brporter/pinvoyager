@@ -29,6 +29,7 @@ pub mod decode;
 pub mod exif;
 pub mod rate_limit;
 pub mod storage;
+pub(crate) mod temporary;
 pub mod validate;
 pub mod variants;
 pub mod worker;
@@ -56,3 +57,5 @@ pub enum PhotoError {
     #[error("storage error")]
     Storage(#[source] std::io::Error),
 }
+
+pub mod account_storage;

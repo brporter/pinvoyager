@@ -25,6 +25,8 @@ export function AccountMenu({ user }: { user: CurrentUser }) {
   const { signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
 
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -54,10 +56,17 @@ export function AccountMenu({ user }: { user: CurrentUser }) {
 
   const onSignOut = useCallback(async () => {
     setOpen(false);
-    await signOut();
-    // Return to Discover after the sign-out action resolves, including when
-    // AuthProvider suppresses a failed logout request.
-    void navigate("/", { replace: true });
+    setSignOutFailed(false);
+    setSigningOut(true);
+    try {
+      await signOut();
+      void navigate("/", { replace: true });
+    } catch {
+      setSignOutFailed(true);
+      setOpen(true);
+    } finally {
+      setSigningOut(false);
+    }
   }, [navigate, signOut]);
 
   const name = user.display_name;
@@ -138,15 +147,21 @@ export function AccountMenu({ user }: { user: CurrentUser }) {
               Site administration
             </Link>
           )}
+          {signOutFailed && (
+            <p role="alert" className="pv-sm">
+              Could not sign out. Your session may still be active.
+            </p>
+          )}
           <button
             type="button"
             className="pv-btn pv-btn--ghost"
             style={ITEM_STYLE}
+            disabled={signingOut}
             onClick={() => {
               void onSignOut();
             }}
           >
-            <span className="pv-btn-label">Sign out</span>
+            <span className="pv-btn-label">{signOutFailed ? "Retry sign out" : "Sign out"}</span>
           </button>
         </div>
       ) : null}

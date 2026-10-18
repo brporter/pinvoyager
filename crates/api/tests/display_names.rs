@@ -413,12 +413,16 @@ async fn migration_retains_unique_valid_handles_and_requires_ambiguous_legacy_na
             .expect("avatars"),
         5
     );
-    assert!(
-        users::find_by_profile_name(&pool, "betaporter")
-            .await
-            .expect("lookup")
-            .is_some()
-    );
+    // Inspect this historical migration's schema directly; current repository
+    // projections may include columns added by later migrations.
+    let resolves: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users u JOIN profile_names n ON n.user_id=u.id
+         WHERE n.name='betaporter' AND u.display_name='betaporter')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("migrated name resolves");
+    assert!(resolves);
 }
 
 #[sqlx::test]

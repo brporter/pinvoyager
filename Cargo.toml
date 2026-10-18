@@ -17,6 +17,10 @@ todo = "warn"
 dbg_macro = "warn"
 unwrap_used = "warn"
 
+[profile.release]
+# Development authentication and role grants are compiled out of shipped binaries.
+debug-assertions = false
+
 # Opt-in performance measurements only; normal development/test profiles stay unchanged.
 [profile.photo-perf]
 inherits = "release"

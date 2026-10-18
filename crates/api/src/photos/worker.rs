@@ -234,8 +234,8 @@ async fn dispatch_owned(
         let config = config.clone();
         jobs.spawn(async move {
             if let Err(err) = process(&pool, &config, &job).await {
-                // `process` has already marked the row `failed`; this line is
-                // the *why*, which the row cannot carry.
+                // `process` attempts to mark pending rows failed; log the cause
+                // even when a duplicate job has already made the photo ready.
                 tracing::error!(
                     photo_id = %job.photo_id,
                     error = %err,
@@ -276,8 +276,8 @@ async fn recover(pool: PgPool, sender: mpsc::Sender<VariantJob>) {
 }
 
 /// Processes one photo and marks it ready after all variants are written.
-/// On failure, attempts to mark it failed and returns the original error.
-/// If marking fails, the pending row remains eligible for recovery.
+/// On failure, attempts to mark a still-pending row failed and returns the original
+/// error. Ready rows remain ready. If marking fails, pending rows remain recoverable.
 pub async fn process(
     pool: &PgPool,
     config: &Config,
@@ -306,7 +306,7 @@ pub async fn process(
             .await
         {
             tracing::error!(photo_id = %job.photo_id, error = %mark,
-                "could not mark photo failed; it stays pending for the next sweep");
+                "could not mark photo failed; pending rows remain eligible for recovery");
         }
         Err(err)
     }

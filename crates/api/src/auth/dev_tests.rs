@@ -49,6 +49,7 @@ async fn a_disabled_dev_login_is_indistinguishable_from_a_missing_route() {
     let result = invoke(
         state(lazy_pool(), false),
         DevLoginRequest {
+            grant_admin: false,
             display_name: None,
             subject: "person@example.test".to_owned(),
             provider: None,
@@ -65,6 +66,7 @@ async fn blank_subject_and_unknown_provider_are_bad_requests() {
     let blank = invoke(
         app.clone(),
         DevLoginRequest {
+            grant_admin: false,
             display_name: None,
             subject: " \t ".to_owned(),
             provider: None,
@@ -78,6 +80,7 @@ async fn blank_subject_and_unknown_provider_are_bad_requests() {
     let unknown = invoke(
         app,
         DevLoginRequest {
+            grant_admin: false,
             display_name: None,
             subject: "person@example.test".to_owned(),
             provider: Some("unknown".to_owned()),
@@ -104,6 +107,7 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
         invoke(
             app.clone(),
             DevLoginRequest {
+                grant_admin: false,
                 display_name: None,
                 subject: subject.clone(),
                 provider: Some("google".to_owned()),
@@ -128,6 +132,7 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
     let (second_jar, second_response) = invoke(
         app,
         DevLoginRequest {
+            grant_admin: false,
             display_name: None,
             subject: subject.clone(),
             provider: None,
@@ -174,21 +179,13 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
 
 #[sqlx::test]
 async fn session_failure_rolls_back_new_accounts_and_existing_account_changes(pool: PgPool) {
-    let mut app = state(pool.clone(), true);
-    std::sync::Arc::get_mut(&mut app.config)
-        .expect("unshared config")
-        .auth
-        .initial_admins =
-        crate::initial_admin::InitialAdmins::parse_args([std::ffi::OsString::from(
-            "--initial-admin-email=admin@example.test",
-        )])
-        .expect("arguments")
-        .expect("run");
+    let app = state(pool.clone(), true);
     sqlx::query("ALTER TABLE sessions ADD CONSTRAINT reject_test_sessions CHECK (false)")
         .execute(&pool)
         .await
         .expect("reject session inserts");
     let request = || DevLoginRequest {
+        grant_admin: true,
         subject: "admin@example.test".to_owned(),
         provider: None,
         display_name: None,

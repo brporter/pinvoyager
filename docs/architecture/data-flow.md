@@ -17,13 +17,15 @@ flowchart LR
 `ApiRequestError` for API failures. Uploads use XHR for transfer progress.
 [`api/types.ts`](../../web/src/api/types.ts) contains handwritten response types;
 backend-produced fixtures and frontend contract tests check representative shapes.
-There is no OpenAPI generation step.
+`client.ts::parseErrorText` handles error JSON for both fetch and XHR; fetch awaits
+body reading before calling that parser. There is no OpenAPI generation step.
 
 [`api/hooks.ts`](../../web/src/api/hooks.ts) owns query keys and ordinary mutations.
 Voyage reads include photo presentation data. Detail and list/profile queries poll
 every second while their returned data reports pending photos. Worker completion
-does not push directly to the browser. Successful logout clears cached account data;
-see the [authentication reference](auth-flow.md) for the unresolved failure path.
+does not push directly to the browser. Successful logout clears cached account data.
+A failed logout remains visible in the account menu with a retry action; it does
+not navigate away. See the [authentication reference](auth-flow.md).
 
 Voyage mutations update cached detail data and invalidate affected lists, discovery, and
 public-profile queries. Upload uses the shared creation hook, keeps the draft ID in the
@@ -31,12 +33,14 @@ URL, and retains per-file retry keys in its batch hook. Files and progress remai
 browser memory. Reloading resumes the draft, but the user must select files again. The
 query client and individual hooks share `retryOnlyTransient`.
 
-Known defect: `web/src/screens/Upload.tsx::Upload` initializes its destination from
-the URL only when it mounts. Navigating between upload URLs while React keeps that
-screen mounted changes the address bar but retains the previous voyage and batch.
-`upload/useUploadBatch.ts::uploadOne` then sends files to the retained voyage. The
-destination and batch must reset together when navigation selects another voyage
-or starts a new creation flow.
+`web/src/screens/Upload.tsx::Upload` remounts `UploadFlow` when navigation selects
+another voyage or starts a new creation flow. Unmounting aborts active uploads and
+prevents queued files from starting; details, progress, destination, and trace context
+reset together. A late draft-creation response cannot redirect an abandoned flow.
+The server may already have saved that draft. Recording a draft created by the current
+flow updates the URL while preserving the flow and its creation/upload trace.
+`web/src/screens/__tests__/Upload.test.tsx` checks destination changes and late replies;
+`VoyageUploadFlow.test.tsx` checks the trace handoff and upload/review lifecycle.
 
 On the server, [`http::router`](../../crates/api/src/http/mod.rs) composes routes and
 middleware for request IDs, tracing, timeouts, and body limits. Handlers enforce

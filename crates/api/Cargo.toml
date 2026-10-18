@@ -1,5 +1,6 @@
 [package]
 name = "pinvoyager-api"
+default-run = "pinvoyager-api"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -31,6 +32,8 @@ tokio = { version = "1.53.1", features = [
     "time",
 ] }
 tower = "0.5.3"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
 tower-http = { version = "0.7.0", features = [
     "trace",
     "request-id",

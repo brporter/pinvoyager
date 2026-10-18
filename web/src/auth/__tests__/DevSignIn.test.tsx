@@ -30,9 +30,24 @@ describe("DevSignIn", () => {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ subject: "traveler@example.test" }),
+      body: JSON.stringify({ subject: "traveler@example.test", grant_admin: false }),
     });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("optionally requests administrator privileges", async () => {
+    const user = userEvent.setup();
+    const fetch = vi.fn().mockResolvedValue(response(200));
+    vi.stubGlobal("fetch", fetch);
+    render(<DevSignIn onSignedIn={vi.fn()} />);
+    const checkbox = screen.getByRole("checkbox", { name: "Grant site administrator privileges" });
+    expect(checkbox).not.toBeChecked();
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "Forge a session" }));
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      subject: "dev@example.com",
+      grant_admin: true,
+    });
   });
 
   it("explains when the development endpoint is unavailable", async () => {

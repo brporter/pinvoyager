@@ -2529,6 +2529,8 @@ dependencies = [
  "hex",
  "http-body",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "image",
  "jsonwebtoken",
  "kamadak-exif",

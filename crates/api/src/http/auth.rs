@@ -44,7 +44,7 @@ const CANCELED: &str = "Sign-in was canceled, so nothing was created.";
 
 /// Conflict message when an identity belongs to another account.
 const ALREADY_LINKED: &str = "That account is already linked to a different PinVoyager account. \
-     To bring it to this account, sign in to the other one first and unlink it there. \
+     Sign in to the account that already uses this identity. \
      Nothing has been changed on either account.";
 
 /// Where a completed sign-in lands when the caller asked for nowhere in
@@ -540,15 +540,10 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<
     .fetch_all(&state.pool)
     .await?;
 
-    let is_site_admin = sqlx::query_scalar("SELECT is_site_admin FROM users WHERE id=$1")
-        .bind(user.user_id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or(AppError::Unauthorized)?;
     Ok(Json(MeResponse {
         user: MeUser {
             id: account.id,
-            is_site_admin,
+            is_site_admin: account.is_site_admin,
             display_name: account.display_name,
             avatar_url: account.avatar_url,
             created_at: account.created_at,

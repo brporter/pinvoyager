@@ -8,119 +8,76 @@ checks the current database role. Anonymous requests return 401 and signed-in
 non-administrators return 403.
 
 The migration `20261018000001_site_administration.sql` adds `users.is_site_admin`
-and `users.suspended`, both defaulting to false. Public profile updates cannot grant administration access. Provider and development sign-in can
-grant the role through the startup allowlist described below. Public profile responses do not expose
-the administration flag.
+and `users.suspended`, both defaulting to false. Public profile updates cannot grant
+administration access. Initial production grants use the UUID operator tool; later
+grants can use the administration UI. Debug-only development sign-in supports an
+explicit grant checkbox. Provider sign-in never grants roles from email claims.
+Public profile responses do not expose the administration flag.
 
 ## Bootstrap
 
-Start the API with one `--initial-admin-email` argument per address:
+Grant the first administrator to an existing account by UUID using the Rust
+operator tool included in the API image. Sign in normally first, then obtain your
+user ID from the signed-in `GET /api/me` response. From the production Compose
+directory, run:
 
 ```sh
-cargo run -p pinvoyager-api -- \
-  --initial-admin-email first@gmail.com \
-  --initial-admin-email second@example.com
-
-# Installed binary; the equals form is also accepted.
-pinvoyager-api --initial-admin-email=first@gmail.com --initial-admin-email=second@example.com
+docker compose exec api pinvoyager-admin YOUR-ACCOUNT-UUID
 ```
 
-`--help` describes the arguments. Unknown arguments, missing values, non-ASCII
-addresses, missing local/domain parts, multiple `@` signs, and embedded
-whitespace/control characters fail startup. Comparisons trim surrounding
-whitespace, preserve local-part case, and ignore ASCII case in the domain. They
-preserve dots and plus suffixes; no Gmail
-alias expansion or domain-wide matching occurs. Duplicate arguments count once.
-The allowlist is supplied only through these command-line arguments, not TOML,
-environment variables, HTTP input, or provider display names.
+`pinvoyager-admin UUID` loads the same `config.toml` and `PINVOYAGER__DATABASE__...`
+settings as the API. It connects directly to PostgreSQL without starting HTTP,
+contacting providers, or running migrations. The API must have migrated the database.
+The tool locks the account row through commit so concurrent grants serialize:
 
-On each successful provider sign-in, after token verification, the API promotes
-the account if it is not already an administrator and its eligible token email
-matches an entry. Promotion and session creation commit together. Suspended
-accounts cannot sign in or gain a role. Existing sessions do not trigger this
-check; the user must sign in again. The first signed-in `/api/me` response exposes
-the role, and `/admin` is immediately authorized. Linking a provider does not trigger promotion.
+- An existing non-administrator receives `is_site_admin = true` and an updated
+  `updated_at` timestamp. The tool reports the grant and exits 0.
+- An existing administrator produces an “already” message and exits 0 without
+  changing the row, including its timestamp.
+- A missing UUID prints an error to stderr and exits nonzero. Invalid arguments,
+  configuration failures, and database failures also exit nonzero. `--help` exits 0.
+- Suspension remains unchanged, including for suspended accounts. Granting the
+  role does not allow a suspended account to sign in.
 
-Development-only **Forge a session** also applies the allowlist: its supplied
-`subject` acts as the email input, for any selected provider, without token or email
-verification. New and returning accounts receive the role through the shared
-`auth/sign_in.rs::sign_in` transaction that also creates their session. Suspended accounts still return 403. Account identity continues
-to match the exact provider/subject pair, so entering a different subject creates
-a different identity even if the email comparison ignores domain case. Additional
-`email` or `email_verified` request fields have no effect. This exception requires
-a debug API build and `auth.dev_login = true`; the release build has no development
-login route. It is a local testing bypass, not evidence of email ownership.
+Reload the app after a grant to refresh `/api/me`. Existing sessions use the current
+database role. Grants persist across restarts and work with all linked identities.
+Further promotions are available in `/admin`. Provider sign-in never grants roles
+from email claims; `--initial-admin-email` is removed and rejected at startup.
+Remove the old `command` entry from deployed Compose files before recreating the
+API container with this version.
 
-For real provider sign-in, email eligibility depends on the provider:
+### Development forging
 
-| Provider | Eligible token claims |
-| --- | --- |
-| Google | `email_verified` must be boolean true, and the address must end in `@gmail.com` or the token must have a nonempty `hd` claim for Google Workspace. |
-| Apple | `email_verified` must be true or the string `"true"`. A private relay address matches only that relay address, not the underlying mailbox. |
-| Microsoft | No email-based bootstrap. Microsoft's email claim is unsuitable for authorization. Use an existing administrator or an explicit operator database grant. |
+With a debug API build and `auth.dev_login = true`, **Forge a session** offers an
+unchecked **Grant site administrator privileges** checkbox. It sends the boolean
+`grant_admin` field, which defaults to false when omitted:
 
-Google and Apple request the `email` scope only while the allowlist is nonempty.
-Claims come from the ID token after signature, issuer, audience, expiry, and nonce
-verification. Emails remain transient and are never stored on user accounts,
-returned by the account API, or included in the promotion log. Identity matching
-continues to use provider and subject, never email.
-
-Remove the arguments and restart all API instances after the intended accounts
-have signed in. Grants persist in the database. Leaving an address configured
-allows later matching sign-ins to grant administration again, including after an
-operator removes the role. Removing an argument does not revoke an existing role.
-Further promotions are available in the administration UI and require confirmation.
-Promotion does not re-enable suspended accounts. Role removal currently requires
-an operator database update; the UI supports promotion only.
-
-The production `api` service in `deploy/vm/docker-compose.yml` supplies
-`--initial-admin-email bryan@bryanporter.com` at startup. Apply the updated Compose
-file on the server and recreate the API container for it to take effect. After an
-eligible sign-in grants the role, remove that service's `command` entry and recreate
-the container again to stop automatic grants.
-
-An operator can alternatively grant an existing enabled account explicitly:
-
-```sql
-UPDATE users SET is_site_admin = true, updated_at = now()
-WHERE id = '00000000-0000-0000-0000-000000000000' AND NOT suspended
-RETURNING id, display_name, is_site_admin;
+```sh
+curl -i -X POST http://127.0.0.1:8080/auth/dev/login \
+  -H 'content-type: application/json' \
+  -d '{"subject":"local-admin","grant_admin":true}'
 ```
 
-Replace the UUID with the intended account ID. Reload the app to refresh the
-signed-in role. No database accounts are promoted automatically during migration.
+The shared sign-in transaction promotes new or returning accounts only when that
+field is true, and commits the role together with session creation. False or omitted
+values preserve existing roles. Suspended accounts still return 403; failed session
+creation rolls back promotion. The subject remains an opaque provider identity key.
+The handler module, route, development identity variant, grant input, and grant SQL
+all use `#[cfg(debug_assertions)]` and are absent from release builds.
 
 ### Security assessment
 
-Email bootstrap is convenient but weaker than an explicit grant to a stable
-provider identity. A stolen mailbox/provider account, recycled address, changed
-domain ownership, or a trusted provider's compromised account-recovery process
-can let someone satisfy the allowlist. Requiring verification is necessary but
-not sufficient: Google warns that verification of an external address can become
-stale, and Microsoft explicitly prohibits authorizing on its mutable email claim.
-The provider restrictions above follow
-[Google's token-verification guidance](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)
-and [Microsoft's claim reference](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference).
-Apple documents its verified and private-relay email claims in
-[the authorization response reference](https://developer.apple.com/documentation/signinwithapplerestapi/request-an-authorization-to-the-sign-in-with-apple-server).
+The operator tool requires container execution access and database credentials;
+protect both as administration access. Development forging can impersonate any
+account and grant administration, so enable it only in trusted local environments.
+Production uses the release Docker build with debug assertions explicitly disabled.
+The publishing workflow waits for checks, including a release test that requests an
+admin forged session with development login enabled and verifies 404 with no cookie.
 
-The allowlist remains an ongoing grant rule while configured; it is not consumed
-once and is not disabled when the first administrator exists. Multiple provider
-identities with the same eligible email can receive separate administrator
-accounts. Existing linked identities also provide sign-in access to the promoted
-account. Require strong provider account protection, preferably phishing-resistant
-MFA, and control provider-linking/recovery methods for these accounts. The API does
-not require fresh MFA or reauthentication before a destructive admin action; modal
-confirmation only prevents accidental clicks.
-
-Treat command-line arguments, provider issuer configuration, and deployment
-manifests as privileged configuration. Email addresses may be visible in process
-listings or shell history. The API's configuration debug output redacts the
-allowlist, startup errors do not echo addresses, and successful grants log account
-ID and provider after commit. Logs are not a durable administration audit ledger.
-For ongoing policy, a provider issuer/subject allowlist or an explicit account-ID
-grant avoids relying on a mutable email claim. Disable bootstrap after use and
-review existing roles separately when changing the allowlist.
+Linked identities can sign in to a promoted account. Protect provider accounts and
+linking/recovery methods. The API does not require fresh MFA or reauthentication
+before destructive administration actions; modal confirmation prevents accidental
+clicks.
 
 ## Account list and detail
 
@@ -131,15 +88,28 @@ Next controls. Newly created UUIDv7 records appear ahead of an existing cursor.
 
 Each account summary includes its ID, display name (nullable), creation time,
 role, suspension status, photo count, voyage count, and `storage_bytes`. Counts
-include drafts and photos in every processing state. Storage is the sum of current
+include drafts and photos in every processing state. Storage measurements sum
 original and variant file lengths for distinct content hashes belonging to that
 account. Duplicate uploads within an account count once; content shared between
 accounts counts in each account's total. These are per-account file totals, not
 exclusive disk usage. They exclude temporary uploads, database storage, filesystem
 allocation overhead, and files awaiting cleanup without photo references. Missing
 files count as zero; other filesystem errors fail the request. Conversion and
-concurrent mutations can change totals between reads. Filesystem reads run on the
-blocking pool, after releasing the database query connection.
+concurrent mutations can change totals between measurements. `AccountStorage` caches
+at most 256 account totals per API process for 60 seconds after measurement; the list
+and detail pages share that cache. Navigating voyage pages does not repeat a recent
+filesystem scan. Expired entries are measured on the next request, and the oldest
+measurement is evicted when the cache is full. Roles, suspension, and counts are read
+from the database on every request and are never authorized from this cache.
+
+A cache miss reads distinct hashes in pages of 1,000 and measures each page on the
+blocking pool after releasing its query connection. The cache mutex protects only
+cache lookups and updates, never database or filesystem work. Per-account locks
+let concurrent callers share a measurement while cached reads and unrelated
+accounts proceed. Overlapping pages acquire account locks in UUID order; cancellation
+releases them, and later callers can retry. Errors do not cache partial totals. Storage changes can take up to a
+cache lifetime to appear; a first measurement of a large account still scales with
+its number of distinct hashes. Multiple API processes maintain independent caches.
 
 The user detail screen lists the title, description, and publication status of
 both drafts and published voyages. Administrators do not receive private photo
@@ -165,8 +135,9 @@ retry. Success refreshes affected queries. Deletion returns to the account list.
 Administrators cannot suspend or delete their own account (409). Administrator
 mutations serialize on a transaction advisory lock and recheck the actor after
 acquiring it. Two administrators trying to suspend or delete each other cannot
-both succeed. Sign-in and linking hold a shared account lock, so suspension either
-revokes their newly created session or completes first and causes rejection.
+both succeed. Returning sign-ins hold an account write lock; linking holds a shared
+account lock. Suspension therefore either revokes the newly created session or
+completes first and causes sign-in rejection.
 Uploads lock the account before the voyage, recheck suspension after receiving
 bytes, and then lock photo content. Account deletion takes those locks in the same
 order before gathering hashes and deleting rows. Other requests already authorized
@@ -174,9 +145,17 @@ when suspension begins may finish. Suspension does not remove public content;
 unpublish separately when needed. An enabled owner can publish a moderated voyage
 again; unpublishing is not a permanent publication ban.
 
-Deletion schedules each content hash in `photo_cleanup` before commit, then attempts
-file removal. A failed removal is logged and remains queued for worker maintenance.
-A successful 204 confirms database deletion; file removal may still be retrying.
+Deletion schedules each content hash in `photo_cleanup` before commit and returns
+204 immediately after that commit. Worker maintenance removes files in the background,
+starting on its next pass (normally every 60 seconds; pending conversion recovery and
+earlier cleanup can delay it). The HTTP handler performs no filesystem removal.
+A failed removal is logged and remains queued for worker maintenance.
+Each maintenance pass attempts at most 1,000 due records. A failed background attempt
+sets `next_attempt_at` 60 seconds ahead so persistent failures do not block newer work.
+The maintenance task awaits each pass before starting another; separate
+API processes can attempt cleanup concurrently, serialized per content hash.
+A successful 204 confirms database deletion and durable cleanup scheduling; it does
+not mean the files have been removed.
 Reserved display names remain without an account association. Unlinked sign-in
 attempts have no known account and expire normally. Deletion does not ban a provider
 identity from registering a new account later. Use suspension to prevent that
@@ -199,12 +178,13 @@ additional authentication credential.
 
 Implementation references:
 
-- `crates/api/src/initial_admin.rs::InitialAdmins::parse_args` validates startup
-  arguments; `main.rs::{entrypoint, run}` installs the allowlist before provider
-  discovery. `auth/providers/oidc.rs::admin_email_from_verified_token` applies the
-  provider claim policy; `auth/sign_in.rs::sign_in` commits any grant with the session.
+- `crates/api/src/bin/pinvoyager-admin.rs::run` validates UUID arguments and
+  performs the operator grant. `auth/dev.rs::login` and `auth/sign_in.rs::sign_in`
+  implement the debug-only optional grant with session creation.
 - `crates/api/src/http/admin.rs::{list, detail, act, measure_storage}` implements
-  paging, role checks, storage measurement, and transactional moderation.
+  paging, role checks, and transactional moderation. `db/repo/users.rs::account_summaries`
+  supplies the shared list/detail projection; `photos/account_storage.rs::AccountStorage`
+  supplies bounded caching and paged storage measurements.
 - `crates/api/src/db/repo/users.rs::require_active`,
   `crates/api/src/auth/extract.rs::resolve`, and
   `crates/api/src/auth/sign_in.rs::sign_in` enforce account status for
@@ -218,18 +198,19 @@ Implementation references:
   `web/src/api/{client,types}.ts` defines the matching transport and response types.
 - `crates/api/tests/admin.rs` checks authorization, paging, counts, file totals,
   private-draft restrictions, moderation, cascades, shared files, retryable cleanup,
-  and concurrent administrator actions. `http/auth_tests.rs` checks suspended
+  concurrent administrator actions, and storage-cache reuse between list and detail.
+  `photos/account_storage_tests.rs` checks expiry, eviction, measurement pagination,
+  and retry after filesystem errors. `http/auth_tests.rs` checks suspended
   provider sign-in and linking. `web/src/screens/__tests__/Admin.test.tsx` checks
   list/detail behavior and confirmation for every action. The admin JSON fixtures
   are compared with normalized router responses and checked by
   `web/src/api/__tests__/contract.test.ts`.
 
-Bootstrap tests: `initial_admin_cli.rs` runs the actual binary with help, invalid,
-and repeated arguments. `auth_tokens.rs` and provider tests verify signed email
-claims, forged-token rejection, provider differences, and conditional email scopes.
-`auth_flow.rs::verified_bootstrap_email_grants_admin_before_the_callback_session_is_used`
-checks the full callback/session/admin request. `http/auth_tests.rs` checks returning
-accounts, persisted grants, concurrent sign-ins, no merging, and suspension/linking
-restrictions. `admin.rs::development_login_applies_initial_admin_emails` verifies grants to new
-and returning forged sessions, immediate administration access, concurrent
-promotions, nonmatching subjects, removed configuration, and suspension rejection.
+Bootstrap tests: `crates/api/tests/admin_cli.rs` runs the actual operator binary
+for invalid arguments, help, missing accounts, new grants, unchanged existing
+administrators, suspended accounts, and database failure. `admin.rs::development_login_optionally_grants_admin`
+checks optional grants, immediate authorization, concurrent sign-ins, retained roles,
+and suspension rejection. `auth/dev_tests.rs::session_failure_rolls_back_new_accounts_and_existing_account_changes`
+checks rollback. `auth_flow.rs::verified_email_does_not_grant_admin` checks provider
+email claims cannot grant roles. `auth_build_mode.rs` verifies release route absence.
+`web/src/auth/__tests__/DevSignIn.test.tsx` checks the checkbox default and request.

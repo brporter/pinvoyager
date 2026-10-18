@@ -8,11 +8,13 @@
 import { useState } from "react";
 
 import { Badge } from "../components/Badge";
+import { Checkbox } from "../components/Checkbox";
 import { Button } from "../components/Button";
 import { TextField } from "../components/TextField";
 
 export function DevSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<void> }) {
   const [subject, setSubject] = useState("dev@example.com");
+  const [grantAdmin, setGrantAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +28,7 @@ export function DevSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<voi
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ subject }),
+        body: JSON.stringify({ subject, grant_admin: grantAdmin }),
       });
 
       if (response.status === 404) {
@@ -77,9 +79,13 @@ export function DevSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<voi
           onChange={(event) => {
             setSubject(event.target.value);
           }}
-          help="Stored as the provider subject. Enter an email configured with --initial-admin-email to receive administrator access. Development sign-in does not verify email ownership."
+          help="Stored as the provider subject. Development sign-in does not verify identity ownership."
           error={error ?? undefined}
         />
+
+        <Checkbox checked={grantAdmin} onChange={(event) => setGrantAdmin(event.target.checked)}>
+          Grant site administrator privileges
+        </Checkbox>
 
         <Button
           variant="secondary"

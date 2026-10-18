@@ -13,12 +13,6 @@ use tower::ServiceExt as _;
 async fn assert_development_route_absent(enabled: bool) {
     let mut config = Config::load().expect("config");
     config.auth.dev_login = enabled;
-    config.auth.initial_admins =
-        pinvoyager_api::initial_admin::InitialAdmins::parse_args([std::ffi::OsString::from(
-            "--initial-admin-email=admin@example.test",
-        )])
-        .expect("arguments")
-        .expect("run");
     let pool = PgPoolOptions::new()
         .connect_lazy("postgres://nobody@127.0.0.1:1/none")
         .expect("lazy pool");
@@ -34,7 +28,9 @@ async fn assert_development_route_absent(enabled: bool) {
                 .method("POST")
                 .uri("/auth/dev/login")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"subject":"admin@example.test"}"#))
+                .body(Body::from(
+                    r#"{"subject":"admin@example.test","grant_admin":true}"#,
+                ))
                 .expect("request"),
         )
         .await

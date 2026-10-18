@@ -80,9 +80,6 @@ pub struct PhotosConfig {
 /// Authentication configuration.
 #[derive(Debug, Deserialize)]
 pub struct AuthConfig {
-    /// Supplied only through server command-line arguments, never request data.
-    #[serde(skip)]
-    pub initial_admins: crate::initial_admin::InitialAdmins,
     /// Public base URL used to construct provider callback URIs. Register the
     /// resulting callback URI with each configured provider.
     pub base_url: Url,

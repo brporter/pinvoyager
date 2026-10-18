@@ -19,7 +19,6 @@ fn app_state(pool: PgPool) -> AppState {
         },
         telemetry: crate::config::TelemetryConfig::default(),
         auth: AuthConfig {
-            initial_admins: Default::default(),
             base_url: "https://example.test".parse().expect("valid base url"),
             session: crate::config::SessionConfig::default(),
             providers: crate::config::ProvidersConfig::default(),

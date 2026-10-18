@@ -1,7 +1,7 @@
 /**
  * Maps the shared current-user query to loading, failed, anonymous, or
  * authenticated session state. Successful sign-out clears query data; failed
- * sign-out requests are suppressed by the action below.
+ * sign-out requests propagate so callers can offer retry.
  */
 
 import { useCallback, useMemo } from "react";
@@ -24,13 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refetch]);
 
   const signOut = useCallback(async (): Promise<void> => {
-    try {
-      await mutateAsync();
-    } catch {
-      // Request failures are currently suppressed without refreshing the
-      // session. Callers therefore cannot distinguish failure from success;
-      // docs/architecture/auth-flow.md records this unresolved behavior.
-    }
+    await mutateAsync();
   }, [mutateAsync]);
 
   const value = useMemo<AuthState>(() => {

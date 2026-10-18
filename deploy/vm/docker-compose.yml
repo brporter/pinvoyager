@@ -2,7 +2,6 @@ name: pinvoyager
 services:
   api:
     image: ghcr.io/brporter/pinvoyager-api:latest
-    command: ["--initial-admin-email", "bryan@bryanporter.com"]
     restart: unless-stopped
     env_file: .env
     environment:

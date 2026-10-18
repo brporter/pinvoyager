@@ -29,7 +29,6 @@ fn test_config() -> Config {
                 ..TelemetryConfig::default()
             },
             auth: crate::config::AuthConfig {
-                initial_admins: Default::default(),
                 base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
                 session: Default::default(),
                 providers: Default::default(),
@@ -165,44 +164,6 @@ async fn responses_carry_a_request_id() {
     assert_eq!(parsed.get_version_num(), 7, "request ids are uuid v7");
 }
 
-/// The deadline must not start before the signal does, or a long-running
-/// server would shoot itself after `shutdown_timeout_secs` of uptime.
-///
-/// Wall-clock durations rather than a paused clock, because tokio's
-/// `test-util` feature is not enabled; they are kept small.
-#[tokio::test]
-async fn drain_deadline_does_not_start_before_the_signal() {
-    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    let deadline = drain_timeout(rx, Duration::from_millis(50));
-
-    tokio::pin!(deadline);
-    let early = tokio::time::timeout(Duration::from_millis(200), &mut deadline).await;
-    assert!(early.is_err(), "deadline fired without a shutdown signal");
-
-    tx.send(()).expect("receiver is alive");
-    tokio::time::timeout(Duration::from_secs(5), deadline)
-        .await
-        .expect("deadline fires once the signal has been observed");
-}
-
-/// If the server stops for its own reasons the sender is dropped; the
-/// deadline must then never fire, or it would race the server's result.
-#[tokio::test]
-async fn drain_deadline_never_fires_if_the_sender_is_dropped() {
-    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    drop(tx);
-
-    let result = tokio::time::timeout(
-        Duration::from_millis(100),
-        drain_timeout(rx, Duration::ZERO),
-    )
-    .await;
-    assert!(
-        result.is_err(),
-        "deadline fired after the sender was dropped"
-    );
-}
-
 #[tokio::test]
 async fn signal_setup_failures_remain_pending_for_each_supported_signal() {
     let interrupt_error: std::io::Result<()> = Err(std::io::Error::other("no SIGINT handler"));
@@ -333,6 +294,7 @@ async fn server_drops_a_stalled_request_when_the_drain_deadline_expires(pool: Pg
     let user = crate::db::repo::users::create(&pool, None, None)
         .await
         .expect("create request owner");
+    let voyage_id = crate::photo_voyage::fixture_voyage(&pool, user.id).await;
     let mut config = test_config();
     let reservation = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve a port");
     config.server.bind = reservation.local_addr().expect("valid test fixture");
@@ -358,7 +320,7 @@ async fn server_drops_a_stalled_request_when_the_drain_deadline_expires(pool: Pg
     socket
         .write_all(
             format!(
-                "POST /api/photos HTTP/1.1\r\nHost: localhost\r\nCookie: {cookie}\r\nContent-Type: multipart/form-data; boundary=pv\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabcd\r\n"
+                "POST /api/voyages/{voyage_id}/photos HTTP/1.1\r\nHost: localhost\r\nCookie: {cookie}\r\nContent-Type: multipart/form-data; boundary=pv\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabcd\r\n"
             )
             .as_bytes(),
         )
@@ -378,11 +340,21 @@ async fn server_drops_a_stalled_request_when_the_drain_deadline_expires(pool: Pg
 async fn an_inflight_request_cannot_hold_shutdown_past_its_deadline() {
     let started = std::sync::Arc::new(tokio::sync::Notify::new());
     let route_started = started.clone();
+    let dropped = std::sync::Arc::new(tokio::sync::Notify::new());
+    struct OnDrop(std::sync::Arc<tokio::sync::Notify>);
+    impl Drop for OnDrop {
+        fn drop(&mut self) {
+            self.0.notify_one();
+        }
+    }
+    let route_dropped = dropped.clone();
     let routes = Router::new().route(
         "/blocked",
         axum::routing::get(move || {
             let started = route_started.clone();
+            let dropped = route_dropped.clone();
             async move {
+                let _guard = OnDrop(dropped);
                 started.notify_one();
                 std::future::pending::<String>().await
             }
@@ -404,11 +376,114 @@ async fn an_inflight_request_cannot_hold_shutdown_past_its_deadline() {
     tokio::time::timeout(Duration::from_secs(5), started.notified())
         .await
         .expect("handler entered");
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(
+        !server.is_finished(),
+        "the deadline must not start before shutdown"
+    );
     stop.send(()).expect("signal listener");
     tokio::time::timeout(Duration::from_secs(1), server)
         .await
         .expect("drain is bounded")
         .expect("server task")
         .expect("server result");
-    request.abort();
+    tokio::time::timeout(Duration::from_secs(1), dropped.notified())
+        .await
+        .expect("handler is canceled before server returns");
+    assert!(request.await.expect("request task").is_err());
+}
+
+#[tokio::test]
+async fn shutdown_allows_an_active_request_to_finish_before_the_deadline() {
+    let started = std::sync::Arc::new(tokio::sync::Notify::new());
+    let finish = std::sync::Arc::new(tokio::sync::Notify::new());
+    let route_started = started.clone();
+    let route_finish = finish.clone();
+    let routes = Router::new().route(
+        "/slow",
+        get(move || {
+            let started = route_started.clone();
+            let finish = route_finish.clone();
+            async move {
+                started.notify_one();
+                finish.notified().await;
+                "finished"
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(serve_router(
+        listener,
+        routes,
+        async {
+            stopped.await.expect("stop");
+        },
+        Duration::from_secs(5),
+    ));
+    let request = tokio::spawn(async move {
+        reqwest::get(format!("http://{address}/slow"))
+            .await
+            .expect("response")
+            .text()
+            .await
+            .expect("body")
+    });
+    started.notified().await;
+    stop.send(()).expect("signal");
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(!server.is_finished());
+    assert!(
+        tokio::net::TcpStream::connect(address).await.is_err(),
+        "listener is closed during draining"
+    );
+    finish.notify_one();
+    assert_eq!(request.await.expect("request"), "finished");
+    tokio::time::timeout(Duration::from_secs(1), server)
+        .await
+        .expect("server finished")
+        .expect("task")
+        .expect("server");
+}
+
+#[tokio::test]
+async fn shutdown_cancels_a_streamed_response_at_the_deadline() {
+    let (send, receive) = tokio::sync::mpsc::channel::<Result<&'static str, std::io::Error>>(1);
+    send.send(Ok("first chunk")).await.expect("chunk");
+    let receive = std::sync::Arc::new(std::sync::Mutex::new(Some(receive)));
+    let routes = Router::new().route(
+        "/stream",
+        get(move || {
+            let receive = receive.lock().expect("lock").take().expect("one request");
+            async move { Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(receive)) }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(serve_router(
+        listener,
+        routes,
+        async {
+            stopped.await.expect("stop");
+        },
+        Duration::from_millis(5),
+    ));
+    let response = reqwest::get(format!("http://{address}/stream"))
+        .await
+        .expect("headers");
+    stop.send(()).expect("signal");
+    tokio::time::timeout(Duration::from_secs(1), server)
+        .await
+        .expect("deadline")
+        .expect("task")
+        .expect("server");
+    tokio::time::timeout(Duration::from_secs(1), send.closed())
+        .await
+        .expect("response stream dropped");
+    assert!(
+        response.bytes().await.is_err(),
+        "client observes the truncated stream"
+    );
 }

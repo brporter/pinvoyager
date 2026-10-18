@@ -1,7 +1,7 @@
 /** Draft creation and per-file upload/review. The batch hook owns cancellation and retry identity. */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { keys, useCreateVoyage } from "../api/hooks";
@@ -43,9 +43,51 @@ type Step = "details" | "choose" | "process" | "review";
 // ---------------------------------------------------------------------------
 
 export function Upload() {
-  const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
-  const [voyageId, setVoyageId] = useState<string | null>(search.get("voyage"));
+  const selected = search.get("voyage");
+  const [flow, setFlow] = useState({
+    destination: selected,
+    key: 0,
+    created: undefined as string | undefined,
+  });
+  if (flow.destination !== selected) {
+    setFlow({
+      destination: selected,
+      key: flow.created === selected ? flow.key : flow.key + 1,
+      created: undefined,
+    });
+    return null;
+  }
+  return (
+    <UploadFlow
+      key={flow.key}
+      initialVoyageId={selected}
+      onCreated={(id) => {
+        // Recording our own creation keeps this batch and its trace context alive.
+        setFlow((current) => ({ ...current, created: id }));
+        setSearch({ voyage: id }, { replace: true });
+      }}
+    />
+  );
+}
+
+/** Navigation to another destination unmounts this flow and cancels its batch. */
+function UploadFlow({
+  initialVoyageId,
+  onCreated,
+}: {
+  initialVoyageId: string | null;
+  onCreated: (id: string) => void;
+}) {
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const navigate = useNavigate();
+  const [voyageId, setVoyageId] = useState(initialVoyageId);
   const destination = useRef(voyageId);
   const traceContext = useRef<import("../api/client").TraceContext>({});
   const [title, setTitle] = useState("");
@@ -67,9 +109,10 @@ export function Upload() {
         description: description.trim(),
         granularity,
       });
+      if (!active.current) return;
       destination.current = voyage.id;
       setVoyageId(voyage.id);
-      setSearch({ voyage: voyage.id }, { replace: true });
+      onCreated(voyage.id);
       setStep("choose");
     },
     retry: false,

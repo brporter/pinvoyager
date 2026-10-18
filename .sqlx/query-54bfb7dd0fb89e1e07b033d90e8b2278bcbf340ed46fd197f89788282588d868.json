@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE photos SET variant_status = $2, updated_at = now() WHERE id = $1 AND ($2 <> 'failed' OR variant_status = 'pending')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "54bfb7dd0fb89e1e07b033d90e8b2278bcbf340ed46fd197f89788282588d868"
+}

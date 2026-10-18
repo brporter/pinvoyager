@@ -166,15 +166,17 @@ pub async fn list_for_voyage(
     ).fetch_all(executor).await
 }
 
+/// Sets processing status, but applies failures only to pending rows. Missing rows
+/// succeed without changes; unsupported statuses and database failures return errors.
 pub async fn set_variant_status(
     executor: impl PgExecutor<'_>,
     id: Uuid,
     status: &str,
 ) -> Result<(), sqlx::Error> {
     // The database rejects unsupported status strings. Updating a deleted row
-    // succeeds without changing anything.
+    // succeeds without changing anything. A late failure cannot replace ready status.
     sqlx::query!(
-        "UPDATE photos SET variant_status = $2, updated_at = now() WHERE id = $1",
+        "UPDATE photos SET variant_status = $2, updated_at = now() WHERE id = $1 AND ($2 <> 'failed' OR variant_status = 'pending')",
         id,
         status,
     )

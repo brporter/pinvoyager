@@ -66,7 +66,11 @@ framing is included. File type comes from magic bytes, not the filename or submi
 MIME type. Dimensions are probed before full decoding. Dimension checks, hashing, and
 EXIF reads run on the blocking pool. Multipart part headers exceeding 4,096 bytes return
 400; `check_part_headers` counts header names, values, and separators. The handler
-removes a rejected part's temporary file.
+removes a rejected part's temporary file. `photos/temporary.rs::TemporaryUpload`
+creates and locks the file on the blocking pool. Its shared lease schedules removal
+when the last owner is dropped, including cancellation while receiving bytes.
+Blocking probes retain a lease until their reads finish. Ordinary completion also
+awaits temporary-file removal before returning.
 
 | Default | Value |
 | --- | --- |
@@ -131,8 +135,11 @@ Images are never enlarged. Finalization locks content and rechecks the photo
 before writing. Each output uses a unique sibling temporary file and atomic
 rename. The blocking write owns the database transaction so cancellation cannot
 release the content lock while writes continue. After all variants exist, the
-photo becomes ready. A processing error attempts to mark it failed and logs its
-cause.
+photo becomes ready. A processing error changes only a still-pending row to failed
+and logs its cause. `db/repo/photos.rs::set_variant_status` prevents a delayed failure
+from a duplicate job overwriting ready status; successful conversions can still mark
+a row ready. `photos_recovery.rs::delayed_failure_cannot_replace_a_successful_conversion`
+checks the conflicting status updates.
 
 ```mermaid
 stateDiagram-v2
@@ -144,7 +151,9 @@ stateDiagram-v2
     failed --> [*]: Photo deleted
 ```
 
-Maintenance runs at startup and every 60 seconds. It traverses every pending photo in ID
+Maintenance is triggered at startup and by a 60-second timer. A process awaits its
+current pass before starting the next, so a slow pass never overlaps another pass
+in that process. Earlier work can delay cleanup. It traverses every pending photo in ID
 pages of 1,000, removes expired sessions/authorization attempts, and retries queued file
 cleanup. A database scan failure is retried on a later pass. Failed conversions are not
 automatically retried. Duplicate jobs can encode the same bytes concurrently, especially
@@ -168,17 +177,36 @@ validated hashes and variant enums, never upload filenames. Multiple photo rows
 can reference the same original and variants.
 
 Photo/voyage deletion locks the voyage and content hashes, deletes rows, and
-records cleanup in the database transaction. Files are removed only after that
-transaction commits. `photos/cleanup.rs::clean` reacquires the content lock and
+records cleanup in the database transaction. Account, voyage, and photo deletion
+return 204 after the transaction commits, without waiting for file removal.
+Worker maintenance performs removal on its next pass; earlier maintenance work
+can delay that pass. `photos/cleanup.rs::clean` reacquires the content lock and
 rechecks references before removal; a concurrent upload that adopted the content
 keeps its files. The blocking removal owns the transaction until it stops.
-Failed removals remain in `photo_cleanup` for maintenance retry.
+Failed removals remain in `photo_cleanup` for maintenance retry. `cleanup::sweep`
+selects at most 1,000 records whose `next_attempt_at` has arrived, ordered by that
+time, creation time, and hash. A failed background attempt moves its next attempt
+60 seconds ahead, leaving other due records eligible for the next pass. The migration
+`20261018000002_cleanup_retry_schedule.sql` makes existing records immediately due.
+All three deletion paths use this background schedule; none removes files in its
+HTTP request. Tests in `http/photos_tests.rs`, `http/voyages_tests.rs`, and
+`tests/admin.rs` assert that bytes remain after the response and disappear when
+maintenance runs, with shared content preserved.
+
+Before processing recorded deletions, `cleanup::sweep` calls
+`temporary::sweep`. It scans `tmp` on the blocking pool and removes regular files
+named `UUID.part` whose modification time is at least 24 hours old. It skips
+symlinks, other names, directories, recent files, and files locked by active
+uploads in any API process. It holds the file lock through the age check and
+removal. Filesystem failures are logged and retried on later maintenance passes;
+a temporary-file sweep failure does not prevent recorded content cleanup.
+This also handles abandoned files after a crash or runtime shutdown prevents a
+lease's cleanup task from starting.
 
 The filesystem and PostgreSQL do not form one transaction. A crash around an
-original write can leave unreferenced bytes, and canceled uploads can leave
-temporary files. Automatic cleanup handles recorded deletions, not a complete
-scan of every orphaned file. Storage needs persistent capacity and operational
-monitoring. The API container configures `/data`; Compose mounts its `uploads`
+original write can still leave unreferenced original bytes; maintenance does not
+scan every original or variant for missing database references. Storage needs
+persistent capacity and operational monitoring. The API container configures `/data`; Compose mounts its `uploads`
 volume there.
 
 ## Authorized delivery
@@ -207,7 +235,7 @@ it; a 304 does not buffer the image.
 closed-worker acceptance, incomplete GPS, native HEIC conversion, failed delete commits,
 authorization, and validators. `photos/worker_tests.rs` checks queue capacity, recovery
 beyond 1,000 rows, and shutdown. `photos/cleanup_tests.rs` checks retry after filesystem
-failure and adoption of shared content. Integration suites include `photo_ownership.rs`,
+failure, adoption of shared content, and progress past 1,000 persistently failing records. Integration suites include `photo_ownership.rs`,
 `photos_public_access.rs`, `photos_recovery.rs`, and `image_tracing.rs`. Frontend
 batch/map tests cover cancellation, retries, review, readiness polling, and real
 MapLibre geometry. See [testing](testing.md), [tracing](tracing.md), and [photo

@@ -22,6 +22,7 @@ pub struct AppState {
     /// Handle onto the variant worker. Uploads enqueue and return; encoding
     /// happens off the request path (D8).
     pub variants: VariantQueue,
+    pub account_storage: Arc<crate::photos::account_storage::AccountStorage>,
 }
 
 impl AppState {
@@ -40,6 +41,7 @@ impl AppState {
             config,
             providers: Arc::new(providers),
             variants,
+            account_storage: Arc::default(),
         }
     }
 }

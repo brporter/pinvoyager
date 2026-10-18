@@ -41,6 +41,11 @@ describe("/auth/callback", () => {
       "Nothing has been changed on either account.",
     );
 
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Sign in to the account that already uses this identity.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/unlink/i);
+
     // Still on the callback: an outcome named in the URL is never overridden
     // by the session.
     await waitFor(() => {

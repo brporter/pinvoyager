@@ -14,7 +14,7 @@
 //!   algorithms the provider's own metadata advertises;
 //! - **`iss`** against the discovered issuer (Microsoft common substitutes the validated tenant);
 //! - **`aud`** against our `client_id`;
-//! - **`exp`** (and `iat`) against the clock;
+//! - **`exp`** against the clock; `iat` has no additional age or clock check;
 //! - **`nonce`** against the value we stored in the pending attempt.
 //!
 //! The call sites in [`oidc`] identify where verification is configured.

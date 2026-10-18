@@ -44,16 +44,23 @@ pub async fn clean(pool: &PgPool, root: &Path, hash: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Each maintenance pass is bounded; later passes retry failures and drain
-/// any remaining records without delaying HTTP startup.
+/// Sweeps temporary files, then attempts at most 1,000 due content records.
+/// Later passes retry failures and drain remaining records.
 pub async fn sweep(pool: &PgPool, root: &Path) -> AppResult<()> {
+    if let Err(error) = super::temporary::sweep(root).await {
+        tracing::warn!(%error, "stale temporary upload cleanup will be retried");
+    }
     let hashes: Vec<String> =
-        sqlx::query_scalar("SELECT content_hash FROM photo_cleanup ORDER BY created_at LIMIT 1000")
+        sqlx::query_scalar("SELECT content_hash FROM photo_cleanup WHERE next_attempt_at <= now() ORDER BY next_attempt_at, created_at, content_hash LIMIT 1000")
             .fetch_all(pool)
             .await?;
     for hash in hashes {
         if let Err(error) = clean(pool, root, &hash).await {
-            tracing::warn!(%error, "photo cleanup will be retried");
+            // Move failures behind currently due records, so a full page of
+            // persistent failures cannot prevent newer cleanup from running.
+            sqlx::query("UPDATE photo_cleanup SET next_attempt_at=now()+interval '60 seconds' WHERE content_hash=$1")
+                .bind(&hash).execute(pool).await?;
+            tracing::warn!(%error, "photo cleanup will be retried after 60 seconds");
         }
     }
     Ok(())

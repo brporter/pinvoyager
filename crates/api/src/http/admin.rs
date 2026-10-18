@@ -7,14 +7,14 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
-use sqlx::{PgConnection, PgPool};
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::{
     auth::CurrentUser,
-    db::repo::photos,
+    db::repo::{photos, users},
     error::{AppError, AppResult},
-    photos::{VariantKind, cleanup, storage},
+    photos::cleanup,
     state::AppState,
 };
 
@@ -57,7 +57,7 @@ impl Page {
     }
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 struct AdminUser {
     id: Uuid,
     display_name: Option<String>,
@@ -69,43 +69,30 @@ struct AdminUser {
     storage_bytes: i64,
 }
 
-/// Sum files currently present, once per content hash per account. Shared bytes
-/// count for each owning account, so these totals are not site-wide disk usage.
-/// Missing files contribute zero; other filesystem failures return an error.
-async fn measure_storage(
-    pool: &PgPool,
-    root: &std::path::Path,
-    accounts: &mut [AdminUser],
-) -> AppResult<()> {
-    let ids: Vec<Uuid> = accounts.iter().map(|user| user.id).collect();
-    let hashes: Vec<(Uuid, String)> =
-        sqlx::query_as("SELECT DISTINCT owner_id, content_hash FROM photos WHERE owner_id=ANY($1)")
-            .bind(&ids)
-            .fetch_all(pool)
-            .await?;
-    let root = root.to_path_buf();
-    let totals = crate::blocking::run_blocking(move || {
-        let mut totals = std::collections::HashMap::<Uuid, i64>::new();
-        for (owner, hash) in hashes {
-            let hash = storage::ContentHash::try_from(hash)?;
-            let paths = std::iter::once(storage::original_path(&root, &hash)).chain(
-                VariantKind::ALL
-                    .into_iter()
-                    .map(|kind| storage::variant_path(&root, &hash, kind)),
-            );
-            for path in paths {
-                match std::fs::metadata(path) {
-                    Ok(metadata) => *totals.entry(owner).or_default() += metadata.len() as i64,
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(AppError::Internal(Box::new(error))),
-                }
-            }
+impl From<users::AccountSummary> for AdminUser {
+    fn from(account: users::AccountSummary) -> Self {
+        Self {
+            id: account.id,
+            display_name: account.display_name,
+            created_at: account.created_at,
+            is_site_admin: account.is_site_admin,
+            suspended: account.suspended,
+            voyage_count: account.voyage_count,
+            photo_count: account.photo_count,
+            storage_bytes: 0,
         }
-        Ok(totals)
-    })
-    .await?;
+    }
+}
+
+/// Storage totals may be cached for 60 seconds; role and count queries remain current.
+async fn measure_storage(state: &AppState, accounts: &mut [AdminUser]) -> AppResult<()> {
+    let ids: Vec<_> = accounts.iter().map(|user| user.id).collect();
+    let totals = state
+        .account_storage
+        .totals(&state.pool, &state.config.photos.storage_root, &ids)
+        .await?;
     for account in accounts {
-        account.storage_bytes = totals.get(&account.id).copied().unwrap_or_default();
+        account.storage_bytes = totals[&account.id];
     }
     Ok(())
 }
@@ -123,21 +110,19 @@ async fn list(
 ) -> AppResult<Json<UserPage>> {
     authorize(&mut *state.pool.acquire().await?, user.user_id).await?;
     let limit = page.limit()?;
-    let mut users: Vec<AdminUser> = sqlx::query_as("SELECT u.id, u.display_name, u.created_at, u.is_site_admin, u.suspended,
-    (SELECT count(*) FROM voyages v WHERE v.owner_id=u.id) AS voyage_count,
-    (SELECT count(*) FROM photos p WHERE p.owner_id=u.id) AS photo_count,
-    0::bigint AS storage_bytes FROM users u WHERE ($1::uuid IS NULL OR u.id<$1) ORDER BY u.id DESC LIMIT $2")
-    .bind(page.before)
-    .bind(limit + 1)
-    .fetch_all(&state.pool)
-    .await?;
+    let mut users: Vec<AdminUser> =
+        users::account_summaries(&state.pool, None, page.before, limit + 1)
+            .await?
+            .into_iter()
+            .map(AdminUser::from)
+            .collect();
     let next_before = if users.len() > limit as usize {
         users.pop();
         users.last().map(|user| user.id)
     } else {
         None
     };
-    measure_storage(&state.pool, &state.config.photos.storage_root, &mut users).await?;
+    measure_storage(&state, &mut users).await?;
     Ok(Json(UserPage { users, next_before }))
 }
 
@@ -163,22 +148,12 @@ async fn detail(
 ) -> AppResult<Json<UserDetail>> {
     authorize(&mut *state.pool.acquire().await?, user.user_id).await?;
     let limit = page.limit()?;
-    let mut account: AdminUser = sqlx::query_as(
-        "SELECT u.id, u.display_name, u.created_at, u.is_site_admin, u.suspended,
-    (SELECT count(*) FROM voyages v WHERE v.owner_id=u.id) AS voyage_count,
-    (SELECT count(*) FROM photos p WHERE p.owner_id=u.id) AS photo_count,
-    0::bigint AS storage_bytes FROM users u WHERE u.id=$1",
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or(AppError::NotFound)?;
-    measure_storage(
-        &state.pool,
-        &state.config.photos.storage_root,
-        std::slice::from_mut(&mut account),
-    )
-    .await?;
+    let mut account: AdminUser = users::account_summaries(&state.pool, Some(id), None, 1)
+        .await?
+        .pop()
+        .ok_or(AppError::NotFound)?
+        .into();
+    measure_storage(&state, std::slice::from_mut(&mut account)).await?;
     let mut voyages: Vec<AdminVoyage> = sqlx::query_as("SELECT id,title,description,published FROM voyages WHERE owner_id=$1 AND ($2::uuid IS NULL OR id<$2) ORDER BY id DESC LIMIT $3")
         .bind(id).bind(page.before).bind(limit+1).fetch_all(&state.pool).await?;
     let next_before = if voyages.len() > limit as usize {
@@ -229,7 +204,6 @@ async fn act(
             "You cannot suspend or delete your own administrator account.".into(),
         ));
     }
-    let mut hashes = Vec::<String>::new();
     match action {
         Action::Suspend | Action::Enable => {
             let suspended = matches!(action, Action::Suspend);
@@ -268,7 +242,7 @@ async fn act(
                 .bind(id)
                 .fetch_all(&mut *tx)
                 .await?;
-            hashes = sqlx::query_scalar(
+            let hashes: Vec<String> = sqlx::query_scalar(
                 "SELECT DISTINCT content_hash FROM photos WHERE owner_id=$1 ORDER BY content_hash",
             )
             .bind(id)
@@ -288,12 +262,5 @@ async fn act(
         }
     }
     tx.commit().await?;
-    for hash in hashes {
-        if let Err(error) =
-            cleanup::clean(&state.pool, &state.config.photos.storage_root, &hash).await
-        {
-            tracing::warn!(%error,"account deletion committed; file cleanup will be retried");
-        }
-    }
     Ok(StatusCode::NO_CONTENT)
 }

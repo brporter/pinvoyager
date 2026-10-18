@@ -59,7 +59,6 @@ fn state(pool: PgPool, root: &ScratchRoot) -> AppState {
         },
         telemetry: TelemetryConfig::default(),
         auth: AuthConfig {
-            initial_admins: Default::default(),
             base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
             session: Default::default(),
             providers: Default::default(),

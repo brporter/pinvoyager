@@ -29,7 +29,6 @@ fn test_state() -> AppState {
         },
         telemetry: TelemetryConfig::default(),
         auth: crate::config::AuthConfig {
-            initial_admins: Default::default(),
             base_url: "http://127.0.0.1:8080".parse().expect("valid url"),
             session: Default::default(),
             providers: Default::default(),
@@ -1034,11 +1033,25 @@ async fn deleting_a_voyage_deletes_photos_but_preserves_shared_storage(pool: PgP
             .expect("photo")
             .is_some()
     );
+    assert!(
+        unique_path.exists(),
+        "HTTP deletion leaves bytes queued for maintenance"
+    );
+    crate::photos::cleanup::sweep(&pool, scratch.path())
+        .await
+        .expect("background cleanup");
     assert!(!unique_path.exists());
     assert!(shared_path.exists());
     destroy(State(state), test_user(owner.id), Path(second_voyage))
         .await
         .expect("delete last reference");
+    assert!(
+        shared_path.exists(),
+        "last reference also queues background removal"
+    );
+    crate::photos::cleanup::sweep(&pool, scratch.path())
+        .await
+        .expect("background cleanup");
     assert!(!shared_path.exists());
 }
 

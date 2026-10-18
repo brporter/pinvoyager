@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO users (id, display_name, avatar_url)\n         VALUES ($1, $2, $3)\n         RETURNING id, display_name, avatar_url, created_at",
+  "query": "INSERT INTO users (id, display_name, avatar_url)\n         VALUES ($1, $2, $3)\n         RETURNING id, display_name, avatar_url, created_at, is_site_admin",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "is_site_admin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_site_admin"
+          }
+        }
       }
     ],
     "parameters": {
@@ -59,8 +70,9 @@
       false,
       true,
       true,
+      false,
       false
     ]
   },
-  "hash": "ce133637877b2594d705d315ab30e897fedaf0a25792208f7ae11019df6872ec"
+  "hash": "1f8f4e34f6780fd76a298e29a413b6d32f2e6122bff6432bfcadc5be33f54ca8"
 }

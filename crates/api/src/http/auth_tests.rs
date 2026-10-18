@@ -23,7 +23,6 @@ impl crate::auth::AuthProvider for MislabelledProvider {
             subject: "mislabelled-subject".to_owned(),
 
             avatar_url: None,
-            admin_email: None,
         })
     }
 }
@@ -73,7 +72,6 @@ impl crate::auth::AuthProvider for StaticIdentityProvider {
             subject: "simulated-concurrent-first-sign-in".to_owned(),
 
             avatar_url: None,
-            admin_email: None,
         })
     }
 }
@@ -145,6 +143,7 @@ async fn concurrent_first_sign_in_unique_violation_is_a_safe_rejection(pool: sql
             State(app.clone()),
             CookieJar::new(),
             Json(crate::auth::dev::DevLoginRequest {
+                grant_admin: false,
                 subject: "simulated-concurrent-first-sign-in".to_owned(),
                 provider: None,
                 display_name: None,
@@ -636,7 +635,6 @@ async fn suspended_accounts_cannot_sign_in_or_complete_provider_linking(pool: sq
         provider: ProviderKind::Google,
         subject: "suspended-provider-subject".into(),
         avatar_url: None,
-        admin_email: None,
     };
     identities::create(&pool, account.id, DbProvider::Google, &identity.subject)
         .await
@@ -677,112 +675,47 @@ async fn suspended_accounts_cannot_sign_in_or_complete_provider_linking(pool: sq
 }
 
 #[sqlx::test]
-async fn initial_admin_matches_promote_on_signin_without_merging_or_bypassing_suspension(
-    pool: sqlx::PgPool,
-) {
-    let mut config = crate::Config::load().expect("config");
-    config.auth.initial_admins = crate::initial_admin::InitialAdmins::parse_args(
-        [
-            "--initial-admin-email",
-            "first@gmail.com",
-            "--initial-admin-email=second@example.com",
-        ]
-        .into_iter()
-        .map(std::ffi::OsString::from),
-    )
-    .expect("arguments")
-    .expect("not help");
+async fn provider_signin_never_grants_administration(pool: sqlx::PgPool) {
     let state = AppState::new(
         pool.clone(),
-        std::sync::Arc::new(config),
+        std::sync::Arc::new(crate::Config::load().expect("config")),
         crate::auth::ProviderRegistry::empty(),
         crate::photos::worker::VariantQueue::detached(),
     );
-    let mut identity = VerifiedIdentity {
+    let identity = VerifiedIdentity {
         provider: ProviderKind::Google,
-        subject: "first-account".into(),
+        subject: "ordinary".into(),
         avatar_url: None,
-        admin_email: Some("first@GMAIL.com".into()),
     };
+    let (id, _) = sign_in(&state, SignInIdentity::Verified(&identity))
+        .await
+        .expect("sign in");
+    assert!(
+        !sqlx::query_scalar::<_, bool>("SELECT is_site_admin FROM users WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("role")
+    );
+    sqlx::query("UPDATE users SET is_site_admin=true WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .expect("grant");
     sign_in(&state, SignInIdentity::Verified(&identity))
         .await
-        .expect("initial sign-in");
-    let first = identities::find_by_provider_subject(&pool, DbProvider::Google, &identity.subject)
-        .await
-        .expect("lookup")
-        .expect("identity")
-        .user_id;
-    let is_admin = |id| {
+        .expect("return");
+    assert!(
         sqlx::query_scalar::<_, bool>("SELECT is_site_admin FROM users WHERE id=$1")
             .bind(id)
             .fetch_one(&pool)
-    };
-    assert!(is_admin(first).await.expect("role"));
-    let (one, two) = tokio::join!(
-        sign_in(&state, SignInIdentity::Verified(&identity)),
-        sign_in(&state, SignInIdentity::Verified(&identity))
+            .await
+            .expect("role")
     );
-    one.expect("concurrent first login");
-    two.expect("concurrent second login");
-    // Removing an allowlist value does not revoke a persisted grant.
-    identity.admin_email = None;
-    sign_in(&state, SignInIdentity::Verified(&identity))
-        .await
-        .expect("returning admin");
-    assert!(is_admin(first).await.expect("role"));
-    identity.subject = "ordinary-account".into();
-    sign_in(&state, SignInIdentity::Verified(&identity))
-        .await
-        .expect("ordinary sign-in");
-    let second = identities::find_by_provider_subject(&pool, DbProvider::Google, &identity.subject)
-        .await
-        .expect("lookup")
-        .expect("identity")
-        .user_id;
-    assert!(!is_admin(second).await.expect("role"));
-    identity.admin_email = Some("unlisted@example.com".into());
-    sign_in(&state, SignInIdentity::Verified(&identity))
-        .await
-        .expect("unlisted");
-    assert!(!is_admin(second).await.expect("role"));
-    identity.admin_email = Some("second@example.com".into());
-    sign_in(&state, SignInIdentity::Verified(&identity))
-        .await
-        .expect("promote existing account");
-    assert!(is_admin(second).await.expect("role"));
-    sqlx::query("UPDATE users SET is_site_admin=false WHERE id=$1")
-        .bind(second)
-        .execute(&pool)
-        .await
-        .expect("demote");
-    sign_in(&state, SignInIdentity::Verified(&identity))
-        .await
-        .expect("allowlist still grants role");
-    assert!(is_admin(second).await.expect("role"));
-    // Equal emails still identify separate provider subjects/accounts.
-    identity.subject = "another-account".into();
-    sign_in(&state, SignInIdentity::Verified(&identity))
-        .await
-        .expect("separate account");
-    let third = identities::find_by_provider_subject(&pool, DbProvider::Google, &identity.subject)
-        .await
-        .expect("lookup")
-        .expect("identity")
-        .user_id;
-    assert_ne!(second, third);
-    sqlx::query("UPDATE users SET suspended=true,is_site_admin=false WHERE id=$1")
-        .bind(third)
-        .execute(&pool)
-        .await
-        .expect("suspend");
-    assert!(matches!(
-        sign_in(&state, SignInIdentity::Verified(&identity)).await,
-        Err(AppError::Forbidden)
-    ));
-    assert!(!is_admin(third).await.expect("role"));
-    // Linking is not sign-in and does not grant a role.
-    let ordinary = users::create(&pool, None, None).await.expect("account");
-    identity.subject = "link-only".into();
-    link(&state, ordinary.id, &identity).await.expect("link");
-    assert!(!is_admin(ordinary.id).await.expect("role"));
+}
+
+#[test]
+fn linking_conflict_offers_an_existing_account_instead_of_unlinking() {
+    assert!(ALREADY_LINKED.contains("Sign in to the account that already uses this identity."));
+    assert!(!ALREADY_LINKED.contains("unlink"));
 }

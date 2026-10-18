@@ -25,6 +25,10 @@ async fn cleanup_failure_is_retained_and_a_later_pass_removes_it(pool: PgPool) {
         .expect("count");
     assert_eq!(count, 1);
     std::fs::remove_dir(blocked).expect("clear obstruction");
+    sqlx::query("UPDATE photo_cleanup SET next_attempt_at=now()-interval '1 second'")
+        .execute(&pool)
+        .await
+        .expect("retry becomes due");
     sweep(&pool, scratch.path()).await.expect("retry");
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM photo_cleanup")
         .fetch_one(&pool)
@@ -57,4 +61,88 @@ async fn cleanup_rechecks_references_after_a_new_upload_adopts_content(pool: PgP
         std::fs::read(path).expect("adopted original remains"),
         b"original"
     );
+}
+
+#[sqlx::test]
+async fn failing_old_records_do_not_starve_newer_cleanup(pool: PgPool) {
+    let scratch = ScratchDir::new("cleanup-fairness");
+    for index in 0..1000 {
+        let hash = ContentHash::try_from(format!("{index:064x}")).expect("hash");
+        std::fs::create_dir_all(storage::variant_path(
+            scratch.path(),
+            &hash,
+            VariantKind::Thumb,
+        ))
+        .expect("obstruction");
+        sqlx::query(
+            "INSERT INTO photo_cleanup(content_hash,created_at) VALUES($1,now()-interval '1 hour')",
+        )
+        .bind(hash.as_str())
+        .execute(&pool)
+        .await
+        .expect("old cleanup");
+    }
+    let newer = "f".repeat(64);
+    sqlx::query("INSERT INTO photo_cleanup(content_hash) VALUES($1)")
+        .bind(&newer)
+        .execute(&pool)
+        .await
+        .expect("new cleanup");
+    sweep(&pool, scratch.path()).await.expect("first pass");
+    sweep(&pool, scratch.path()).await.expect("second pass");
+    let remains: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM photo_cleanup WHERE content_hash=$1)")
+            .bind(newer)
+            .fetch_one(&pool)
+            .await
+            .expect("remaining");
+    assert!(
+        !remains,
+        "persistent failures must leave room for newer cleanup"
+    );
+}
+
+#[sqlx::test]
+async fn sweep_removes_only_stale_unlocked_upload_files(pool: PgPool) {
+    use std::{
+        fs::{File, FileTimes},
+        time::{Duration, SystemTime},
+    };
+    let scratch = ScratchDir::new("stale-uploads");
+    let tmp = scratch.path().join("tmp");
+    std::fs::create_dir(&tmp).expect("temporary directory");
+    let old = SystemTime::now() - Duration::from_secs(48 * 60 * 60);
+    let stale = tmp.join(format!("{}.part", uuid::Uuid::now_v7()));
+    let active = tmp.join(format!("{}.part", uuid::Uuid::now_v7()));
+    let recent = tmp.join(format!("{}.part", uuid::Uuid::now_v7()));
+    let unrelated = tmp.join("operator-notes.part");
+    for path in [&stale, &active, &unrelated] {
+        File::create(path)
+            .expect("file")
+            .set_times(FileTimes::new().set_modified(old))
+            .expect("age");
+    }
+    File::create(&recent).expect("recent file");
+    let locked = File::options()
+        .read(true)
+        .write(true)
+        .open(&active)
+        .expect("active file");
+    locked.lock().expect("hold upload lock");
+    let directory = tmp.join(format!("{}.part", uuid::Uuid::now_v7()));
+    std::fs::create_dir(&directory).expect("unrelated directory");
+    sweep(&pool, scratch.path()).await.expect("sweep");
+    assert!(!stale.exists(), "stale abandoned uploads are removed");
+    assert!(
+        active.exists(),
+        "an active upload survives regardless of age"
+    );
+    assert!(recent.exists());
+    assert!(unrelated.exists());
+    assert!(directory.exists());
+    drop(locked);
+    sweep(&pool, scratch.path())
+        .await
+        .expect("sweep unlocked file");
+    assert!(!active.exists());
 }

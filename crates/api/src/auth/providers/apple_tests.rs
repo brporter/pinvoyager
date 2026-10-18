@@ -176,7 +176,7 @@ async fn apple_discovery_rejects_a_bad_key_before_network_discovery() {
     };
     let base_url = Url::parse("https://pinvoyager.example/").expect("valid test fixture");
 
-    let error = match AppleProvider::discover(&config, &base_url, APPLE_ISSUER, false).await {
+    let error = match AppleProvider::discover(&config, &base_url, APPLE_ISSUER).await {
         Ok(_) => panic!("invalid signing key must fail before contacting Apple"),
         Err(error) => error,
     };
@@ -196,7 +196,7 @@ async fn apple_discovery_probes_its_key_and_uses_the_fixed_form_post_parameters(
         private_key_pem: SecretString::from(TEST_KEY_PEM),
     };
     let base_url = Url::parse("https://pinvoyager.example/").expect("valid test fixture");
-    let apple = AppleProvider::discover(&config, &base_url, mock.issuer().as_str(), false)
+    let apple = AppleProvider::discover(&config, &base_url, mock.issuer().as_str())
         .await
         .expect("Apple can discover against the local OIDC provider");
 
@@ -253,54 +253,4 @@ async fn apple_provider_uses_form_post_without_requesting_profile_names() {
         .expect("valid mock ID token verifies");
 
     assert_eq!(identity.provider, ProviderKind::Apple);
-}
-
-#[tokio::test]
-async fn apple_bootstrap_requests_email_and_requires_a_verified_token_claim() {
-    use crate::auth::AuthProvider as _;
-    let mock = support::MockOidcProvider::start().await;
-    let config = AppleProviderConfig {
-        client_id: support::CLIENT_ID.into(),
-        team_id: "ABCDE12345".into(),
-        key_id: "KEYID67890".into(),
-        private_key_pem: SecretString::from(TEST_KEY_PEM),
-    };
-    let apple = AppleProvider::discover(
-        &config,
-        &Url::parse("https://pinvoyager.example/").expect("URL"),
-        mock.issuer().as_str(),
-        true,
-    )
-    .await
-    .expect("provider");
-    let authorization = apple.authorize().expect("authorization");
-    let scope = authorization
-        .url
-        .query_pairs()
-        .find(|(key, _)| key == "scope")
-        .expect("scope")
-        .1
-        .into_owned();
-    assert!(scope.split_whitespace().any(|scope| scope == "email"));
-    for (verified, expected) in [
-        (serde_json::json!(true), true),
-        (serde_json::json!("true"), true),
-        (serde_json::json!(false), false),
-        (serde_json::json!("false"), false),
-        (serde_json::Value::Null, false),
-    ] {
-        let code = mock
-            .token()
-            .claim("email", serde_json::json!("relay@privaterelay.appleid.com"))
-            .claim("email_verified", verified)
-            .issue();
-        let identity = apple
-            .exchange(&code, support::PKCE_VERIFIER, support::NONCE)
-            .await
-            .expect("identity");
-        assert_eq!(
-            identity.admin_email.as_deref(),
-            expected.then_some("relay@privaterelay.appleid.com")
-        );
-    }
 }

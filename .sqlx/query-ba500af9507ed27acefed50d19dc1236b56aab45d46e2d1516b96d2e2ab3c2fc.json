@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, display_name, avatar_url, created_at FROM users WHERE id = $1",
+  "query": "SELECT id, display_name, avatar_url, created_at, is_site_admin FROM users WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "is_site_admin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_site_admin"
+          }
+        }
       }
     ],
     "parameters": {
@@ -57,8 +68,9 @@
       false,
       true,
       true,
+      false,
       false
     ]
   },
-  "hash": "2e939c125407ae8018e94242ab507ecdfeadd6dca3aaba11c0b8db1422400f38"
+  "hash": "ba500af9507ed27acefed50d19dc1236b56aab45d46e2d1516b96d2e2ab3c2fc"
 }

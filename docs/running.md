@@ -95,17 +95,14 @@ will see the same prompt on their next visit. See [display names](display-names.
 
 The development provider stores `subject` as the account's provider identifier. The
 example uses an email-shaped string to make that identifier easy to remember.
-To test administration, start the API with `--initial-admin-email alice@example.test`
-and enter `alice@example.test` in **Forge a session** (or the request above).
-Both new and existing accounts receive administrator access on sign-in when their
-subject matches the configured list. The development path does not verify email
-ownership; it still rejects suspended accounts. See
-[site administration](site-administration.md#bootstrap) for matching rules.
+To test administration, select **Grant site administrator privileges** in
+**Forge a session**, or add `"grant_admin":true` to the request above. The checkbox
+starts unchecked. A true value promotes new or returning accounts; false or omitted
+values preserve existing roles. Suspended accounts remain blocked.
 
-The route bypasses provider authentication, then calls the same account-policy
-and session-creation function as verified provider sign-in. Both paths check
-suspension, update identity activity, and apply initial-admin policy in one
-transaction; see the [shared pipeline](architecture/auth-flow.md#shared-sign-in-pipeline).
+Both sign-in paths check suspension, update identity activity, and create a session
+in one transaction. The debug-only grant also commits in that transaction; see the
+[shared pipeline](architecture/auth-flow.md#shared-sign-in-pipeline).
 
 `#[cfg(debug_assertions)]` in
 `crates/api/src/http/auth.rs::routes` omits it from release builds. To check that the
@@ -252,15 +249,23 @@ docker run --rm -p 8080:8080 \
 
 ## First site administrator
 
-Pass repeatable email arguments when starting the API:
+Use the Rust operator tool against an existing account:
 
 ```sh
-cargo run -p pinvoyager-api -- --initial-admin-email first@gmail.com --initial-admin-email second@example.com
+cargo run -p pinvoyager-api --bin pinvoyager-admin -- YOUR-ACCOUNT-UUID
+# On the production host, from the Compose directory:
+docker compose exec api pinvoyager-admin YOUR-ACCOUNT-UUID
 ```
 
-Eligible verified Google or Apple sign-ins receive the administrator role. Microsoft
-email claims cannot grant this role. The development-only **Forge a session** path
-also grants it when the supplied subject matches a configured email.
-Read the [bootstrap instructions and security
-limits](site-administration.md#bootstrap), then remove the arguments and restart
-all instances after bootstrap. Further promotions are available at `/admin`.
+It uses the API database configuration and reports a grant, an existing role, or a
+missing-account error. Reload the app after success. See
+[site administration](site-administration.md#bootstrap) for exit status,
+suspension behavior, and development-only forging. Further promotions are available
+at `/admin`.
+
+## IDE launch configuration
+
+`.run/Run pinvoyager-api.run.xml` runs `cargo run --package pinvoyager-api --bin
+pinvoyager-api` without startup arguments. The API rejects the retired
+`--initial-admin-email` flag. Use the development sign-in administrator checkbox
+or the `pinvoyager-admin UUID` operator tool described above to grant the role.

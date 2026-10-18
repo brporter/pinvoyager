@@ -18,7 +18,7 @@ cargo clippy --all-targets -- -D warnings
 RUSTDOCFLAGS='-D warnings' cargo doc --no-deps
 cargo test
 cargo coverage -- --test-threads=1
-cargo test --release --test auth_build_mode
+cargo test --release --test auth_build_mode --test admin_cli
 
 npm --prefix web run format:check
 npm --prefix web run typecheck
@@ -53,7 +53,7 @@ Test filenames without a directory are relative to `crates/api/tests/`, except
 | Upload and readiness | `npm --prefix web run test:regression` | Creation validation, per-file state, transfer failures, pending-to-ready polling, and first voyage visit. |
 | Native images | `crates/api/src/http/photos_tests.rs`, `crates/api/tests/photos_recovery.rs` | HEIC ingestion/conversion, corrupt inputs, variants, and pending recovery. |
 | Privacy and ownership | `crates/api/tests/photo_ownership.rs`, `photos_public_access.rs`, `voyages_granularity.rs`, `discover_map.rs` | Voyage membership, draft visibility, authorized variants, rounding, and discovery data. |
-| Site administration | `admin.rs`, `initial_admin_cli.rs`, `auth_tokens.rs`, `auth_flow.rs`, `http/auth_tests.rs`, `web/src/screens/__tests__/Admin.test.tsx` | CLI bootstrap, verified-email grants, development subject grants, roles, suspension and sign-in/link rejection, account/voyage pagination, storage accounting, deletion/shared-file cleanup, concurrency, and modal confirmation for every action. |
+| Site administration | `admin.rs`, `admin_cli.rs`, `auth_tokens.rs`, `auth_flow.rs`, `http/auth_tests.rs`, `web/src/screens/__tests__/Admin.test.tsx` | UUID operator grants, provider emails never granting roles, optional development grants, roles, suspension and sign-in/link rejection, account/voyage pagination, storage accounting, deletion/shared-file cleanup, concurrency, and modal confirmation for every action. |
 | Authentication and names | `auth_flow.rs`, `auth_tokens.rs`, `auth_build_mode.rs`, `auth/dev_tests.rs`, `display_names.rs` | Shared provider/forged sign-in policy, atomic rollback, session contracts, release-build bypass exclusion, identity linkage, unique names, aliases, and public profiles. |
 | API shapes | `api_fixtures.rs`, `web/src/api/__tests__/contract.test.ts` | Representative response fixtures and frontend type compatibility. |
 | Tracing | `image_tracing.rs`, `telemetry_tests.rs` | Request/worker context, span attribution, export configuration, and shutdown. |
@@ -118,3 +118,52 @@ before each pool is returned. These tests therefore run against a fresh CI
 database as well as an already migrated local database; mutations still roll
 back their transactions. The separate empty-database migration test verifies
 bootstrap in its own temporary database.
+
+Production publishing uses `Dockerfile`, which builds both Rust binaries with
+`cargo build --release --locked --bins` and explicitly disables release debug
+assertions. `checks.yml` tests `auth_build_mode` and `admin_cli` in release mode
+before `deploy.yml` publishes either image. The web Dockerfile runs the Vite
+production build; the development sign-in form is excluded by `import.meta.env.DEV`.
+
+
+## Regression checks for navigation, cleanup, and shutdown
+
+`web/src/screens/__tests__/Upload.test.tsx` verifies that selecting another upload
+URL cancels active work, discards queued files, resets the destination, and ignores
+late creation replies. `VoyageUploadFlow.test.tsx` verifies that creating a draft
+preserves its trace through upload. `AuthProviderCallbacks.test.tsx` and
+`shell/__tests__/AccountMenu.test.tsx` cover logout failure propagation and retry.
+Fetch and XHR error parsing retain the cases in the two API client test suites.
+
+`crates/api/src/http/mod_tests.rs` checks that HTTP shutdown closes the listener,
+allows active requests to finish within the timeout, and drops both blocked handlers
+and streamed bodies at the deadline. The stalled-upload test uses the current
+voyage-scoped upload route. `photos_recovery.rs` checks that a delayed failure cannot
+replace a successful conversion. `photos/cleanup_tests.rs` checks that a page of
+1,000 failed removals cannot prevent a newer record from being processed.
+
+`photos/account_storage_tests.rs` covers the 60-second cache lifetime, 256-account
+capacity, paged measurement beyond 1,000 hashes, and uncached errors. `tests/admin.rs`
+checks cache reuse across list/detail requests and current authorization. Account
+summary queries and `/api/me` retain their existing response fixtures.
+
+## Review regression coverage
+
+`http/photos_tests.rs::photo_deletion_queues_files_without_removing_them_in_the_request`,
+`http/voyages_tests.rs::deleting_a_voyage_deletes_photos_but_preserves_shared_storage`,
+and `tests/admin.rs::deletion_removes_account_data_and_unshared_files_but_reserves_names`
+verify that deletion returns after database commit while files remain queued, then
+exercise background cleanup and shared-content retention.
+
+`http/photos_tests.rs::canceling_an_upload_removes_its_partially_written_file`
+cancels an upload only after bytes reach disk and waits for removal.
+`photos/temporary_tests.rs` checks lease lifetime through blocking work, filesystem
+errors, and symlink preservation. `photos/cleanup_tests.rs::sweep_removes_only_stale_unlocked_upload_files`
+checks age, naming, and active-file locks. `photos/account_storage_tests.rs` blocks
+one account's measurement and verifies cached/unrelated reads proceed, duplicate
+requests share a result, and cancellation releases the account lock.
+
+The callback tests assert supported existing-account recovery instructions; the
+OIDC issue-time comments document the verifier's existing policy. The RustRover
+launch configuration uses the argument-free API command; the CLI tests continue
+to verify rejection of the retired administrator flag.
