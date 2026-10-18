@@ -90,7 +90,7 @@ base_url = "http://127.0.0.1:8080"
 #        -d '{"subject":"alice@example.test","display_name":"Alice"}'
 #
 # The `subject` is stored as the provider subject, not as an email — this
-# service holds no email address anywhere (D3). An email-shaped string is just a
+# service does not store account email addresses (D3). An email-shaped string is a
 # memorable handle for choosing which account you are.
 #
 # This is a COMPLETE AUTHENTICATION BYPASS. It is safe to enable here only

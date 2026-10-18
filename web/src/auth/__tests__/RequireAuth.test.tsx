@@ -137,7 +137,7 @@ describe("the redirect target is validated, not merely carried", () => {
     stubMe(200, SIGNED_IN);
     // On-site is not by itself enough — the server's allowlist would drop this
     // too, and disagreeing with it would strand the user with no explanation.
-    renderAt("/signin?redirect_to=%2Fadmin");
+    renderAt("/signin?redirect_to=%2Funknown-route");
 
     await waitFor(() => {
       expect(location()).toBe("/");

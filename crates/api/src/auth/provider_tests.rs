@@ -26,6 +26,7 @@ fn a_deployment_with_no_credentials_still_has_a_registry() {
 async fn configured_apple_provider_is_discovered_and_registered() {
     let mock = support::MockOidcProvider::start().await;
     let config = AuthConfig {
+        initial_admins: Default::default(),
         base_url: url::Url::parse("http://pinvoyager.example").expect("valid test fixture"),
         session: Default::default(),
         providers: ProvidersConfig {
@@ -57,6 +58,7 @@ async fn configured_apple_provider_is_discovered_and_registered() {
 async fn every_configured_provider_is_discovered_registered_and_authorizable() {
     let mock = support::MockOidcProvider::start().await;
     let config = AuthConfig {
+        initial_admins: Default::default(),
         base_url: url::Url::parse("http://pinvoyager.example").expect("valid test fixture"),
         session: Default::default(),
         providers: ProvidersConfig {
@@ -101,6 +103,7 @@ async fn every_configured_provider_is_discovered_registered_and_authorizable() {
 #[tokio::test]
 async fn a_provider_that_fails_startup_discovery_is_disabled_without_stopping_startup() {
     let config = AuthConfig {
+        initial_admins: Default::default(),
         base_url: url::Url::parse("http://pinvoyager.example").expect("valid test fixture"),
         session: Default::default(),
         providers: ProvidersConfig {

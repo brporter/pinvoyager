@@ -11,7 +11,7 @@ overview](../architecture.md) for modules, routes, and data flow.
 | D3 | Identities match on provider and subject, never email. Linking another provider requires an authenticated account. |
 | D4, D4a | MapLibre uses OpenStreetMap raster tiles for development. Attribution is visible and requests use normal browser caching and an origin Referer. This tile configuration is normally limited to development by project policy; the owner authorized it for the initial production deployment on 2026-10-11 (see the tile policy reference). |
 | D5 | The application performs no geocoding. Place context comes from basemap labels. |
-| D6 | Published voyages are public; drafts return 404 to non-owners. Public voyage coordinates use the voyage's granularity. Exact coordinates remain available in owner-only photo metadata. Originals are never served. |
+| D6 | Published voyages are public; drafts return 404 to non-owners. The administrator-only account detail endpoint may list draft titles/descriptions, but does not grant draft photo access. Public voyage coordinates use the voyage's granularity. Exact coordinates remain available in owner-only photo metadata. Originals are never served. |
 | D7 | Image paths derive from content hashes. The authorized HTTP handler serves only re-encoded WebP variants with controlled response headers. Variant responses are private and must revalidate authorization before reuse. |
 | D8 | Database access is async. CPU-heavy image work and blocking file operations run off Tokio worker threads. The database pool has an acquisition timeout. |
 | D9 | JPEG/PNG/WebP decoding uses `image`, HEIC uses native libheif, and lossy WebP encoding uses libwebp. All variants are generated from decoded pixels without copied metadata. |

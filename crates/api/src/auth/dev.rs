@@ -3,7 +3,8 @@
 //! A caller supplies a provider and subject and receives a session for that
 //! identity, creating an account if needed. This bypass can impersonate existing
 //! accounts. It is compiled only with debug assertions and additionally requires
-//! `auth.dev_login` to be enabled.
+//! `auth.dev_login` to be enabled. A subject matching an initial-admin email also
+//! grants administrator access without email verification.
 
 use axum::Json;
 use axum::extract::State;
@@ -12,16 +13,15 @@ use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
 
 use crate::auth::ProviderKind;
-use crate::auth::session;
-use crate::db::repo::identities::{self, Provider as DbProvider};
-use crate::db::repo::users;
+use crate::auth::sign_in::{SignInIdentity, sign_in};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct DevLoginRequest {
     /// The provider subject to sign in as. An email-shaped string is the
-    /// convenient thing to type; it is treated as an opaque identifier.
+    /// convenient thing to type. It remains the opaque identity key and is also
+    /// compared with configured initial-admin emails for development role grants.
     pub subject: String,
     /// Which provider this forged identity claims to come from. Defaults to
     /// Google, which is only a convenience — nothing contacts it.
@@ -33,9 +33,10 @@ pub struct DevLoginRequest {
     pub display_name: Option<String>,
 }
 
-/// Finds or creates the supplied provider identity and issues a session in one
-/// transaction. Returns 404 when development login is disabled and propagates
-/// database failures.
+/// Validates the development request and delegates account policy and session
+/// creation to the shared sign-in function. Returns 404 when disabled, 400 for
+/// invalid inputs or a first-sign-in collision, 403 for suspended accounts, and
+/// propagates other database failures.
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -56,7 +57,6 @@ pub async fn login(
             .ok_or_else(|| AppError::BadRequest(format!("unknown provider: {name}")))?,
         None => ProviderKind::Google,
     };
-    let db_provider = DbProvider::from(kind);
     let provider_name = kind.as_str();
 
     tracing::warn!(
@@ -65,25 +65,14 @@ pub async fn login(
         "DEV LOGIN: forging a session without any provider verification"
     );
 
-    let mut tx = state.pool.begin().await?;
-
-    let user_id = match identities::find_by_provider_subject(
-        &mut *tx,
-        db_provider,
-        &request.subject,
+    let (user_id, token) = sign_in(
+        &state,
+        SignInIdentity::Development {
+            provider: kind,
+            subject: &request.subject,
+        },
     )
-    .await?
-    {
-        Some(identity) => identity.user_id,
-        None => {
-            let user = users::create(&mut *tx, None, None).await?;
-            identities::create(&mut *tx, user.id, db_provider, &request.subject).await?;
-            user.id
-        }
-    };
-
-    let token = session::create(&mut *tx, user_id, &state.config.auth.session).await?;
-    tx.commit().await?;
+    .await?;
 
     let jar = jar.add(crate::http::auth::session_cookie(
         &state.config.auth.session,

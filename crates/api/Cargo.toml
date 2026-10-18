@@ -48,7 +48,8 @@ uuid = { version = "1.24.1", features = ["v7", "serde"] }
 
 # Optional Tokio runtime instrumentation for development; not enabled by default.
 console-subscriber = { version = "0.5.0", optional = true }
-openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
+# Apple may encode email_verified as a string in its signed ID token.
+openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls", "accept-string-booleans"] }
 # Pinned to 0.12, NOT 0.13. openidconnect 4 depends on oauth2 5, which is built
 # against reqwest 0.12 — and a `&reqwest::Client` from 0.13 does not implement
 # oauth2's `AsyncHttpClient`, so discovery will not typecheck against it. Two

@@ -18,6 +18,8 @@ import errorNotFound from "../__fixtures__/error_not_found.json";
 import errorUnauthorized from "../__fixtures__/error_unauthorized.json";
 import errorValidation from "../__fixtures__/error_validation.json";
 import publicProfile from "../__fixtures__/public_profile.json";
+import adminUsers from "../__fixtures__/admin_users.json";
+import adminUserDetail from "../__fixtures__/admin_user_detail.json";
 import me from "../__fixtures__/me.json";
 import photo from "../__fixtures__/photo.json";
 import photoList from "../__fixtures__/photo_list.json";
@@ -34,6 +36,8 @@ import voyageUpdated from "../__fixtures__/voyage_updated.json";
 
 import type { ApiErrorBody } from "../client";
 import type {
+  AdminUserPage,
+  AdminUserDetail,
   ApiError,
   DiscoverMap,
   Granularity,
@@ -130,6 +134,8 @@ type Assert<T extends true> = T;
  * Exported so that `noUnusedLocals` does not delete the entire check.
  */
 export const assigned: {
+  adminUsers: FromJson<AdminUserPage>;
+  adminUserDetail: FromJson<AdminUserDetail>;
   me: FromJson<Me>;
   publicProfile: FromJson<PublicProfilePage>;
   photo: FromJson<Photo>;
@@ -151,6 +157,8 @@ export const assigned: {
   // which accepts arbitrary codes and optional field errors.
   errorValidation: ApiErrorBody;
 } = {
+  adminUsers,
+  adminUserDetail,
   me,
   publicProfile,
   photo,
@@ -181,6 +189,8 @@ export const assigned: {
  * point the entry fails its `extends never` constraint and the build stops.
  */
 export type ContractHasNoExtraFields = [
+  NoExtraFields<ExtraKeys<typeof adminUsers, AdminUserPage>>,
+  NoExtraFields<ExtraKeys<typeof adminUserDetail, AdminUserDetail>>,
   NoExtraFields<ExtraKeys<typeof me, Me>>,
   NoExtraFields<ExtraKeys<typeof publicProfile, PublicProfilePage>>,
   NoExtraFields<ExtraKeys<typeof photo, Photo>>,

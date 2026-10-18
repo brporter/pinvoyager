@@ -119,6 +119,12 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
         .expect("small login response");
     let first: serde_json::Value = serde_json::from_slice(&first_body).expect("valid test fixture");
 
+    sqlx::query("UPDATE identities SET last_seen_at = now() - interval '1 day' WHERE subject=$1")
+        .bind(&subject)
+        .execute(&pool)
+        .await
+        .expect("age last sign-in");
+
     let (second_jar, second_response) = invoke(
         app,
         DevLoginRequest {
@@ -153,4 +159,101 @@ async fn first_and_returning_logins_issue_sessions_for_the_same_identity(pool: P
             .await
             .expect("read the stored display name");
     assert!(display_name.is_none());
+    let seen_recently: bool = sqlx::query_scalar(
+        "SELECT last_seen_at > now() - interval '1 minute' FROM identities WHERE subject=$1",
+    )
+    .bind(&subject)
+    .fetch_one(&pool)
+    .await
+    .expect("last sign-in");
+    assert!(
+        seen_recently,
+        "forged sign-in updates identity activity like provider sign-in"
+    );
+}
+
+#[sqlx::test]
+async fn session_failure_rolls_back_new_accounts_and_existing_account_changes(pool: PgPool) {
+    let mut app = state(pool.clone(), true);
+    std::sync::Arc::get_mut(&mut app.config)
+        .expect("unshared config")
+        .auth
+        .initial_admins =
+        crate::initial_admin::InitialAdmins::parse_args([std::ffi::OsString::from(
+            "--initial-admin-email=admin@example.test",
+        )])
+        .expect("arguments")
+        .expect("run");
+    sqlx::query("ALTER TABLE sessions ADD CONSTRAINT reject_test_sessions CHECK (false)")
+        .execute(&pool)
+        .await
+        .expect("reject session inserts");
+    let request = || DevLoginRequest {
+        subject: "admin@example.test".to_owned(),
+        provider: None,
+        display_name: None,
+    };
+    assert!(matches!(
+        invoke(app.clone(), request()).await,
+        Err(AppError::Database(_))
+    ));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+            .fetch_one(&pool)
+            .await
+            .expect("accounts"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM identities")
+            .fetch_one(&pool)
+            .await
+            .expect("identities"),
+        0
+    );
+
+    let account = crate::db::repo::users::create(&pool, Some("kept-name"), Some("kept-avatar"))
+        .await
+        .expect("existing account");
+    let identity = crate::db::repo::identities::create(
+        &pool,
+        account.id,
+        crate::db::repo::identities::Provider::Google,
+        "admin@example.test",
+    )
+    .await
+    .expect("identity");
+    let old_activity: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+        "UPDATE identities SET last_seen_at=now()-interval '1 day' WHERE id=$1 RETURNING last_seen_at")
+        .bind(identity.id).fetch_one(&pool).await.expect("age activity");
+    assert!(matches!(
+        invoke(app, request()).await,
+        Err(AppError::Database(_))
+    ));
+    let (is_admin, name, avatar): (bool, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT is_site_admin, display_name, avatar_url FROM users WHERE id=$1")
+            .bind(account.id)
+            .fetch_one(&pool)
+            .await
+            .expect("account");
+    assert!(!is_admin, "failed sign-in must roll back promotion");
+    assert_eq!(name.as_deref(), Some("kept-name"));
+    assert_eq!(avatar.as_deref(), Some("kept-avatar"));
+    assert_eq!(
+        sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+            "SELECT last_seen_at FROM identities WHERE id=$1"
+        )
+        .bind(identity.id)
+        .fetch_one(&pool)
+        .await
+        .expect("activity"),
+        old_activity
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .expect("sessions"),
+        0
+    );
 }

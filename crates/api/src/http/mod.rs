@@ -1,6 +1,7 @@
 //! HTTP layer.
 //!
 
+pub mod admin;
 pub mod auth;
 pub mod health;
 pub mod middleware;
@@ -31,6 +32,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health::health))
         .route("/ready", get(health::ready))
         .merge(auth::routes())
+        .merge(admin::routes())
         .merge(photos::routes())
         .merge(profiles::routes())
         .merge(voyages::routes())

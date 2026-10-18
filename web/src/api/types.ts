@@ -185,6 +185,7 @@ export interface UploadResult {
  * is optional provider-supplied data.
  */
 export interface CurrentUser {
+  is_site_admin: boolean;
   id: string;
   display_name: string | null;
   avatar_url: string | null;
@@ -246,5 +247,29 @@ export interface FieldError {
 
 /** Public profile by ID or name: public identity plus this owner's published page. */
 export interface PublicProfilePage extends VoyageList {
-  user: CurrentUser;
+  user: Omit<CurrentUser, "is_site_admin">;
 }
+
+/** Rust: http::admin. File bytes include originals and variants, deduplicated per account. */
+export interface AdminUser {
+  id: string;
+  display_name: string | null;
+  created_at: string;
+  is_site_admin: boolean;
+  suspended: boolean;
+  photo_count: number;
+  voyage_count: number;
+  storage_bytes: number;
+}
+export interface AdminUserPage {
+  users: AdminUser[];
+  next_before: string | null;
+}
+export interface AdminUserDetail {
+  user: AdminUser;
+  voyages: { id: string; title: string; description: string | null; published: boolean }[];
+  next_before: string | null;
+}
+export type AdminAction =
+  | { action: "suspend" | "enable" | "delete" | "promote" | "unpublish_all" }
+  | { action: "unpublish_voyage"; voyage_id: string };

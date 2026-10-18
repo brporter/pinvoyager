@@ -223,3 +223,34 @@ body {
 .pv-voyage-page-area .pv-empty {
   padding: var(--pv-space-4);
 }
+
+.pv-admin {
+  max-width: 1100px;
+  margin: auto;
+  padding: var(--pv-space-6) var(--pv-space-4);
+  overflow-wrap: anywhere;
+}
+.pv-admin-table-scroll {
+  overflow-x: auto;
+}
+.pv-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.pv-admin-table th,
+.pv-admin-table td {
+  padding: var(--pv-space-3);
+  border-bottom: 1px solid var(--pv-border);
+}
+.pv-admin-card {
+  padding: var(--pv-space-4);
+}
+.pv-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pv-space-2);
+}
+.pv-admin a {
+  color: var(--pv-accent-text);
+}

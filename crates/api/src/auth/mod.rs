@@ -12,6 +12,7 @@ pub mod extract;
 pub mod provider;
 pub(crate) mod providers;
 pub mod session;
+pub(crate) mod sign_in;
 
 pub use extract::{CurrentUser, MaybeUser};
 pub use provider::{AuthProvider, ProviderKind, ProviderRegistry, VerifiedIdentity};

@@ -13,6 +13,8 @@ requested page. Saving the name resumes that page.
 | `/upload` | Signed-in creation: name, description, precision → files → processing → review. |
 | `/upload?voyage=:id` | Add photos directly to an existing owned voyage. |
 | `/u/:identifier` | Accepts account ID or display name. The signed-in owner sees drafts and creation controls; everyone else sees published voyages only. Old aliases resolve to `/u/:currentName`. |
+| `/admin` | Site-administrator account list with photo/voyage counts and file storage totals. |
+| `/admin/users/:id` | Site-administrator user detail, voyage metadata, and modal-confirmed account/voyage actions. |
 | `/settings` | Signed-in display-name settings and provider linking. |
 | `/signin` | Provider selection. |
 | `/auth/callback` | Authentication result and redirect to the requested destination. |
@@ -46,3 +48,7 @@ publication state. Publish submits the edited fields and `published: true` in on
 request. A draft's Share dialog requires successful publication before exposing its
 public URL. See [photo ownership](../voyage-owned-photos.md),
 [sharing](../voyage-sharing.md), and [gallery behavior](../location-gallery.md).
+
+The account menu links site administrators to `/admin` on desktop and mobile.
+`Admin` checks the signed-in role; API handlers enforce it independently. Both admin
+routes are accepted sign-in return destinations. See [site administration](../site-administration.md).

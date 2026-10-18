@@ -310,6 +310,9 @@ async fn ingest_part(
         .await
         .map_err(|_| AppError::ServiceUnavailable)?;
     let mut tx = state.pool.begin().await?;
+    // Lock the account before its voyage, matching administrator deletion, and
+    // reject an upload whose account was suspended while its bytes arrived.
+    crate::db::repo::users::require_active(&mut tx, owner_id).await?;
     let owned: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
             .bind(voyage_id)

@@ -77,7 +77,7 @@ export function DevSignIn({ onSignedIn }: { onSignedIn: () => void | Promise<voi
           onChange={(event) => {
             setSubject(event.target.value);
           }}
-          help="Stored as an opaque provider subject. It looks like an email because that is a convenient thing to type — nothing parses it and nothing is ever sent to it."
+          help="Stored as the provider subject. Enter an email configured with --initial-admin-email to receive administrator access. Development sign-in does not verify email ownership."
           error={error ?? undefined}
         />
 

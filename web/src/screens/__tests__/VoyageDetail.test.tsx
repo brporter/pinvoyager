@@ -691,6 +691,7 @@ describe("VoyageDetail — ownership", () => {
         id: "u1",
         display_name: "Owner",
         avatar_url: null,
+        is_site_admin: false,
         created_at: "2026-01-01T00:00:00Z",
       },
     });
@@ -716,6 +717,7 @@ describe("VoyageDetail — ownership", () => {
           id: "u1",
           display_name: "Owner",
           avatar_url: null,
+          is_site_admin: false,
           created_at: "2026-01-01T00:00:00Z",
         },
       });
@@ -735,6 +737,7 @@ describe("VoyageDetail — ownership", () => {
         id: "u1",
         display_name: "Owner",
         avatar_url: null,
+        is_site_admin: false,
         created_at: "2026-01-01T00:00:00Z",
       },
     });
@@ -810,6 +813,7 @@ it.each(["u1", "another-user"])(
         id: userId,
         display_name: "Visitor",
         avatar_url: null,
+        is_site_admin: false,
         created_at: "2026-01-01T00:00:00Z",
       },
     });

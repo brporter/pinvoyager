@@ -1,0 +1,15 @@
+{
+  "users": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "display_name": null,
+      "created_at": "2026-10-18T00:00:00Z",
+      "is_site_admin": false,
+      "suspended": false,
+      "voyage_count": 2,
+      "photo_count": 0,
+      "storage_bytes": 0
+    }
+  ],
+  "next_before": "00000000-0000-0000-0000-000000000001"
+}

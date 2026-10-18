@@ -364,6 +364,9 @@ impl OidcCore {
         Ok(VerifiedIdentity {
             provider: self.kind,
             subject: claims.subject().as_str().to_owned(),
+            // Read bootstrap claims only after signature, issuer, audience,
+            // expiry, and nonce verification above has succeeded.
+            admin_email: admin_email_from_verified_token(self.kind, &id_token.to_string()),
             avatar_url: claims
                 .picture()
                 .and_then(|picture| picture.get(None))
@@ -430,6 +433,35 @@ impl OidcCore {
     }
 }
 
+/// The input must already have passed ID-token verification. Core OIDC claims
+/// omit Google's hd extension, so read the same verified payload for this policy.
+/// Missing, malformed, unverified, or non-authoritative emails never grant roles.
+fn admin_email_from_verified_token(kind: ProviderKind, token: &str) -> Option<String> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let claims: Value = serde_json::from_slice(&bytes).ok()?;
+    let verified = claims["email_verified"] == Value::Bool(true)
+        || (kind == ProviderKind::Apple && claims["email_verified"].as_str() == Some("true"));
+    if !verified {
+        return None;
+    }
+    let email = claims["email"].as_str()?;
+    let authoritative = match kind {
+        ProviderKind::Google => {
+            email.to_ascii_lowercase().ends_with("@gmail.com")
+                || claims["hd"]
+                    .as_str()
+                    .is_some_and(|domain| !domain.is_empty())
+        }
+        ProviderKind::Apple => true,
+        // Microsoft explicitly prohibits using this mutable claim for authorization.
+        ProviderKind::Microsoft => false,
+    };
+    authoritative.then(|| email.to_owned())
+}
+
 /// Google OIDC and Microsoft OIDC, including the common authority.
 pub(crate) struct StandardOidcProvider {
     core: OidcCore,
@@ -440,6 +472,7 @@ impl StandardOidcProvider {
         kind: ProviderKind,
         config: &crate::config::OidcProviderConfig,
         base_url: &Url,
+        request_email: bool,
     ) -> Result<Self, AuthError> {
         let core = OidcCore::discover(
             kind,
@@ -447,12 +480,13 @@ impl StandardOidcProvider {
             &config.client_id,
             Arc::new(StaticClientSecret::new(&config.client_secret)),
             super::callback_uri(base_url, kind)?,
-            // `openid` is added by the library. `profile` is what supplies a
-            // display name and (from Google) an avatar. `email` is deliberately
-            // absent: this service does not store an email address, and asking a
-            // provider for data we must immediately discard is a privacy cost
-            // with no product behind it.
-            vec![Scope::new("profile".to_owned())],
+            // Request email only while bootstrap is configured. Microsoft email
+            // claims are never used for administrator authorization.
+            if request_email {
+                vec![Scope::new("profile".into()), Scope::new("email".into())]
+            } else {
+                vec![Scope::new("profile".into())]
+            },
             Vec::new(),
         )
         .await?;

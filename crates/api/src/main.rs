@@ -10,7 +10,11 @@ use pinvoyager_api::{AppState, Config, db, http, telemetry};
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    if let Err(err) = run().await {
+    entrypoint(std::env::args_os().skip(1)).await
+}
+
+async fn entrypoint(args: impl IntoIterator<Item = std::ffi::OsString>) -> ExitCode {
+    if let Err(err) = run(args).await {
         // Report startup failures even if telemetry initialization failed.
         eprintln!("fatal: {err}");
         let mut source = std::error::Error::source(&*err);
@@ -23,8 +27,16 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = Config::load()?;
+async fn run(
+    args: impl IntoIterator<Item = std::ffi::OsString>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let Some(initial_admins) = pinvoyager_api::initial_admin::InitialAdmins::parse_args(args)?
+    else {
+        print!("{}", pinvoyager_api::initial_admin::HELP);
+        return Ok(());
+    };
+    let mut config = Config::load()?;
+    config.auth.initial_admins = initial_admins;
     let provider = telemetry::init(&config.telemetry)?;
     let result = run_service(config).await;
     telemetry::shutdown(provider).await;

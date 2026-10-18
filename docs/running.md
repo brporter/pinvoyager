@@ -95,8 +95,19 @@ will see the same prompt on their next visit. See [display names](display-names.
 
 The development provider stores `subject` as the account's provider identifier. The
 example uses an email-shaped string to make that identifier easy to remember.
+To test administration, start the API with `--initial-admin-email alice@example.test`
+and enter `alice@example.test` in **Forge a session** (or the request above).
+Both new and existing accounts receive administrator access on sign-in when their
+subject matches the configured list. The development path does not verify email
+ownership; it still rejects suspended accounts. See
+[site administration](site-administration.md#bootstrap) for matching rules.
 
-The route bypasses provider authentication. `#[cfg(debug_assertions)]` in
+The route bypasses provider authentication, then calls the same account-policy
+and session-creation function as verified provider sign-in. Both paths check
+suspension, update identity activity, and apply initial-admin policy in one
+transaction; see the [shared pipeline](architecture/auth-flow.md#shared-sign-in-pipeline).
+
+`#[cfg(debug_assertions)]` in
 `crates/api/src/http/auth.rs::routes` omits it from release builds. To check that the
 route string is absent from the release binary:
 
@@ -238,3 +249,18 @@ docker run --rm -p 8080:8080 \
 | Connection refused from the container | Used `localhost` where the container needs `db` (Compose) or `host.docker.internal` (plain `docker run`). |
 | `db` never reaches `healthy` | Inspect `docker compose logs db` and the existing volume before changing database storage. |
 | Container build fails on a `query!` macro | The `.sqlx` cache is stale. Rerun `cargo sqlx prepare`. |
+
+## First site administrator
+
+Pass repeatable email arguments when starting the API:
+
+```sh
+cargo run -p pinvoyager-api -- --initial-admin-email first@gmail.com --initial-admin-email second@example.com
+```
+
+Eligible verified Google or Apple sign-ins receive the administrator role. Microsoft
+email claims cannot grant this role. The development-only **Forge a session** path
+also grants it when the supplied subject matches a configured email.
+Read the [bootstrap instructions and security
+limits](site-administration.md#bootstrap), then remove the arguments and restart
+all instances after bootstrap. Further promotions are available at `/admin`.

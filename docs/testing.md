@@ -18,6 +18,7 @@ cargo clippy --all-targets -- -D warnings
 RUSTDOCFLAGS='-D warnings' cargo doc --no-deps
 cargo test
 cargo coverage -- --test-threads=1
+cargo test --release --test auth_build_mode
 
 npm --prefix web run format:check
 npm --prefix web run typecheck
@@ -34,6 +35,14 @@ branches, functions, and lines across production TypeScript modules. Its
 exclusions cover declarations, tests, fixtures, mocks, and test setup, not
 production features. No production instrumentation exclusion is configured.
 
+The release-only forging check runs with debug assertions disabled even when the
+test configuration enables development login. On macOS, if the release build fails
+to load a compiler plugin with `mis-aligned LINKEDIT string pool`, run
+`CARGO_PROFILE_RELEASE_STRIP=none SQLX_OFFLINE=true cargo test --release --test auth_build_mode`.
+Disabling symbol stripping avoids the compiler-plugin loading issue without
+changing the build's authentication restrictions. The repository's `photo-perf`
+profile uses the same stripping workaround.
+
 ## Focused suites
 
 Test filenames without a directory are relative to `crates/api/tests/`, except
@@ -44,7 +53,8 @@ Test filenames without a directory are relative to `crates/api/tests/`, except
 | Upload and readiness | `npm --prefix web run test:regression` | Creation validation, per-file state, transfer failures, pending-to-ready polling, and first voyage visit. |
 | Native images | `crates/api/src/http/photos_tests.rs`, `crates/api/tests/photos_recovery.rs` | HEIC ingestion/conversion, corrupt inputs, variants, and pending recovery. |
 | Privacy and ownership | `crates/api/tests/photo_ownership.rs`, `photos_public_access.rs`, `voyages_granularity.rs`, `discover_map.rs` | Voyage membership, draft visibility, authorized variants, rounding, and discovery data. |
-| Authentication and names | `auth_flow.rs`, `auth_tokens.rs`, `display_names.rs` | Provider flow/session contracts, identity linkage, unique names, aliases, and public profiles. |
+| Site administration | `admin.rs`, `initial_admin_cli.rs`, `auth_tokens.rs`, `auth_flow.rs`, `http/auth_tests.rs`, `web/src/screens/__tests__/Admin.test.tsx` | CLI bootstrap, verified-email grants, development subject grants, roles, suspension and sign-in/link rejection, account/voyage pagination, storage accounting, deletion/shared-file cleanup, concurrency, and modal confirmation for every action. |
+| Authentication and names | `auth_flow.rs`, `auth_tokens.rs`, `auth_build_mode.rs`, `auth/dev_tests.rs`, `display_names.rs` | Shared provider/forged sign-in policy, atomic rollback, session contracts, release-build bypass exclusion, identity linkage, unique names, aliases, and public profiles. |
 | API shapes | `api_fixtures.rs`, `web/src/api/__tests__/contract.test.ts` | Representative response fixtures and frontend type compatibility. |
 | Tracing | `image_tracing.rs`, `telemetry_tests.rs` | Request/worker context, span attribution, export configuration, and shutdown. |
 | Image performance | [Photo benchmark](photo-performance.md) | Opt-in large-image timing and saved-baseline comparisons. |

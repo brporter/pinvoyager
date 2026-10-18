@@ -11,6 +11,7 @@ import { AuthShell } from "./shell/AuthShell";
 import { Discover } from "./screens/Discover";
 import { NotFound } from "./screens/NotFound";
 import { Profile } from "./screens/Profile";
+import { Admin } from "./screens/Admin";
 import { Settings } from "./screens/Settings";
 import { Upload } from "./screens/Upload";
 import { VoyageDetail } from "./screens/VoyageDetail";
@@ -32,6 +33,8 @@ export function App() {
               <Route path="/voyages/:id/edit" element={<VoyageEdit />} />
               <Route path="/upload" element={<Upload />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/users/:id" element={<Admin />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

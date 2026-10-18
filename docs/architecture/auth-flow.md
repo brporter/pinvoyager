@@ -57,6 +57,56 @@ loads current-user data and requires a unique name when it is absent. See
 Debug builds can expose `/auth/dev/login` when enabled in configuration. The route
 is absent from release builds. See [local sign-in](../running.md#signing-in-without-provider-credentials).
 
+## Shared sign-in pipeline
+
+Provider callbacks verify state, browser binding, provider identity, and token claims
+before calling `auth/sign_in.rs::sign_in` with `SignInIdentity::Verified`.
+`auth/dev.rs::login` validates the development request and calls that same function
+with `SignInIdentity::Development`. The development module, HTTP route, and input
+variant all use `#[cfg(debug_assertions)]`; they are absent in release builds.
+Debug builds additionally require `auth.dev_login = true` before accepting a forged
+identity. A forged identity is never labelled `VerifiedIdentity`.
+
+```mermaid
+flowchart TD
+    Provider[Provider callback] --> Verify[Verify state, browser binding, and provider token]
+    Verify --> Shared[auth::sign_in::sign_in]
+    Dev[Debug-only Forge a session] --> Check[Check development configuration and request]
+    Check --> Shared
+    Shared --> Account[Resolve account by provider and subject]
+    Account --> Policy[Reject suspension, update identity activity, apply initial-admin list]
+    Policy --> Session[Create opaque session and commit transaction]
+    Session --> Cookie[Shared session cookie construction]
+    Cookie --> Redirect[Provider callback redirects]
+    Cookie --> JSON[Development endpoint returns JSON]
+```
+
+The shared function resolves an existing account or creates one. Returning sign-ins
+lock the account before checking suspension and updating `identities.last_seen_at`.
+Both paths preserve an existing account's display name and avatar. A provider's
+avatar is used only when creating an account; development identities supply none.
+The initial-admin comparison uses an eligible verified email for provider sign-in
+and the supplied subject for development sign-in. Email never selects an account.
+
+Account creation, identity activity, administrator promotion, and opaque session
+creation commit in one database transaction. A failure rolls back all of those
+writes. A concurrent first-sign-in identity collision returns a generic 400 asking
+the caller to start again; the next attempt can find the winning account. Other
+database failures propagate through the normal error handling. After commit, a
+promotion log records account ID, provider, and whether the source was `provider`
+or `development`. Both entry points use `http/auth.rs::session_cookie`; only their
+HTTP response formats differ. Provider linking remains a separate operation and
+neither creates a session nor grants administrator access.
+
+`auth_flow.rs::provider_and_development_signins_apply_the_same_account_policy`
+alternates signed provider callbacks and forged sessions on one account, checking
+identity activity and immediate administrator access. `auth/dev_tests.rs` checks
+rollback when session insertion fails. `http/auth_tests.rs` checks both entry
+points' handling of first-sign-in collisions. Run
+`cargo test --release --test auth_build_mode` to verify that the forging endpoint
+returns 404 even with `auth.dev_login = true` and an initial-admin list configured.
+CI runs that release check in addition to the debug-build coverage suite.
+
 ## Microsoft personal and organizational accounts
 
 With the `https://login.microsoftonline.com/common/v2.0` authority and an app
@@ -114,7 +164,7 @@ their original contents to preserve sqlx checksums. No users, voyages, photos,
 or sessions are deleted. Existing sessions continue to work until revoked or
 expired; users can link a supported provider in Settings while signed in.
 Accounts that had only the retired identity cannot sign in again without a
-supported identity linked to that same account. Matching by email remains prohibited.
+supported identity linked to that same account. Matching accounts by email remains prohibited.
 
 Regression tests live in
 `crates/api/src/auth/provider_tests.rs::removed_provider_is_not_recognized`,
@@ -124,3 +174,24 @@ Regression tests live in
 `web/src/screens/__tests__/Settings.test.tsx`. The migration test starts with the
 old auth schema, verifies that retained rows survive, and checks that the database
 rejects the retired provider while accepting each supported provider.
+
+## Administrator roles and suspension
+
+`users.is_site_admin` authorizes `/api/admin/*` on every request and is returned only
+in the signed-in `/api/me` user. `users.suspended` blocks session resolution and
+provider sign-in/link completion. Suspension revokes sessions and pending linking
+attempts. Sign-in/link transactions lock the account through commit so they cannot
+issue a session after suspension has completed. Enabling requires a fresh sign-in.
+See [site administration](../site-administration.md) for bootstrap and moderation.
+
+Startup `--initial-admin-email` arguments enable automatic role grants on eligible
+verified Google/Apple sign-ins. Google requires Gmail or Workspace ownership;
+Microsoft email claims cannot grant roles. Emails are transient grant inputs and
+do not change provider/subject account matching. The allowlist persists for the
+process lifetime, grants persist in PostgreSQL, and suspended accounts remain
+blocked. Provider email scopes are requested only while bootstrap is configured.
+The debug-only `auth/dev.rs::login` passes its supplied subject to the shared
+`auth/sign_in.rs::sign_in` policy without provider or email verification. It requires
+`auth.dev_login`; the shared function checks suspension and commits promotion with
+the forged session. The route does not exist in release builds.
+See [bootstrap security](../site-administration.md#security-assessment).

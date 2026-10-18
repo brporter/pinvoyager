@@ -38,11 +38,11 @@ impl Drop for ScratchRoot {
 }
 
 async fn app(pool: PgPool, issuer: &Url, root: &ScratchRoot) -> Router {
-    app_with_providers(pool, issuer, root, false).await
+    app_with_providers(pool, issuer, root, false, false).await
 }
 
 async fn app_with_microsoft(pool: PgPool, issuer: &Url, root: &ScratchRoot) -> Router {
-    app_with_providers(pool, issuer, root, true).await
+    app_with_providers(pool, issuer, root, true, false).await
 }
 
 async fn app_with_providers(
@@ -50,8 +50,9 @@ async fn app_with_providers(
     issuer: &Url,
     root: &ScratchRoot,
     microsoft_enabled: bool,
+    initial_admin: bool,
 ) -> Router {
-    let config: Config = serde_json::from_value(json!({
+    let mut config: Config = serde_json::from_value(json!({
         "server": { "bind": "127.0.0.1:0", "request_timeout_secs": 10 },
         "database": {
             "url": "postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager",
@@ -83,6 +84,15 @@ async fn app_with_providers(
     }))
     .expect("valid test config");
 
+    if initial_admin {
+        config.auth.initial_admins =
+            pinvoyager_api::initial_admin::InitialAdmins::parse_args([std::ffi::OsString::from(
+                "--initial-admin-email=bootstrap@gmail.com",
+            )])
+            .expect("arguments")
+            .expect("run");
+    }
+    config.auth.dev_login = true;
     let providers = ProviderRegistry::from_config(&config.auth).await;
     http::router(AppState::new(
         pool,
@@ -800,5 +810,131 @@ async fn retired_provider_start_callback_and_link_requests_return_not_found(pool
         .await
         .status(),
         StatusCode::NOT_FOUND
+    );
+}
+
+#[sqlx::test]
+async fn verified_bootstrap_email_grants_admin_before_the_callback_session_is_used(pool: PgPool) {
+    let mock = support::MockOidcProvider::start().await;
+    let root = ScratchRoot::new();
+    let app = app_with_providers(pool, mock.issuer(), &root, false, true).await;
+    let flow = start_flow(&app, mock.issuer(), "/admin").await;
+    let code = mock
+        .token()
+        .nonce(&flow.nonce)
+        .claim("email", json!("bootstrap@gmail.com"))
+        .claim("email_verified", json!(true))
+        .issue();
+    let cookie = complete_sign_in(&app, "google", &flow, &code).await;
+    assert_eq!(
+        send(&app, "GET", "/api/admin/users", Some(&cookie))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+}
+
+#[cfg(debug_assertions)]
+#[sqlx::test]
+async fn provider_and_development_signins_apply_the_same_account_policy(pool: PgPool) {
+    let mock = MockOidcProvider::start().await;
+    let root = ScratchRoot::new();
+    let app = app_with_providers(pool.clone(), mock.issuer(), &root, false, true).await;
+    let subject = "bootstrap@gmail.com";
+    let mut account_id = None;
+    for development in [false, true, false] {
+        if let Some(id) = account_id {
+            sqlx::query("UPDATE users SET is_site_admin=false WHERE id=$1")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .expect("remove role before sign-in");
+            sqlx::query(
+                "UPDATE identities SET last_seen_at=now()-interval '1 day' WHERE user_id=$1",
+            )
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("age activity");
+        }
+        let cookie = if development {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/auth/dev/login")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(json!({"subject":subject}).to_string()))
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::OK);
+            response.headers()[header::SET_COOKIE]
+                .to_str()
+                .expect("cookie")
+                .split(';')
+                .next()
+                .expect("cookie pair")
+                .to_owned()
+        } else {
+            let flow = start_flow(&app, mock.issuer(), "/admin").await;
+            let code = mock
+                .token()
+                .subject(subject)
+                .nonce(&flow.nonce)
+                .claim("email", json!(subject))
+                .claim("email_verified", json!(true))
+                .issue();
+            complete_sign_in(&app, "google", &flow, &code).await
+        };
+        let me = send(&app, "GET", "/api/me", Some(&cookie)).await;
+        assert_eq!(me.status(), StatusCode::OK);
+        let me: Value = serde_json::from_slice(
+            &axum::body::to_bytes(me.into_body(), 16 * 1024)
+                .await
+                .expect("body"),
+        )
+        .expect("JSON");
+        let id: Uuid = me["user"]["id"]
+            .as_str()
+            .expect("user id")
+            .parse()
+            .expect("UUID");
+        assert_eq!(
+            *account_id.get_or_insert(id),
+            id,
+            "both paths use the same account"
+        );
+        assert_eq!(me["user"]["is_site_admin"], true);
+        assert_eq!(
+            send(&app, "GET", "/api/admin/users", Some(&cookie))
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        let seen_recently: bool = sqlx::query_scalar(
+            "SELECT last_seen_at > now() - interval '1 minute' FROM identities WHERE user_id=$1",
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("identity activity");
+        assert!(seen_recently, "both paths update identity activity");
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")
+            .fetch_one(&pool)
+            .await
+            .expect("accounts"),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .expect("sessions"),
+        3
     );
 }

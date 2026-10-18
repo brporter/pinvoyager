@@ -334,3 +334,71 @@ async fn a_token_with_no_nonce_at_all_is_rejected() {
         "a token with no `nonce` claim, against an attempt that has one",
     );
 }
+
+#[tokio::test]
+async fn only_verified_authoritative_google_token_emails_can_bootstrap_admins() {
+    let mock = MockOidcProvider::start().await;
+    let registry = registry_for(&mock).await;
+    for (email, verified, hd, expected) in [
+        (
+            json!("admin@gmail.com"),
+            json!(true),
+            json!(null),
+            Some("admin@gmail.com"),
+        ),
+        (
+            json!("admin@example.com"),
+            json!(true),
+            json!("example.com"),
+            Some("admin@example.com"),
+        ),
+        (json!("admin@example.com"), json!(true), json!(null), None),
+        (json!("admin@example.com"), json!(true), json!(""), None),
+        (json!("admin@gmail.com"), json!(false), json!(null), None),
+        (json!("admin@gmail.com"), json!(null), json!(null), None),
+        (json!(null), json!(true), json!(null), None),
+    ] {
+        let code = mock
+            .token()
+            .claim("email", email)
+            .claim("email_verified", verified)
+            .claim("hd", hd)
+            .issue();
+        let identity = provider(&registry)
+            .exchange(&code, PKCE_VERIFIER, NONCE)
+            .await
+            .expect("verified identity");
+        assert_eq!(identity.admin_email.as_deref(), expected);
+    }
+    let forged = mock
+        .token()
+        .claim("email", json!("admin@gmail.com"))
+        .claim("email_verified", json!(true))
+        .signed_by_a_different_key()
+        .issue();
+    assert_rejected(
+        provider(&registry)
+            .exchange(&forged, PKCE_VERIFIER, NONCE)
+            .await,
+        "forged admin email",
+    );
+}
+
+#[tokio::test]
+async fn microsoft_email_never_grants_administration_even_when_claimed_verified() {
+    let mock = MockOidcProvider::start().await;
+    let config: AuthConfig = serde_json::from_value(json!({"base_url":"http://localhost:8080/","providers":{"microsoft":{"client_id":CLIENT_ID,"client_secret":CLIENT_SECRET,"issuer":mock.issuer().as_str()}}})).expect("config");
+    let registry = ProviderRegistry::from_config(&config).await;
+    let code = mock
+        .token()
+        .claim("email", json!("admin@example.com"))
+        .claim("email_verified", json!(true))
+        .issue();
+    let identity = registry
+        .get(ProviderKind::Microsoft)
+        .expect("provider")
+        .exchange(&code, PKCE_VERIFIER, NONCE)
+        .await
+        .expect("identity");
+    assert!(identity.admin_email.is_none());
+}

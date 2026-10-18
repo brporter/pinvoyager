@@ -480,3 +480,43 @@ async fn microsoft_metadata_fetch_reports_transport_status_and_json_failures() {
         Err(AuthError::Provider(_))
     ));
 }
+
+#[test]
+fn malformed_bootstrap_claims_cannot_supply_an_email() {
+    for token in ["", "header.%%.signature", "header.bm90IGpzb24.signature"] {
+        assert!(admin_email_from_verified_token(ProviderKind::Google, token).is_none());
+    }
+}
+
+#[tokio::test]
+async fn google_requests_email_only_when_bootstrap_is_configured() {
+    use crate::auth::AuthProvider as _;
+    let mock = support::MockOidcProvider::start().await;
+    let config = crate::config::OidcProviderConfig {
+        client_id: support::CLIENT_ID.into(),
+        client_secret: SecretString::from(support::CLIENT_SECRET),
+        issuer: mock.issuer().clone(),
+    };
+    for enabled in [false, true] {
+        let google = StandardOidcProvider::discover(
+            ProviderKind::Google,
+            &config,
+            &Url::parse("https://pinvoyager.example/").expect("URL"),
+            enabled,
+        )
+        .await
+        .expect("provider");
+        let authorization = google.authorize().expect("authorization");
+        let scope = authorization
+            .url
+            .query_pairs()
+            .find(|(key, _)| key == "scope")
+            .expect("scope")
+            .1
+            .into_owned();
+        assert_eq!(
+            scope.split_whitespace().any(|scope| scope == "email"),
+            enabled
+        );
+    }
+}

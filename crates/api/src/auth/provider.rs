@@ -51,13 +51,17 @@ impl From<ProviderKind> for DbProvider {
     }
 }
 
-/// Verified provider identity. Contains no email address or provider credentials.
+/// Verified identity plus a transient email eligible for administrator bootstrap.
+/// No provider credentials or email addresses are persisted.
 #[derive(Debug, Clone)]
 pub struct VerifiedIdentity {
     pub provider: ProviderKind,
     /// The provider's stable subject identifier. Opaque — never parsed.
     pub subject: String,
     pub avatar_url: Option<String>,
+    /// Present only after token verification and provider-specific email checks.
+    /// Never use this value to find or merge an account.
+    pub admin_email: Option<String>,
 }
 
 /// Everything needed to send the browser to the provider and to verify what
@@ -130,9 +134,14 @@ impl ProviderRegistry {
             async {
                 match &configured.google {
                     Some(cfg) => Some(
-                        StandardOidcProvider::discover(ProviderKind::Google, cfg, base_url)
-                            .await
-                            .map(boxed),
+                        StandardOidcProvider::discover(
+                            ProviderKind::Google,
+                            cfg,
+                            base_url,
+                            !config.initial_admins.is_empty(),
+                        )
+                        .await
+                        .map(boxed),
                     ),
                     None => None,
                 }
@@ -140,9 +149,14 @@ impl ProviderRegistry {
             async {
                 match &configured.microsoft {
                     Some(cfg) => Some(
-                        StandardOidcProvider::discover(ProviderKind::Microsoft, cfg, base_url)
-                            .await
-                            .map(boxed),
+                        StandardOidcProvider::discover(
+                            ProviderKind::Microsoft,
+                            cfg,
+                            base_url,
+                            false,
+                        )
+                        .await
+                        .map(boxed),
                     ),
                     None => None,
                 }
@@ -150,9 +164,14 @@ impl ProviderRegistry {
             async {
                 match &configured.apple {
                     Some(cfg) => Some(
-                        AppleProvider::discover(cfg, base_url, apple_issuer)
-                            .await
-                            .map(boxed),
+                        AppleProvider::discover(
+                            cfg,
+                            base_url,
+                            apple_issuer,
+                            !config.initial_admins.is_empty(),
+                        )
+                        .await
+                        .map(boxed),
                     ),
                     None => None,
                 }

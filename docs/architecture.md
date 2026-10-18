@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- |
 | `crates/api/src/main.rs`, `state.rs` | Startup/shutdown and shared pool, configuration, providers, upload limiter, and worker handle. |
 | `crates/api/src/http/` | Routes, authorization, validation, response types, and database transactions. `voyages/discovery.rs` owns public map queries. |
-| `crates/api/src/auth/` | Provider exchange, browser-bound authorization attempts, opaque sessions, and request extractors. |
+| `crates/api/src/auth/` | Provider exchange, browser-bound authorization attempts, shared sign-in policy, opaque sessions, and request extractors. |
 | `crates/api/src/db/repo/` | Database row types and SQL operations accepting pool or transaction executors. |
 | `crates/api/src/photos/` | Validation, EXIF, decoding, content-addressed storage, rate limiting, conversion, and retryable cleanup. |
 | `crates/api/src/voyages/granularity.rs` | Rounds coordinates for public responses. |
@@ -41,6 +41,8 @@ flowchart LR
 ## Startup, request handling, and shutdown
 
 `main::run` loads configuration, initializes telemetry, and calls `run_service`.
+Repeatable `--initial-admin-email EMAIL` startup arguments configure verified-email
+administrator grants during provider sign-in; see [site administration](site-administration.md).
 The service connects to PostgreSQL, runs embedded migrations, initializes
 providers, starts image workers, and serves HTTP. A failed provider is logged
 and disabled independently. Configuration uses defaults, optional `config.toml`,
@@ -85,6 +87,14 @@ creation by default. Activity extends only the idle deadline. The cookie lifetim
 the absolute session limit. Periodic maintenance removes expired sessions and
 authorization attempts.
 
+After provider verification, `auth/sign_in.rs::sign_in` resolves the account,
+checks suspension, updates identity activity, applies initial-admin policy, and
+creates the opaque session in one transaction. The debug-only forging endpoint
+calls the same function with an explicitly marked development identity after
+checking configuration and request inputs. Release builds omit both that endpoint
+and the development identity variant. See the
+[shared sign-in pipeline](architecture/auth-flow.md#shared-sign-in-pipeline).
+
 Accounts choose unique lowercase display names. `profile_names` stores current
 names, aliases, and reservations. `/u/:identifier` accepts an account ID or display
 name. The signed-in owner sees drafts and published voyages; anonymous visitors
@@ -102,7 +112,7 @@ Migrations in `crates/api/migrations/` are the schema source of truth.
 
 | Relation | Purpose |
 | --- | --- |
-| `users` | Account, display name, avatar, and timestamps. |
+| `users` | Account, display name, avatar, administrator/suspension flags, and timestamps. |
 | `identities` | Unique provider/subject pairs belonging to accounts. |
 | `sessions` | Token hashes, user ownership, activity, and absolute expiry. |
 | `auth_attempts` | Short-lived provider state, PKCE, nonce, browser binding, and optional linking user. |
@@ -128,7 +138,9 @@ tests.
 | `POST /auth/link/{provider}` | Begin linking for an authenticated account. |
 | `POST /auth/logout` | Revoke the presented session and clear its cookie. |
 | `POST /auth/dev/login` | Debug builds only, also controlled by configuration. |
-| `GET/PATCH /api/me` | Session/account state and display-name changes. |
+| `GET/PATCH /api/me` | Session/account state, signed-in administrator flag, and display-name changes. |
+| `GET /api/admin/users`, `GET /api/admin/users/{id}` | Administrator-only account summaries and voyage names/descriptions, paged. |
+| `POST /api/admin/users/{id}/actions` | Administrator-only suspension, enabling, promotion, deletion, and unpublishing. |
 | `GET /api/profiles/{identifier}` | Public profile by ID, name, or alias; published voyages only, including for owner requests. |
 | `GET/POST /api/voyages` | Public feed or authenticated owner feed; create a private draft. |
 | `GET/PATCH/DELETE /api/voyages/{id}` | Read visible voyages; owner-only edits, publication, and deletion. |
@@ -140,9 +152,12 @@ tests.
 | `GET /api/voyages/{id}/map` | Rounded voyage map payload. |
 | `GET /api/map` | Public discovery clusters for a viewport and zoom. |
 
-Registered by `http::{auth,photos,voyages,profiles}::routes`. Missing and foreign
-drafts return 404. There is no unscoped upload library, account-deletion endpoint,
-or provider-unlink endpoint.
+Registered by `http::{auth,admin,photos,voyages,profiles}::routes`. Missing and foreign
+drafts return 404. The separate administration endpoint exposes draft voyage names
+and descriptions without granting private photo access. There is no unscoped upload
+library, self-service account deletion, or provider-unlink endpoint. See
+[site administration](site-administration.md) for account moderation, storage totals,
+first-administrator setup, and deletion cleanup.
 
 ## Image lifecycle and consistency
 

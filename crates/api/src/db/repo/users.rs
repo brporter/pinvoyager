@@ -68,3 +68,20 @@ pub async fn find_by_profile_name(
     .fetch_optional(executor)
     .await
 }
+
+/// Reject suspended or deleted accounts and hold a shared account lock until
+/// the sign-in/link transaction commits, serializing it with suspension/deletion.
+pub async fn require_active(
+    connection: &mut sqlx::PgConnection,
+    id: Uuid,
+) -> crate::error::AppResult<()> {
+    let suspended: Option<bool> =
+        sqlx::query_scalar("SELECT suspended FROM users WHERE id=$1 FOR SHARE")
+            .bind(id)
+            .fetch_optional(connection)
+            .await?;
+    match suspended {
+        Some(false) => Ok(()),
+        _ => Err(crate::error::AppError::Forbidden),
+    }
+}

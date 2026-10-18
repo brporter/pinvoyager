@@ -58,6 +58,7 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo install cargo-llvm-cov --locked
       - run: cargo coverage -- --test-threads=1
+      - run: cargo test --release --test auth_build_mode
       - run: cargo llvm-cov report --lcov --output-path backend-coverage.lcov
         if: always()
       - uses: actions/upload-artifact@v4

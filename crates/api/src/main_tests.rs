@@ -32,7 +32,9 @@ fn entrypoint_child() {
     let Ok(expected) = std::env::var("PINVOYAGER_ENTRY_CHILD_EXPECT") else {
         return;
     };
-    let actual = main();
+    let actual = tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(entrypoint([]));
     assert_eq!(
         actual,
         if expected == "success" {

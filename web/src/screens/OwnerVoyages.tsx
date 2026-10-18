@@ -7,7 +7,13 @@ import { LoadMore, VoyageCard, VoyageGrid, VoyageGridSkeleton } from "../compone
 import { monthYear, referenceOf, voyagesOf } from "../components/voyagePresentation";
 import { ErrorScreen } from "./NotFound";
 
-export function OwnerVoyages({ owner, desktop }: { owner: CurrentUser; desktop: boolean }) {
+export function OwnerVoyages({
+  owner,
+  desktop,
+}: {
+  owner: Omit<CurrentUser, "is_site_admin">;
+  desktop: boolean;
+}) {
   const feed = useVoyages({ mine: true });
   const voyages = voyagesOf(feed.data);
   const drafts = voyages.filter((voyage) => !voyage.published).length;

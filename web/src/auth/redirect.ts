@@ -8,7 +8,7 @@
  * Allowed paths and their descendants, matching the server allowlist.
  * A following slash is required for descendant matches.
  */
-const ALLOWED_REDIRECTS = ["/", "/discover", "/settings", "/upload", "/voyages"] as const;
+const ALLOWED_REDIRECTS = ["/", "/discover", "/settings", "/upload", "/voyages", "/admin"] as const;
 
 /** Mirror of `MAX_REDIRECT_LEN`. */
 const MAX_REDIRECT_LEN = 512;

@@ -28,6 +28,7 @@ use uuid::Uuid;
 use crate::auth::attempt::{self, BindingValue, PendingAttempt};
 use crate::auth::provider::VerifiedIdentity;
 use crate::auth::session::{self, SessionToken};
+use crate::auth::sign_in::{GENERIC_FAILURE, SignInIdentity, sign_in};
 use crate::auth::{AuthError, CurrentUser, ProviderKind};
 use crate::config::SessionConfig;
 use crate::db::repo::identities::{self, Provider as DbProvider};
@@ -37,9 +38,6 @@ use crate::state::AppState;
 
 /// Authorization attempts expire after this duration.
 const ATTEMPT_TTL: Duration = Duration::minutes(10);
-
-/// Client-visible message shared by verification failures.
-const GENERIC_FAILURE: &str = "We could not complete sign-in. Starting again normally works.";
 
 /// Message for a provider-declined flow, before account or identity writes.
 const CANCELED: &str = "Sign-in was canceled, so nothing was created.";
@@ -58,7 +56,14 @@ const SIGNED_IN_DESTINATION: &str = "/";
 const LINKED_DESTINATION: &str = "/settings";
 
 /// Allowed return paths. Entries match exactly or with a following slash.
-const ALLOWED_REDIRECTS: &[&str] = &["/", "/discover", "/settings", "/upload", "/voyages"];
+const ALLOWED_REDIRECTS: &[&str] = &[
+    "/",
+    "/discover",
+    "/settings",
+    "/upload",
+    "/voyages",
+    "/admin",
+];
 
 /// Maximum number of bytes accepted in a return destination.
 const MAX_REDIRECT_LEN: usize = 512;
@@ -410,63 +415,13 @@ async fn complete(
             Ok((jar, redirect(StatusCode::SEE_OTHER, &to)?))
         }
         None => {
-            let token = sign_in(state, &identity).await?;
+            let (_, token) = sign_in(state, SignInIdentity::Verified(&identity)).await?;
             let jar = jar.add(session_cookie(&state.config.auth.session, &token));
 
             let to = destination(attempt.redirect_to.as_deref(), SIGNED_IN_DESTINATION);
             Ok((jar, redirect(StatusCode::SEE_OTHER, &to)?))
         }
     }
-}
-
-/// Finds an account by provider and subject or creates one, then issues a
-/// session. Account, identity, and session writes share one transaction.
-async fn sign_in(state: &AppState, identity: &VerifiedIdentity) -> AppResult<SessionToken> {
-    let provider = DbProvider::from(identity.provider);
-
-    // One transaction for the whole unit of work: on any failure below there is
-    // no account without an identity, and no identity without a session to use
-    // it. It is short and holds no connection across unrelated work (D8).
-    let mut tx = state.pool.begin().await?;
-
-    let user_id =
-        match identities::find_by_provider_subject(&mut *tx, provider, &identity.subject).await? {
-            Some(existing) => {
-                // A returning sign-in updates last-seen and nothing else. In
-                // particular the provider's current name and avatar do not
-                // overwrite what the user has since set here — the provider is the
-                // authority on who they are, not on how they look to us.
-                //
-                // Written out here rather than in `db::repo::identities` because it
-                // serves this one call site; move it there when a second appears.
-                sqlx::query!(
-                    "UPDATE identities SET last_seen_at = now() WHERE id = $1",
-                    existing.id,
-                )
-                .execute(&mut *tx)
-                .await?;
-
-                existing.user_id
-            }
-            None => {
-                // D2: the first sign-in *is* the signup. There is no separate
-                // registration step to reach, which is why this is an insert rather
-                // than a 404 pointing at one.
-                let user = users::create(&mut *tx, None, identity.avatar_url.as_deref()).await?;
-
-                identities::create(&mut *tx, user.id, provider, &identity.subject)
-                    .await
-                    .map_err(first_sign_in_identity_error)?;
-
-                user.id
-            }
-        };
-
-    let token = session::create(&mut *tx, user_id, &state.config.auth.session).await?;
-
-    tx.commit().await?;
-
-    Ok(token)
 }
 
 /// Links the verified provider identity to the supplied account.
@@ -477,6 +432,7 @@ async fn link(state: &AppState, user_id: Uuid, identity: &VerifiedIdentity) -> A
     let provider = DbProvider::from(identity.provider);
 
     let mut tx = state.pool.begin().await?;
+    users::require_active(&mut tx, user_id).await?;
 
     if let Some(existing) =
         identities::find_by_provider_subject(&mut *tx, provider, &identity.subject).await?
@@ -506,16 +462,6 @@ async fn link(state: &AppState, user_id: Uuid, identity: &VerifiedIdentity) -> A
     tx.commit().await?;
 
     Ok(())
-}
-
-fn first_sign_in_identity_error(err: sqlx::Error) -> AppError {
-    if unique_violation(&err) {
-        // Two first sign-ins for the same subject raced and the unique index
-        // arbitrated. The loser retries and lands in the branch above.
-        rejected("concurrent first sign-in for the same identity")
-    } else {
-        err.into()
-    }
 }
 
 fn link_identity_error(err: sqlx::Error) -> AppError {
@@ -560,6 +506,7 @@ struct MeResponse {
 #[derive(Debug, Serialize)]
 struct MeUser {
     id: Uuid,
+    is_site_admin: bool,
     display_name: Option<String>,
     avatar_url: Option<String>,
     created_at: DateTime<Utc>,
@@ -593,9 +540,15 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<
     .fetch_all(&state.pool)
     .await?;
 
+    let is_site_admin = sqlx::query_scalar("SELECT is_site_admin FROM users WHERE id=$1")
+        .bind(user.user_id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
     Ok(Json(MeResponse {
         user: MeUser {
             id: account.id,
+            is_site_admin,
             display_name: account.display_name,
             avatar_url: account.avatar_url,
             created_at: account.created_at,

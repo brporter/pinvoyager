@@ -1,1 +1,16 @@
-{"user":{"id":"01a12876-e0c3-7fc2-b30e-f97d7be3de0e","display_name":"fixture-owner","avatar_url":null,"created_at":"2026-10-11T00:57:21.856858Z"},"identities":[{"provider":"google","linked_at":"2026-10-11T00:57:21.856858Z","last_seen_at":"2026-10-11T00:57:21.856858Z"}]}
+{
+  "user": {
+    "id": "01a12876-e0c3-7fc2-b30e-f97d7be3de0e",
+    "display_name": "fixture-owner",
+    "avatar_url": null,
+    "created_at": "2026-10-11T00:57:21.856858Z",
+    "is_site_admin": false
+  },
+  "identities": [
+    {
+      "provider": "google",
+      "linked_at": "2026-10-11T00:57:21.856858Z",
+      "last_seen_at": "2026-10-11T00:57:21.856858Z"
+    }
+  ]
+}

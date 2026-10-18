@@ -16,6 +16,7 @@ const namedUser: CurrentUser = {
   id: "user-1",
   display_name: "Sam Example",
   avatar_url: null,
+  is_site_admin: false,
   created_at: "2025-01-01T00:00:00Z",
 };
 
@@ -140,4 +141,12 @@ describe("AccountMenu", () => {
     expect(mocks.signOut).toHaveBeenCalledOnce();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
+});
+
+it("links administrators to administration and closes the account menu", async () => {
+  renderMenu({ ...namedUser, is_site_admin: true });
+  await userEvent.click(screen.getByRole("button", { name: /Account/ }));
+  await userEvent.click(screen.getByRole("link", { name: "Site administration" }));
+  expect(screen.getByTestId("location")).toHaveTextContent("/admin");
+  expect(screen.queryByRole("link", { name: "Site administration" })).not.toBeInTheDocument();
 });

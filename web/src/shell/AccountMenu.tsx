@@ -128,6 +128,16 @@ export function AccountMenu({ user }: { user: CurrentUser }) {
           >
             <span className="pv-btn-label">Settings</span>
           </Link>
+          {user.is_site_admin && (
+            <Link
+              className="pv-btn pv-btn--ghost"
+              style={ITEM_STYLE}
+              to="/admin"
+              onClick={() => setOpen(false)}
+            >
+              Site administration
+            </Link>
+          )}
           <button
             type="button"
             className="pv-btn pv-btn--ghost"

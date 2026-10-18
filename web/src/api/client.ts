@@ -8,6 +8,9 @@
  */
 
 import type {
+  AdminAction,
+  AdminUserPage,
+  AdminUserDetail,
   DiscoverMap,
   Granularity,
   Me,
@@ -606,6 +609,9 @@ export function signInUrl(provider: "google" | "microsoft" | "apple", redirectTo
 /** Every method, for a call site that would rather hold one object than a
  *  dozen imports. The named exports above are the same functions. */
 export const api = {
+  getAdminUsers,
+  getAdminUser,
+  administerUser,
   listVoyages,
   getVoyage,
   getVoyageMap,
@@ -625,3 +631,22 @@ export const api = {
   signOut,
   signInUrl,
 } as const;
+
+/** Administrator metadata; the server checks the current account role on each call. */
+export function getAdminUsers(before?: string): Promise<AdminUserPage> {
+  return request({ method: "GET", path: "/api/admin/users", query: { before } });
+}
+export function getAdminUser(id: string, before?: string): Promise<AdminUserDetail> {
+  return request({
+    method: "GET",
+    path: `/api/admin/users/${encodeURIComponent(id)}`,
+    query: { before },
+  });
+}
+export function administerUser(id: string, body: AdminAction): Promise<void> {
+  return request({
+    method: "POST",
+    path: `/api/admin/users/${encodeURIComponent(id)}/actions`,
+    body,
+  });
+}

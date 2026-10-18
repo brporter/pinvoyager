@@ -33,7 +33,7 @@ describe("safeRedirect", () => {
       "/discover/😀",
       // On-site is not by itself enough. An unrecognized path is a typo or a
       // probe, not a destination.
-      "/admin",
+      "/unknown-route",
       // Prefix matches without a separator — the reason the check looks at the
       // character after the match rather than using `startsWith` alone.
       "/settings-evil.example",
@@ -49,6 +49,8 @@ describe("safeRedirect", () => {
     const allowed = [
       "/",
       "/discover",
+      "/admin",
+      "/admin/users/example",
       "/settings",
       "/upload",
       "/voyages/0192f0c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",

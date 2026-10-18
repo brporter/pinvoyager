@@ -2,7 +2,7 @@
 //!
 //! Apple requires an ES256 JWT as the client secret. `AppleClientSecret`
 //! caches that signature and renews it before expiry. Authorization uses a
-//! form-POST callback; provider names and email addresses are not requested.
+//! form-POST callback; email is requested only while administrator bootstrap is enabled.
 
 use std::sync::{Arc, Mutex};
 
@@ -40,6 +40,7 @@ impl AppleProvider {
         config: &AppleProviderConfig,
         base_url: &Url,
         issuer: &str,
+        request_email: bool,
     ) -> Result<Self, AuthError> {
         let secret = Arc::new(AppleClientSecret::new(config)?);
 
@@ -55,7 +56,11 @@ impl AppleProvider {
             &config.client_id,
             secret,
             super::callback_uri(base_url, ProviderKind::Apple)?,
-            vec![],
+            if request_email {
+                vec![openidconnect::Scope::new("email".into())]
+            } else {
+                vec![]
+            },
             // Keep the callback transport consistent with the registered Apple flow.
             vec![("response_mode", "form_post")],
         )

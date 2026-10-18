@@ -41,6 +41,15 @@ async fn resolve(parts: &Parts, state: &AppState) -> Result<Option<CurrentUser>,
         return Ok(None);
     };
 
+    let active: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND NOT suspended)")
+            .bind(session.user_id)
+            .fetch_one(&state.pool)
+            .await?;
+    if !active {
+        return Ok(None);
+    }
+
     Ok(Some(CurrentUser {
         user_id: session.user_id,
         session,

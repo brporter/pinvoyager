@@ -194,7 +194,7 @@ it("loads the requested stranger's public profile without scanning discovery", (
       pages: [{ user: { ...ADA, id: STRANGER_ID }, voyages: [voyage()], next_before: null }],
       pageParams: [null],
     },
-  } as ReturnType<typeof usePublicProfile>);
+  } as unknown as ReturnType<typeof usePublicProfile>);
   renderProfile(STRANGER_ID, authState(ADA));
   expect(mockedUseVoyages).not.toHaveBeenCalled();
   expect(usePublicProfile).toHaveBeenCalledWith(STRANGER_ID);

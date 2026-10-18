@@ -15,6 +15,7 @@ const user: CurrentUser = {
   id: "user-1",
   display_name: "ada-lovelace",
   avatar_url: null,
+  is_site_admin: false,
   created_at: "2026-01-01T00:00:00Z",
 };
 
