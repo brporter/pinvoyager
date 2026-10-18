@@ -105,6 +105,14 @@ On pushes to `main`, `.github/workflows/deploy.yml` calls the same workflow and
 publishes images only after it passes. Excluding `main` from the standalone Checks
 push trigger avoids running the same checks twice for each push to `main`.
 
+Both workflows select JavaScript actions that declare the Node.js 24 runtime:
+`actions/checkout@v5`, `actions/setup-node@v5`, `actions/upload-artifact@v6`,
+`Swatinem/rust-cache@v2`, `docker/setup-buildx-action@v4`, `docker/login-action@v4`,
+and `docker/build-push-action@v7`. The Rust toolchain action uses composite steps.
+The web build separately selects Node.js 24 through `setup-node`'s `node-version`;
+that input controls build commands, not the runtime of other actions. See
+[GitHub's Node.js 20 migration guidance](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/).
+
 The shared database used by `crates/api/tests/integration.rs::pool` is migrated
 before each pool is returned. These tests therefore run against a fresh CI
 database as well as an already migrated local database; mutations still roll

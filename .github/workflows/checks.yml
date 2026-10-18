@@ -15,8 +15,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -26,7 +26,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint -- --deny-warnings
       - run: npm run test -- --coverage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: web-coverage
@@ -51,7 +51,7 @@ jobs:
       DATABASE_URL: postgres://pinvoyager:pinvoyager@localhost:5432/pinvoyager
       SQLX_OFFLINE: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy, llvm-tools-preview
@@ -64,7 +64,7 @@ jobs:
       - run: cargo test --release --test auth_build_mode
       - run: cargo llvm-cov report --lcov --output-path backend-coverage.lcov
         if: always()
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: backend-coverage
