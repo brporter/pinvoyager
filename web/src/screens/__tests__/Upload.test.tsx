@@ -304,7 +304,7 @@ describe("Upload screen", () => {
     expect(createVoyage).not.toHaveBeenCalled();
   });
 
-  it("shows queued files and reviews a partial batch containing only unplaced photos", async () => {
+  it("counts queued files and reviews a partial batch containing only unplaced photos", async () => {
     const user = userEvent.setup();
     let finish!: (result: { photos: Photo[] }) => void;
     screenMocks.upload
@@ -321,7 +321,8 @@ describe("Upload screen", () => {
       new File(["first"], "first.jpg", { type: "image/jpeg" }),
       new File(["second"], "second.jpg", { type: "image/jpeg" }),
     ]);
-    expect(await screen.findByText(/waiting/)).toBeInTheDocument();
+    expect(screen.getByText("0 of 2 files processed")).toBeInTheDocument();
+    expect(screen.queryByText("second.jpg")).not.toBeInTheDocument();
     await act(async () =>
       finish({ photos: [photo({ latitude: null, longitude: null, placed: false })] }),
     );
@@ -471,7 +472,7 @@ describe("Upload screen", () => {
     expect(await screen.findByRole("heading", { name: "Uploaded 1 of 1" })).toBeInTheDocument();
     expect(screen.getByText("1 of 1 photo uploaded")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review 1 photo" })).toBeInTheDocument();
-    expect(screen.getByText("hokkaido.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("hokkaido.jpg")).not.toBeInTheDocument();
     expect(screenMocks.upload).toHaveBeenCalledWith(
       expect.objectContaining({
         files: [expect.objectContaining({ name: "hokkaido.jpg" })],
@@ -520,7 +521,7 @@ describe("Upload screen", () => {
     expect(input).toHaveValue("");
   });
 
-  it("shows byte progress, processing, and completion as the upload advances", async () => {
+  it("counts accepted files and shows the current file until server acceptance", async () => {
     const user = userEvent.setup();
     let reportProgress!: (fraction: number | null) => void;
     let resolveUpload!: (result: { photos: Photo[] }) => void;
@@ -536,19 +537,22 @@ describe("Upload screen", () => {
     await user.upload(input, new File(["image"], "progress.jpg", { type: "image/jpeg" }));
 
     const progress = await screen.findByRole("progressbar", {
-      name: "Upload progress for progress.jpg",
+      name: "File processing progress",
     });
     act(() => reportProgress(0.456));
-    expect(progress).toHaveAttribute("aria-valuenow", "46");
+    expect(progress).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText("progress.jpg")).toBeInTheDocument();
 
     act(() => reportProgress(1));
-    expect(progress).toHaveAttribute("aria-valuenow", "100");
+    expect(progress).toHaveAttribute("aria-valuenow", "0");
     expect(screen.getByText(/reading location data/)).toBeInTheDocument();
 
     act(() => reportProgress(null));
-    expect(progress).toHaveAttribute("aria-valuenow", "100");
+    expect(progress).toHaveAttribute("aria-valuenow", "0");
     await act(async () => resolveUpload({ photos: [photo()] }));
-    await waitFor(() => expect(screen.getByText(/43\.06°, 141\.35°/)).toBeInTheDocument());
+    expect(progress).toHaveAttribute("aria-valuenow", "1");
+    expect(screen.getByText("1 of 1 file processed")).toBeInTheDocument();
+    expect(screen.queryByText("progress.jpg")).not.toBeInTheDocument();
   });
 
   it("turns an empty response into a retryable row and succeeds on retry", async () => {
@@ -566,7 +570,7 @@ describe("Upload screen", () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(await screen.findByText(/43\.06°, 141\.35°/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Review 1 photo" })).toBeInTheDocument();
     expect(screenMocks.upload).toHaveBeenCalledTimes(2);
     expect(screenMocks.upload.mock.calls[1][0].idempotencyKey).toBe(
       screenMocks.upload.mock.calls[0][0].idempotencyKey,
@@ -717,7 +721,7 @@ describe("Upload screen", () => {
     expect(screenMocks.upload).not.toHaveBeenCalled();
   });
 
-  it("shows filenames and upload outcomes without previews for HEIC, JPEG, and PNG", async () => {
+  it("summarizes upload outcomes without file rows or previews for HEIC, JPEG, and PNG", async () => {
     const user = userEvent.setup();
     const createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:raw-photo");
     const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
@@ -730,13 +734,58 @@ describe("Upload screen", () => {
     await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, files);
     await waitFor(() => expect(screenMocks.upload).toHaveBeenCalledTimes(3));
     expect(await screen.findByRole("heading", { name: "Uploaded 3 of 3" })).toBeInTheDocument();
-    for (const file of files) expect(screen.getByText(file.name)).toBeInTheDocument();
-    expect(screen.getAllByText("Uploaded", { exact: true })).toHaveLength(3);
+    for (const file of files) expect(screen.queryByText(file.name)).not.toBeInTheDocument();
+    expect(screen.getByText("3 of 3 files processed")).toBeInTheDocument();
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector(".pv-upload-thumb")).toBeNull();
     expect(createUrl).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /review/i }));
     expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("keeps hundreds of queued files compact and advances the current filename", async () => {
+    const user = userEvent.setup();
+    const finishes: ((result: { photos: Photo[] }) => void)[] = [];
+    screenMocks.upload.mockImplementation(() => new Promise((resolve) => finishes.push(resolve)));
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
+    await user.upload(
+      container.querySelector<HTMLInputElement>('input[type="file"]')!,
+      Array.from(
+        { length: 300 },
+        (_, i) => new File(["image"], `photo-${i}.jpg`, { type: "image/jpeg" }),
+      ),
+    );
+    const progress = screen.getByRole("progressbar", { name: "File processing progress" });
+    expect(progress).toHaveAttribute("aria-valuemax", "300");
+    expect(progress).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText("photo-0.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("photo-1.jpg")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".pv-upload-row")).toHaveLength(0);
+    expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+    await act(async () => finishes[0]({ photos: [photo()] }));
+    expect(progress).toHaveAttribute("aria-valuenow", "1");
+    expect(screen.getByText("photo-1.jpg")).toBeInTheDocument();
+    expect(screen.queryByText("photo-0.jpg")).not.toBeInTheDocument();
+    await act(async () => finishes[1]({ photos: [photo()] }));
+    expect(progress).toHaveAttribute("aria-valuenow", "2");
+  });
+
+  it("keeps a large failed batch in a scrollable region and counts failed files as processed", async () => {
+    const user = userEvent.setup();
+    screenMocks.upload.mockRejectedValue(apiError(413, "too_large"));
+    const { container } = renderScreen(<Upload />, { auth: authState(ADA) });
+    await enterDetails(user);
+    await user.upload(
+      container.querySelector<HTMLInputElement>('input[type="file"]')!,
+      Array.from({ length: 100 }, (_, i) => fileOfSize(26_000_000, `large-${i}.jpg`)),
+    );
+    await screen.findByRole("heading", { name: "Uploaded 0 of 100" });
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+    expect(screen.getByRole("region", { name: "Files that were not uploaded" })).toHaveClass(
+      "pv-upload-errors",
+    );
+    expect(screen.getByRole("button", { name: "Remove large-99.jpg" })).toBeInTheDocument();
   });
 
   it("aborts the pending upload and never starts remaining files on unmount", async () => {

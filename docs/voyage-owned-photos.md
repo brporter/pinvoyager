@@ -20,8 +20,17 @@ keep their selected precision. `http/voyages_tests.rs::create_update_and_delete_
 `web/src/screens/__tests__/Upload.test.tsx` cover these defaults and explicit choices.
 
 Choosing or dropping files starts sequential uploads into that draft. Accepted
-photos remain even when another file fails. Upload rows display filenames,
-progress, and retryable errors without loading original-image previews. Adding
+photos remain even when another file fails. `web/src/screens/Upload.tsx::ProcessStep`
+shows one batch progress bar, a processed-file count, and the current filename with
+its upload or location-reading status. The bar advances when each request succeeds
+or fails, including cancellation; transferring all bytes does not finish a file.
+Queued and accepted photos do not get individual rows. Failures retain per-file
+retry and removal controls inside a keyboard-focusable region limited to 18rem in
+height (`design/components.css::.pv-upload-errors`). This keeps hundreds of selected
+or failed files from extending the page. The active file can be canceled while
+uploading or waiting for acceptance. Original-image previews are never loaded.
+`web/src/screens/__tests__/Upload.test.tsx` covers 300 queued files, 100 failures,
+current-file changes, progress, cancellation, retry, and review. Adding
 to an existing voyage uses `/upload?voyage={id}` and skips draft creation.
 Photos append in submission order. The API supports reordering, but the current
 editor photo grid has no reorder or removal controls.

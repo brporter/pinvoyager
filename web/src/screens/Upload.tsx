@@ -29,7 +29,6 @@ import { LazyUploadReviewMap } from "../map";
 import {
   MAX_SIZE_LABEL,
   tally,
-  megabytes,
   coordinateLabel,
   plural,
   type Item,
@@ -350,29 +349,76 @@ function ProcessStep({
   onStartOver: () => void;
 }) {
   const settled = counts.pending === 0;
+  const processed = counts.total - counts.pending;
+  const current = items.find((item) => item.status === "uploading" || item.status === "processing");
+  const failures = items.filter((item) => item.status === "error");
 
   return (
     <>
-      <div className="pv-card" aria-busy={!settled}>
-        {items.map((item) => (
-          <UploadRow
-            key={item.id}
-            name={item.file.name}
-            status={item.status}
-            progress={item.progress}
-            unplaced={item.status === "uploaded" && item.photo.latitude == null}
-            detail={detailFor(item)}
-            error={item.failure?.message}
-            onCancel={item.status === "uploading" ? () => onCancel(item.id) : undefined}
-            onRetry={
-              item.status === "error" && item.failure.retryable === true
-                ? () => onRetry(item.id)
-                : undefined
-            }
-            onRemove={item.status === "error" ? () => onRemove(item.id) : undefined}
+      <div className="pv-card" style={{ padding: "var(--pv-space-4)" }}>
+        <p className="pv-sm" style={{ marginTop: 0 }}>
+          {processed} of {counts.total} {plural(counts.total, "file", "files")} processed
+        </p>
+        <div
+          className="pv-progress"
+          role="progressbar"
+          aria-label="File processing progress"
+          aria-valuemin={0}
+          aria-valuemax={Math.max(1, counts.total)}
+          aria-valuenow={processed}
+          aria-valuetext={`${processed} of ${counts.total} ${plural(counts.total, "file", "files")} processed`}
+        >
+          <div
+            className="pv-progress-bar"
+            style={{ width: `${counts.total === 0 ? 0 : (processed / counts.total) * 100}%` }}
           />
-        ))}
+        </div>
+        <div className="pv-upload-current" aria-live="polite">
+          {current !== undefined ? (
+            <>
+              <span className="pv-upload-info">
+                <span className="pv-upload-name">{current.file.name}</span>
+                <span className="pv-upload-sub">
+                  {current.status === "processing" ? " · reading location data" : " · uploading"}
+                </span>
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Cancel upload of ${current.file.name}`}
+                onClick={() => onCancel(current.id)}
+              >
+                Cancel file
+              </Button>
+            </>
+          ) : (
+            <span className="pv-sm pv-muted">File processing complete.</span>
+          )}
+        </div>
+        <p className="pv-xs pv-muted" style={{ marginBottom: 0 }}>
+          Photos are saved as they are accepted. Image preparation may continue after upload.
+        </p>
       </div>
+
+      {failures.length > 0 && (
+        <div
+          className="pv-card pv-upload-errors"
+          role="region"
+          aria-label="Files that were not uploaded"
+          tabIndex={0}
+        >
+          {failures.map((item) => (
+            <UploadRow
+              key={item.id}
+              name={item.file.name}
+              status="error"
+              error={item.failure.message}
+              onRetry={item.failure.retryable ? () => onRetry(item.id) : undefined}
+              onRemove={() => onRemove(item.id)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Live so the outcome is announced as it settles rather than only being
           visible. `polite` because it changes several times per batch. */}
@@ -403,31 +449,11 @@ function ProcessStep({
           title="Nothing was uploaded"
           className="pv-card"
         >
-          Every file in this batch was refused. The reason for each one is on its row above.
+          No photos remain in this batch. Any file errors are listed above.
         </EmptyState>
       )}
     </>
   );
-}
-
-function detailFor(item: Item): string {
-  const size = megabytes(item.file.size);
-
-  switch (item.status) {
-    case "queued":
-      return `${size} · waiting`;
-    case "uploading":
-      return `${size} · uploading`;
-    case "processing":
-      return `${size} · reading location data`;
-    case "uploaded": {
-      // An item only enters `uploaded` when the API returned its photo.
-      const at = coordinateLabel(item.photo);
-      return at === null ? `${size} · uploaded, needs placing` : `${size} · ${at}`;
-    }
-    case "error":
-      return size;
-  }
 }
 
 /** Reports successful uploads, failures, cancellations, and missing locations. */

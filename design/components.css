@@ -656,6 +656,25 @@
 .pv-upload-sub { font-size: var(--pv-text-xs); color: var(--pv-text-subtle); }
 .pv-upload-sub--error { color: var(--pv-danger); }
 
+/* Keep the current filename and failures within a bounded upload display. */
+.pv-upload-current {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-space-3);
+  min-width: 0;
+  margin-top: var(--pv-space-3);
+}
+.pv-upload-current .pv-upload-name {
+  display: inline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.pv-upload-errors {
+  max-height: 18rem;
+  overflow-y: auto;
+  margin-top: var(--pv-space-4);
+}
+
 .pv-progress {
   height: 4px;
   background: var(--pv-bg-active);

@@ -19,9 +19,14 @@ It sends files sequentially, one per request. Each item has a UUID reused as its
 files from starting. Canceling a request cannot undo a server commit; retrying
 with the same key resolves an uncertain result without creating another photo.
 
-XHR reports transfer progress. After transfer, the row says it is reading
-location data until the response arrives. Accepted rows include exact owner
-metadata and become available for review, including photos without GPS. The
+`web/src/screens/Upload.tsx::ProcessStep` displays one batch progress bar counting
+accepted and failed files against the total selected. It shows only the current
+filename while uploading; after transfer, that line says it is reading location
+data until the response arrives. Failed files retain retry and removal controls in
+a scrollable region with a maximum height of 18rem. Queued and accepted files have
+no individual rows. The bar measures request completion; server image conversion
+can continue afterward. Accepted photos include exact owner metadata and become
+available for review, including photos without GPS. The
 review map does not wait for variants. Voyage detail and list queries poll while
 photos remain pending. Creation, upload, deletion, and publication mutations
 invalidate affected voyage, discovery, and public-profile queries.
