@@ -224,10 +224,13 @@ export function useDiscoverMap(window: MapWindow | null): UseQueryResult<Discove
 const EMPTY_WINDOW: MapWindow = { west: 0, south: 0, east: 0, north: 0, zoom: 0 };
 
 /** Public maps and profile pages can change after any voyage/photo mutation. */
-function invalidatePublicViews(client: QueryClient): void {
+function invalidatePublicViews(
+  client: QueryClient,
+  voyageKey: readonly string[] = keys.voyages.lists(),
+): void {
   void client.invalidateQueries({ queryKey: ["discover-map"] });
   void client.invalidateQueries({ queryKey: ["public-profile"] });
-  void client.invalidateQueries({ queryKey: keys.voyages.lists() });
+  void client.invalidateQueries({ queryKey: voyageKey });
 }
 
 /** Creation, edits, and reordering return a complete voyage. Store that detail
@@ -235,7 +238,6 @@ function invalidatePublicViews(client: QueryClient): void {
 function voyageChanged(client: QueryClient, voyage: Voyage): void {
   invalidatePublicViews(client);
   client.setQueryData(keys.voyages.detail(voyage.id), voyage);
-  void client.invalidateQueries({ queryKey: keys.voyages.lists() });
   void client.invalidateQueries({ queryKey: keys.voyages.map(voyage.id) });
 }
 
@@ -269,7 +271,6 @@ export function useDeleteVoyage(): UseMutationResult<void, Error, string> {
       invalidatePublicViews(client);
       client.removeQueries({ queryKey: keys.voyages.detail(id) });
       client.removeQueries({ queryKey: keys.voyages.map(id) });
-      void client.invalidateQueries({ queryKey: keys.voyages.lists() });
       // The voyage and its photo records were deleted.
       void client.invalidateQueries({ queryKey: keys.photos.all });
     },
@@ -354,7 +355,6 @@ export function useUploadPhotos(): UseMutationResult<UploadResult, Error, Upload
       invalidatePublicViews(client);
       void client.invalidateQueries({ queryKey: keys.voyages.detail(voyageId) });
       void client.invalidateQueries({ queryKey: keys.voyages.map(voyageId) });
-      void client.invalidateQueries({ queryKey: keys.voyages.lists() });
       void client.invalidateQueries({ queryKey: keys.photos.lists() });
     },
   });
@@ -366,11 +366,9 @@ export function useDeletePhoto(): UseMutationResult<void, Error, string> {
   return useMutation({
     mutationFn: (id: string) => deletePhoto(id),
     onSuccess: (_result, id) => {
-      invalidatePublicViews(client);
+      invalidatePublicViews(client, keys.voyages.all);
       client.removeQueries({ queryKey: keys.photos.detail(id) });
       void client.invalidateQueries({ queryKey: keys.photos.lists() });
-      // Invalidate voyage data that may include the deleted photo.
-      void client.invalidateQueries({ queryKey: keys.voyages.all });
     },
   });
 }

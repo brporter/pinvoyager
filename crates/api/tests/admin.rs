@@ -981,3 +981,96 @@ async fn storage_measurement_is_reused_between_account_list_and_detail(pool: PgP
         "pagination and detail should reuse the recent measurement"
     );
 }
+
+/// Signals only when JSON extraction starts, after session authentication.
+struct PausedBody {
+    ready: Option<tokio::sync::oneshot::Sender<()>>,
+    body: tokio::sync::mpsc::Receiver<Result<String, std::io::Error>>,
+}
+impl tokio_stream::Stream for PausedBody {
+    type Item = Result<String, std::io::Error>;
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        if let Some(ready) = self.ready.take() {
+            let _ = ready.send(());
+        }
+        self.body.poll_recv(cx)
+    }
+}
+
+#[sqlx::test]
+async fn suspension_rejects_mutations_authenticated_before_the_body_arrives(pool: PgPool) {
+    let app = app(pool.clone());
+    let (_, admin_cookie) = administrator(&pool).await;
+    for operation in ["publish", "create", "reorder", "rename"] {
+        let (owner, cookie) = caller(&pool).await;
+        let id = voyage(&pool, owner, true).await;
+        let (method, path, body) = match operation {
+            "publish" => (
+                "PATCH",
+                format!("/api/voyages/{id}"),
+                json!({"published":true}),
+            ),
+            "create" => ("POST", "/api/voyages".into(), json!({"title":"Late draft"})),
+            "reorder" => (
+                "PATCH",
+                format!("/api/voyages/{id}/photos/order"),
+                json!({"photo_ids":[Uuid::now_v7()]}),
+            ),
+            _ => (
+                "PATCH",
+                "/api/me".into(),
+                json!({"display_name":"late-rename"}),
+            ),
+        };
+        let (ready, authenticated) = tokio::sync::oneshot::channel();
+        let (sender, body_rx) = tokio::sync::mpsc::channel(1);
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header("cookie", cookie)
+            .header("content-type", "application/json")
+            .body(Body::from_stream(PausedBody {
+                ready: Some(ready),
+                body: body_rx,
+            }))
+            .expect("request");
+        let pending = tokio::spawn(app.clone().oneshot(request));
+        authenticated
+            .await
+            .expect("body requested after authentication");
+        assert_eq!(
+            action(&app, &admin_cookie, owner, json!({"action":"suspend"})).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            action(
+                &app,
+                &admin_cookie,
+                owner,
+                json!({"action":"unpublish_all"})
+            )
+            .await,
+            StatusCode::NO_CONTENT
+        );
+        sender
+            .send(Ok(body.to_string()))
+            .await
+            .expect("finish body");
+        drop(sender);
+        let response = pending.await.expect("task").expect("response");
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "{operation} after suspension"
+        );
+        let published: bool = sqlx::query_scalar("SELECT published FROM voyages WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("voyage");
+        assert!(!published);
+    }
+}

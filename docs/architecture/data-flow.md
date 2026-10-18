@@ -28,7 +28,12 @@ A failed logout remains visible in the account menu with a retry action; it does
 not navigate away. See the [authentication reference](auth-flow.md).
 
 Voyage mutations update cached detail data and invalidate affected lists, discovery, and
-public-profile queries. Upload uses the shared creation hook, keeps the draft ID in the
+public-profile queries. `invalidatePublicViews` invalidates each affected voyage
+query once: ordinarily list queries, or the whole voyage prefix when deleting a
+photo whose owning voyage is not supplied. Mutation callbacks add only their
+remaining detail, map, and photo invalidations. `api/__tests__/hooks.test.tsx`
+checks that an edit triggers one refetch of an active voyage list. Upload uses the
+shared creation hook, keeps the draft ID in the
 URL, and retains per-file retry keys in its batch hook. Files and progress remain in
 browser memory. Reloading resumes the draft, but the user must select files again. The
 query client and individual hooks share `retryOnlyTransient`.

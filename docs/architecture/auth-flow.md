@@ -198,3 +198,12 @@ The debug-only `auth/dev.rs::login` accepts `grant_admin: true`; the shared
 `auth/sign_in.rs::sign_in` checks suspension and commits promotion with the forged
 session. The development identity, optional grant code, and route do not exist in
 release builds. See [bootstrap security](../site-administration.md#security-assessment).
+
+Account mutations also use `users::require_active` inside their database
+transactions, after receiving request bodies and before modifying data. Voyage
+mutations share `http/voyages.rs::lock_owned`; photo deletion and uploads follow
+the same account-before-voyage lock order. Profile renaming rechecks after locking
+the account for update. `tests/admin.rs::suspension_rejects_mutations_authenticated_before_the_body_arrives`
+verifies that suspension wins over requests still receiving their JSON bodies.
+The sign-in screen explains that voyages start private and become public only
+when published (`web/src/auth/SignIn.tsx`, `web/src/auth/__tests__/SignIn.test.tsx`).

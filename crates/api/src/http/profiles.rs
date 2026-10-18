@@ -54,6 +54,7 @@ pub(crate) async fn update(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(AppError::Unauthorized)?;
+    users::require_active(&mut tx, user.user_id).await?;
     // New claims insert; a same-owner alias performs a no-op update and returns
     // success. Foreign and permanently reserved names return no row.
     let claimed = sqlx::query_scalar!(

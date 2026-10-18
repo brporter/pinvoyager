@@ -1516,3 +1516,100 @@ async fn canceling_an_upload_removes_its_partially_written_file() {
     .expect("cancellation removes the temporary upload");
     drop(sender);
 }
+
+#[sqlx::test]
+async fn failed_photo_insert_leaves_disk_bytes_until_the_orphan_age_expires(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage = crate::photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let scratch = crate::photos::decode::testutil::ScratchDir::new("failed-insert-orphan");
+    let fixture = crate::photos::decode::testutil::write_jpeg(&scratch, "input", 2, 2);
+    let hash = ContentHash::of_file(&fixture).expect("hash");
+    let original = storage::original_path(scratch.path(), &hash);
+    let bytes = std::fs::read(fixture).expect("fixture bytes");
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let state = test_state_with(
+        pool.clone(),
+        scratch.path().to_owned(),
+        crate::photos::worker::VariantQueue::from_sender(sender),
+    );
+    sqlx::raw_sql(sqlx::AssertSqlSafe("CREATE FUNCTION refuse_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'insert refused'; END $$; CREATE TRIGGER refuse_insert BEFORE INSERT ON photos FOR EACH ROW EXECUTE FUNCTION refuse_insert();"))
+        .execute(&pool).await.expect("reject insertion");
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("multipart/form-data; boundary=pv"),
+    );
+    let result = upload_to_voyage(
+        State(state),
+        test_user(owner.id),
+        Path(voyage),
+        headers,
+        Body::from(multipart_body(
+            "pv",
+            &[("files", Some("input.jpg"), &bytes)],
+        )),
+    )
+    .await;
+    assert!(matches!(result, Err(Rejection::App(AppError::Database(_)))));
+    assert_eq!(
+        std::fs::read(&original).expect("disk write preceded insertion"),
+        bytes
+    );
+    assert!(
+        receiver.try_recv().is_err(),
+        "failed inserts never enqueue conversion"
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM photos")
+        .fetch_one(&pool)
+        .await
+        .expect("rows");
+    assert_eq!(count, 0);
+    crate::photos::cleanup::sweep(&pool, scratch.path())
+        .await
+        .expect("recent orphan survives");
+    assert!(original.exists());
+    std::fs::File::options()
+        .write(true)
+        .open(&original)
+        .expect("original")
+        .set_times(
+            std::fs::FileTimes::new()
+                .set_modified(SystemTime::now() - Duration::from_secs(48 * 60 * 60)),
+        )
+        .expect("age original");
+    crate::photos::cleanup::sweep(&pool, scratch.path())
+        .await
+        .expect("old orphan removed");
+    assert!(!original.exists());
+}
+
+#[sqlx::test]
+async fn suspension_after_authentication_prevents_photo_deletion(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let photo = create_photo_for_test(&pool, owner.id, &"f".repeat(64)).await;
+    let user = test_user(owner.id);
+    sqlx::query("UPDATE users SET suspended=true WHERE id=$1")
+        .bind(owner.id)
+        .execute(&pool)
+        .await
+        .expect("suspend");
+    let state = test_state_with(
+        pool.clone(),
+        "unused".into(),
+        crate::photos::worker::VariantQueue::detached(),
+    );
+    assert!(matches!(
+        destroy(State(state), user, Path(photo.id)).await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(
+        photos::find_by_id(&pool, photo.id)
+            .await
+            .expect("lookup")
+            .is_some()
+    );
+}

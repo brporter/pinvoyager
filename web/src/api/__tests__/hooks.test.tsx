@@ -462,6 +462,23 @@ describe("mutation cache effects", () => {
     expect(set).toHaveBeenCalledWith(keys.me, null);
   });
 
+  it("refetches an active voyage list only once after an edit", async () => {
+    const { client, wrapper } = setup();
+    mocks.listVoyages.mockResolvedValue({ voyages: [voyage], next_before: null });
+    mocks.updateVoyage.mockResolvedValue(voyage);
+    const hook = renderHook(() => ({ feed: useVoyages(), update: useUpdateVoyage("v1") }), {
+      wrapper,
+    });
+    await waitFor(() => expect(hook.result.current.feed.isSuccess).toBe(true));
+    mocks.listVoyages.mockClear();
+    await act(async () => {
+      await hook.result.current.update.mutateAsync({ title: "Edited" });
+    });
+    await waitFor(() => expect(hook.result.current.feed.isFetching).toBe(false));
+    expect(mocks.listVoyages).toHaveBeenCalledTimes(1);
+    client.clear();
+  });
+
   it("does not retry a failed upload mutation", async () => {
     const { wrapper } = setup();
     mocks.uploadPhotos.mockRejectedValue(new Error("rejected"));

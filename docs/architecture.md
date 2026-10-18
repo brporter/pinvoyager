@@ -89,7 +89,9 @@ authorization attempts.
 
 After provider verification, `auth/sign_in.rs::sign_in` resolves the account,
 checks suspension, updates identity activity, and
-creates the opaque session in one transaction. The debug-only forging endpoint
+creates the opaque session in one transaction. Account mutations also recheck
+suspension inside their write transactions, locking the account before voyage and
+content locks. The debug-only forging endpoint
 calls the same function with an explicitly marked development identity after
 checking configuration and request inputs. Release builds omit both that endpoint
 and the development identity variant, including its optional administrator grant. See the
@@ -170,15 +172,17 @@ invalidate the relevant voyage, discovery, and public-profile queries.
 
 The API streams native axum multipart fields into temporary files, validates
 magic bytes and dimensions, hashes content, and reads EXIF. It reserves queue
-capacity before opening the photo transaction. The transaction locks the voyage
-and content, recognizes retry keys, commits the original, and inserts a pending
-row. Sending the reserved job after commit is synchronous. A 201 acknowledges
+capacity before opening the photo transaction. The transaction checks the active
+account and locks the voyage and content, recognizes retry keys, commits the
+original, and inserts a pending row. Sending the reserved job after commit is
+synchronous. A 201 acknowledges
 acceptance, not completed conversion.
 
 Workers decode/orient once and encode three WebP sizes without copied metadata.
 They recheck the row under the content lock before final writes and marking it
-ready. Periodic recovery walks all pending rows in pages of 1,000; a failed
-conversion changes a still-pending row to failed. A late failure from a duplicate
+ready. Recovery and cleanup have independent minute timers, so queue backpressure
+does not block cleanup. Periodic recovery walks all pending rows in pages of 1,000;
+a failed conversion changes a still-pending row to failed. A late failure from a duplicate
 job cannot overwrite ready status. Multiple processes can perform duplicate encoding,
 but final writes/deletion serialize by content hash.
 
@@ -187,9 +191,14 @@ and return 204 after commit. Worker maintenance removes files in the background;
 HTTP handlers do not wait for storage removal. Cleanup reacquires the content lock and rechecks references,
 so another upload can adopt shared bytes safely. Failed removal stays queued
 for retry. Maintenance selects at most 1,000 due cleanup records per pass and defers
-failed attempts for 60 seconds, allowing newer records to progress. PostgreSQL and the filesystem do not share a transaction; a process
-crash can leave unreferenced originals. Temporary upload leases arrange removal
-when canceled; maintenance also removes unlocked UUID-named `.part` files older
+failed attempts for 60 seconds, allowing newer records to progress. Uploads write
+original bytes before inserting the photo row. A failed insert,
+cancellation, or crash can leave unreferenced files. After queued deletions,
+`photos/orphans.rs::sweep` scans canonical original and variant paths and removes
+unreferenced regular files more than 24 hours old. It rechecks references and each
+file's modification time under the content lock; recent files and shared bytes
+survive. Temporary upload leases arrange removal when canceled; maintenance also
+removes unlocked UUID-named `.part` files older
 than 24 hours. Active uploads retain a filesystem lock, including during blocking
 probes, so the sweep skips them across API processes.
 

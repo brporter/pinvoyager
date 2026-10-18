@@ -71,7 +71,7 @@ pub async fn find_by_profile_name(
 }
 
 /// Reject suspended or deleted accounts and hold a shared account lock until
-/// the sign-in/link transaction commits, serializing it with suspension/deletion.
+/// caller's transaction commits, serializing account mutations with suspension/deletion.
 pub async fn require_active(
     connection: &mut sqlx::PgConnection,
     id: Uuid,

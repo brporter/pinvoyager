@@ -81,7 +81,7 @@ export function SignIn() {
       >
         By continuing you agree to the Terms and Privacy Policy.
         <br />
-        Every voyage you create is public.
+        Voyages start private. Publishing makes their photos and selected location precision public.
       </p>
 
       {/* Only render the development sign-in form in development builds. */}

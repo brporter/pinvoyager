@@ -138,17 +138,24 @@ acquiring it. Two administrators trying to suspend or delete each other cannot
 both succeed. Returning sign-ins hold an account write lock; linking holds a shared
 account lock. Suspension therefore either revokes the newly created session or
 completes first and causes sign-in rejection.
-Uploads lock the account before the voyage, recheck suspension after receiving
-bytes, and then lock photo content. Account deletion takes those locks in the same
-order before gathering hashes and deleting rows. Other requests already authorized
-when suspension begins may finish. Suspension does not remove public content;
-unpublish separately when needed. An enabled owner can publish a moderated voyage
+Voyage creation, editing/publication, reordering, photo/voyage deletion, profile
+renaming, and uploads recheck suspension inside their write transactions using
+`db/repo/users.rs::require_active`. They lock the account before any voyage or
+content locks, matching account deletion. Profile renaming takes an account write
+lock before the check; voyage/photo changes hold a shared account lock. A request
+that authenticated before suspension but has not acquired that lock returns 403
+if suspension commits first. A mutation already holding the account lock finishes
+before suspension can commit. In particular, an outstanding publish request cannot
+republish a voyage after suspension and administrative unpublishing have completed.
+Reads already authorized when suspension begins may finish. Suspension does not
+remove public content; unpublish separately when needed. An enabled owner can publish a moderated voyage
 again; unpublishing is not a permanent publication ban.
 
 Deletion schedules each content hash in `photo_cleanup` before commit and returns
 204 immediately after that commit. Worker maintenance removes files in the background,
-starting on its next pass (normally every 60 seconds; pending conversion recovery and
-earlier cleanup can delay it). The HTTP handler performs no filesystem removal.
+starting on its next pass (normally every 60 seconds; earlier cleanup can delay
+it). Pending conversion recovery runs separately and cannot block cleanup when
+the conversion queue is full. The HTTP handler performs no filesystem removal.
 A failed removal is logged and remains queued for worker maintenance.
 Each maintenance pass attempts at most 1,000 due records. A failed background attempt
 sets `next_attempt_at` 60 seconds ahead so persistent failures do not block newer work.

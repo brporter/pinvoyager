@@ -146,3 +146,58 @@ async fn sweep_removes_only_stale_unlocked_upload_files(pool: PgPool) {
         .expect("sweep unlocked file");
     assert!(!active.exists());
 }
+
+fn write_aged(path: &Path, age: std::time::Duration) {
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("directories");
+    std::fs::write(path, b"stored bytes").expect("file");
+    std::fs::File::options()
+        .write(true)
+        .open(path)
+        .expect("file")
+        .set_times(std::fs::FileTimes::new().set_modified(std::time::SystemTime::now() - age))
+        .expect("mtime");
+}
+
+#[sqlx::test]
+async fn orphan_sweep_removes_old_unreferenced_files_only(pool: PgPool) {
+    use std::time::Duration;
+    let scratch = ScratchDir::new("orphans");
+    let old = Duration::from_secs(48 * 60 * 60);
+    let hash = ContentHash::try_from("c".repeat(64)).expect("hash");
+    let original = storage::original_path(scratch.path(), &hash);
+    let thumb = storage::variant_path(scratch.path(), &hash, VariantKind::Thumb);
+    let recent = storage::variant_path(scratch.path(), &hash, VariantKind::Display);
+    write_aged(&original, old);
+    write_aged(&thumb, old);
+    write_aged(&recent, Duration::ZERO);
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage = crate::photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let shared = ContentHash::try_from("d".repeat(64)).expect("hash");
+    let retained = storage::original_path(scratch.path(), &shared);
+    write_aged(&retained, old);
+    sqlx::query("INSERT INTO photos(id,owner_id,voyage_id,content_hash,byte_size,width,height,original_format) VALUES(gen_random_uuid(),$1,$2,$3,8,1,1,'jpeg')")
+        .bind(owner.id).bind(voyage).bind(shared.as_str()).execute(&pool).await.expect("reference");
+    // A variant without an original must also be discovered.
+    let alone = storage::variant_path(
+        scratch.path(),
+        &ContentHash::try_from("e".repeat(64)).expect("hash"),
+        VariantKind::Full,
+    );
+    write_aged(&alone, old);
+    let unrelated = original.parent().expect("parent").join("operator-notes");
+    write_aged(&unrelated, old);
+    sweep(&pool, scratch.path())
+        .await
+        .expect("sweep without cleanup records");
+    assert!(!original.exists(), "old orphaned original must be removed");
+    assert!(!thumb.exists());
+    assert!(!alone.exists());
+    assert!(recent.exists(), "each file needs its own age check");
+    assert!(
+        retained.exists(),
+        "referenced content survives regardless of age"
+    );
+    assert!(unrelated.exists());
+}

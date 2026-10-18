@@ -179,8 +179,11 @@ can reference the same original and variants.
 Photo/voyage deletion locks the voyage and content hashes, deletes rows, and
 records cleanup in the database transaction. Account, voyage, and photo deletion
 return 204 after the transaction commits, without waiting for file removal.
-Worker maintenance performs removal on its next pass; earlier maintenance work
-can delay that pass. `photos/cleanup.rs::clean` reacquires the content lock and
+Worker maintenance performs removal on its next pass. Cleanup and pending-photo
+recovery run on separate minute timers, so a full conversion queue cannot delay
+cleanup. Each task finishes its current pass before starting another; slow
+filesystem operations can still delay later cleanup passes.
+`photos/cleanup.rs::clean` reacquires the content lock and
 rechecks references before removal; a concurrent upload that adopted the content
 keeps its files. The blocking removal owns the transaction until it stops.
 Failed removals remain in `photo_cleanup` for maintenance retry. `cleanup::sweep`
@@ -203,11 +206,29 @@ a temporary-file sweep failure does not prevent recorded content cleanup.
 This also handles abandoned files after a crash or runtime shutdown prevents a
 lease's cleanup task from starting.
 
-The filesystem and PostgreSQL do not form one transaction. A crash around an
-original write can still leave unreferenced original bytes; maintenance does not
-scan every original or variant for missing database references. Storage needs
-persistent capacity and operational monitoring. The API container configures `/data`; Compose mounts its `uploads`
-volume there.
+Uploads write the original to disk before inserting the photo row. PostgreSQL
+and the filesystem do not share a transaction, so a failed insert, canceled request,
+or process crash can leave an original without a photo row. This ordering is
+intentional: an accepted photo must already have its original bytes on disk.
+
+After queued deletions, `photos/orphans.rs::sweep` scans both `originals` and
+`variants` for canonical content-hash files whose modification time is **more than
+24 hours old**. It finds variants even when their original is missing. Files exactly
+24 hours old or newer remain. For each candidate, `cleanup::clean_content` acquires
+the same content lock used by upload and conversion, then checks for **any** photo
+row referencing that hash, including pending and failed photos. Referenced content
+remains. Otherwise, `orphans::remove_older_than` rechecks each file's age and removes
+only eligible regular files while the blocking task retains the transaction and lock.
+A new upload that adopts the bytes before cleanup gets the lock protects them;
+a file replaced with recent bytes is also preserved.
+
+The scan skips symlinks, directories named like files, unknown filenames, and files
+outside their expected shard paths. It streams directory entries using Tokio's
+filesystem operations and retains only shard directory paths between reads. Scan
+work scales with stored files; it does not load the entire tree into memory.
+Individual database/removal failures are logged and leave files for the next scan;
+scan failures propagate to maintenance for logging and retry. The API container
+configures `/data`; Compose mounts its persistent `uploads` volume there.
 
 ## Authorized delivery
 

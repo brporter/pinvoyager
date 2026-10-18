@@ -167,3 +167,25 @@ The callback tests assert supported existing-account recovery instructions; the
 OIDC issue-time comments document the verifier's existing policy. The RustRover
 launch configuration uses the argument-free API command; the CLI tests continue
 to verify rejection of the retired administrator flag.
+
+## Orphan recovery and suspension races
+
+`http/photos_tests.rs::failed_photo_insert_leaves_disk_bytes_until_the_orphan_age_expires`
+forces an insert failure after the disk write, verifies that no conversion is
+queued, and checks that cleanup preserves recent bytes and removes them after
+24 hours. `photos/cleanup_tests.rs::orphan_sweep_removes_old_unreferenced_files_only`
+covers originals, variants without originals, recent files, referenced content,
+and unrelated filenames. `photos/orphans_tests.rs` covers the strict age boundary,
+canonical paths, symlinks, scan/database errors, and uploads adopting or replacing
+bytes while cleanup waits for the content lock.
+
+`photos/worker_tests.rs::cleanup_progresses_while_recovery_waits_for_queue_capacity`
+blocks conversions and fills the queue, then verifies that deletion cleanup still
+runs. Shutdown retains ownership of both periodic tasks.
+
+`tests/admin.rs::suspension_rejects_mutations_authenticated_before_the_body_arrives`
+pauses JSON bodies after authentication, suspends and unpublishes the owner, then
+expects 403 for publication, creation, reordering, and display-name changes.
+The photo/voyage handler suites also verify deletion with an already-authenticated
+caller whose account has since been suspended. Frontend sign-in tests assert
+private-draft wording; API hook tests verify a single active-list refetch per edit.

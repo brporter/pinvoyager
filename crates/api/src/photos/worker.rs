@@ -126,7 +126,7 @@ impl VariantQueue {
     }
 }
 
-/// Starts conversion dispatch and periodic pending-photo recovery.
+/// Starts conversion dispatch, periodic pending-photo recovery, and cleanup.
 /// Conversion concurrency is limited by `variant_concurrency`. Returns the
 /// queue handle used to enqueue jobs and shut down the worker.
 pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
@@ -139,26 +139,20 @@ pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
     });
     let maintenance_pool = pool.clone();
     let maintenance_config = config.clone();
-    let maintenance_sender = sender.clone();
-    let mut maintenance_stop = stopped.clone();
+    let maintenance_stop = stopped.clone();
+    let recovery_pool = pool.clone();
+    let recovery_sender = sender.clone();
+    let recovery_stop = stopped.clone();
     let task = tokio::spawn(async move {
-        // Owning both tasks in a JoinSet ensures cancellation stops maintenance
-        // as well as dispatch; conversion futures are owned by dispatch below.
+        // Own recovery, cleanup, and dispatch so shutdown cancels all three.
+        // Cleanup has its own timer and never waits for conversion queue capacity.
         let mut tasks = JoinSet::new();
-        tasks.spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                tokio::select! {
-                    _ = maintenance_stop.changed() => break,
-                    _ = interval.tick() => {
-                        tokio::select! {
-                            _ = maintenance_stop.changed() => break,
-                            _ = maintain(&maintenance_pool, &maintenance_config, &maintenance_sender) => {}
-                        }
-                    }
-                }
-            }
-        });
+        tasks.spawn(periodically(recovery_stop, async move || {
+            recover(recovery_pool.clone(), recovery_sender.clone()).await;
+        }));
+        tasks.spawn(periodically(maintenance_stop, async move || {
+            maintain(&maintenance_pool, &maintenance_config).await;
+        }));
         tasks.spawn(dispatch_owned(pool, config, receiver, permits, stopped));
         while tasks.join_next().await.is_some() {}
     });
@@ -172,8 +166,27 @@ pub fn spawn(pool: PgPool, config: Arc<Config>) -> VariantQueue {
     }
 }
 
-async fn maintain(pool: &PgPool, config: &Config, sender: &mpsc::Sender<VariantJob>) {
-    recover(pool.clone(), sender.clone()).await;
+/// Runs immediately and every minute, without overlapping passes. A shutdown
+/// signal cancels the current pass, including a wait for queue capacity.
+async fn periodically(mut stopped: watch::Receiver<bool>, mut work: impl AsyncFnMut()) {
+    let mut interval = tokio::time::interval(Duration::from_secs(60));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            biased;
+            _ = stopped.changed() => break,
+            _ = interval.tick() => {
+                tokio::select! {
+                    biased;
+                    _ = stopped.changed() => break,
+                    _ = work() => {}
+                }
+            }
+        }
+    }
+}
+
+async fn maintain(pool: &PgPool, config: &Config) {
     if let Err(error) = crate::auth::session::sweep_expired(pool).await {
         tracing::warn!(%error, "session cleanup will be retried");
     }

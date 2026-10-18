@@ -349,8 +349,10 @@ async fn create(
         None => Granularity::Km1,
     };
 
+    let mut tx = state.pool.begin().await?;
+    crate::db::repo::users::require_active(&mut tx, user.user_id).await?;
     let voyage = repo::create(
-        &state.pool,
+        &mut *tx,
         &NewVoyage {
             owner_id: user.user_id,
             title,
@@ -360,6 +362,7 @@ async fn create(
     )
     .await?;
 
+    tx.commit().await?;
     tracing::Span::current().record("voyage.id", voyage.id.to_string());
 
     // New voyages have no photos, so the response needs no photo query.
@@ -409,15 +412,7 @@ async fn update(
     let mut tx = state.pool.begin().await?;
     // Hold the voyage lock through validation and update: title and publication
     // are one invariant even when two requests patch different fields.
-    let owned: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
-            .bind(id)
-            .bind(user.user_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-    if owned.is_none() {
-        return Err(AppError::NotFound.into());
-    }
+    lock_owned(&mut tx, id, user.user_id).await?;
     let current = repo::find_by_id(&mut *tx, id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -469,15 +464,7 @@ async fn destroy(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, Rejection> {
     let mut tx = state.pool.begin().await?;
-    let owned: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
-            .bind(id)
-            .bind(user.user_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-    if owned.is_none() {
-        return Err(AppError::NotFound.into());
-    }
+    lock_owned(&mut tx, id, user.user_id).await?;
     let hashes: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT content_hash FROM photos WHERE voyage_id=$1 ORDER BY content_hash",
     )
@@ -538,13 +525,14 @@ async fn reorder(
 ) -> Result<Json<VoyageResponse>, Rejection> {
     let photo_ids = clean_photo_ids(body.photo_ids)?;
 
-    // `reorder` returns no indication of whether it matched anything, so the
-    // 404 for "not yours or not there" has to be answered here.
-    let voyage = owned(&state, &user, id).await?;
-
-    repo::reorder(&state.pool, id, user.user_id, &photo_ids).await?;
-
-    let photos = repo::photos_for_voyage(&state.pool, id).await?;
+    let mut tx = state.pool.begin().await?;
+    lock_owned(&mut tx, id, user.user_id).await?;
+    let voyage = repo::find_by_id(&mut *tx, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    repo::reorder(&mut *tx, id, user.user_id, &photo_ids).await?;
+    let photos = repo::photos_for_voyage(&mut *tx, id).await?;
+    tx.commit().await?;
 
     Ok(Json(VoyageResponse::build(voyage, photos)))
 }
@@ -724,21 +712,20 @@ async fn visible(
     Ok(voyage)
 }
 
-/// Loads a voyage the caller owns, for the mutations that need to read before
-/// they write.
-///
-/// Also 404 rather than 403, and for the same reason: a stranger PATCHing an id
-/// must not learn from the status whether anything is there.
-async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> Result<Voyage, Rejection> {
-    let voyage = repo::find_by_id(&state.pool, id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-
-    if voyage.owner_id != user.user_id {
-        return Err(AppError::NotFound.into());
-    }
-
-    Ok(voyage)
+/// Checks suspension and ownership while holding account then voyage locks.
+/// The locks remain held through the caller's transaction, so suspension and
+/// account deletion cannot finish before this mutation commits or rolls back.
+/// Suspended or deleted accounts return 403; missing or foreign voyages return 404.
+async fn lock_owned(tx: &mut sqlx::PgConnection, id: Uuid, owner: Uuid) -> Result<(), Rejection> {
+    crate::db::repo::users::require_active(tx, owner).await?;
+    let found: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+            .bind(id)
+            .bind(owner)
+            .fetch_optional(tx)
+            .await?;
+    found.ok_or(AppError::NotFound)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

@@ -716,6 +716,7 @@ pub(super) async fn destroy(
     let Some((voyage_id, hash)) = row else {
         return Err(AppError::NotFound);
     };
+    crate::db::repo::users::require_active(&mut tx, user.user_id).await?;
     sqlx::query("SELECT id FROM voyages WHERE id=$1 FOR UPDATE")
         .bind(voyage_id)
         .execute(&mut *tx)

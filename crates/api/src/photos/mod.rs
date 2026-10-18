@@ -27,6 +27,7 @@
 pub mod cleanup;
 pub mod decode;
 pub mod exif;
+mod orphans;
 pub mod rate_limit;
 pub mod storage;
 pub(crate) mod temporary;

@@ -403,8 +403,7 @@ async fn maintenance_and_processing_tolerate_a_closed_database() {
         .expect("pool");
     pool.close().await;
     let config = worker_config(Path::new("unused"));
-    let (sender, _receiver) = mpsc::channel(1);
-    maintain(&pool, &config, &sender).await;
+    maintain(&pool, &config).await;
     assert!(
         process(&pool, &config, &VariantJob::new(Uuid::now_v7()))
             .await
@@ -424,5 +423,59 @@ fn atomic_variant_write_cleans_staging_bytes_if_rename_fails() {
             .count(),
         1,
         "only the original obstruction remains"
+    );
+}
+
+#[sqlx::test]
+async fn cleanup_progresses_while_recovery_waits_for_queue_capacity(pool: PgPool) {
+    let scratch = ScratchDir::new("cleanup-during-recovery");
+    let mut blockers = pool.begin().await.expect("transaction");
+    for _ in 0..4 {
+        let id = insert_pending_photo(&pool).await;
+        let photo = photo_repo::find_by_id(&pool, id)
+            .await
+            .expect("photo")
+            .expect("present");
+        photo_repo::lock_content(&mut blockers, &photo.content_hash)
+            .await
+            .expect("hold conversion");
+        let hash = ContentHash::try_from(photo.content_hash).expect("hash");
+        let path = storage::original_path(scratch.path(), &hash);
+        fs::create_dir_all(path.parent().expect("parent")).expect("directories");
+        asymmetric_image(2, 2)
+            .save_with_format(path, image::ImageFormat::Jpeg)
+            .expect("original");
+    }
+    let orphan = "f".repeat(64);
+    sqlx::query("INSERT INTO photo_cleanup(content_hash) VALUES($1)")
+        .bind(&orphan)
+        .execute(&pool)
+        .await
+        .expect("cleanup record");
+    let mut config = worker_config(scratch.path());
+    config.photos.variant_concurrency = 1;
+    config.photos.variant_queue_depth = 1;
+    let queue = spawn(pool.clone(), Arc::new(config));
+    let cleaned = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let pending: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM photo_cleanup WHERE content_hash=$1)",
+            )
+            .bind(&orphan)
+            .fetch_one(&pool)
+            .await
+            .expect("cleanup state");
+            if !pending {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    blockers.rollback().await.expect("release conversions");
+    queue.shutdown(Duration::from_secs(5)).await;
+    assert!(
+        cleaned.is_ok(),
+        "cleanup must run while recovery is blocked by a full queue"
     );
 }

@@ -50,7 +50,7 @@ describe("SignIn", () => {
       expect(
         screen.getByRole("heading", { name: "Sign in or create an account" }),
       ).toBeInTheDocument();
-      expect(screen.getByText(/Every voyage you create is public/)).toBeInTheDocument();
+      expect(screen.getByText(/Voyages start private/)).toBeInTheDocument();
       for (const provider of ["Google", "Apple", "Microsoft"]) {
         expect(
           screen.getByRole("button", { name: `Continue with ${provider}` }),

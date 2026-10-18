@@ -1289,3 +1289,27 @@ async fn publication_checks_the_title_after_waiting_for_concurrent_edits(pool: P
     assert!(saved.title.is_empty());
     assert!(!saved.published);
 }
+
+#[sqlx::test]
+async fn suspension_after_authentication_prevents_voyage_deletion(pool: PgPool) {
+    let owner = crate::db::repo::users::create(&pool, None, None)
+        .await
+        .expect("owner");
+    let voyage = crate::photo_voyage::fixture_voyage(&pool, owner.id).await;
+    let user = test_user(owner.id);
+    sqlx::query("UPDATE users SET suspended=true WHERE id=$1")
+        .bind(owner.id)
+        .execute(&pool)
+        .await
+        .expect("suspend");
+    assert!(matches!(
+        destroy(State(state_with_pool(pool.clone())), user, Path(voyage)).await,
+        Err(Rejection::App(AppError::Forbidden))
+    ));
+    assert!(
+        repo::find_by_id(&pool, voyage)
+            .await
+            .expect("lookup")
+            .is_some()
+    );
+}
