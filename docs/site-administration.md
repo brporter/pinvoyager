@@ -73,6 +73,12 @@ Further promotions are available in the administration UI and require confirmati
 Promotion does not re-enable suspended accounts. Role removal currently requires
 an operator database update; the UI supports promotion only.
 
+The production `api` service in `deploy/vm/docker-compose.yml` supplies
+`--initial-admin-email bryan@bryanporter.com` at startup. Apply the updated Compose
+file on the server and recreate the API container for it to take effect. After an
+eligible sign-in grants the role, remove that service's `command` entry and recreate
+the container again to stop automatic grants.
+
 An operator can alternatively grant an existing enabled account explicitly:
 
 ```sql
