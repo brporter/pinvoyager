@@ -1,5 +1,5 @@
 import { useModalDialog } from "./useModalDialog";
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { VoyagePhoto } from "../api/types";
 import { Button } from "./Button";
 import { ArrowLeftIcon, ArrowRightIcon, CloseIcon } from "./icons";
@@ -13,7 +13,6 @@ export function LocationGallery({
   onClose: () => void;
 }) {
   const modal = useModalDialog(onClose);
-  const titleId = useId();
   const [activeId, setActiveId] = useState<string | null>(() => photos[0]?.id ?? null);
   // Keep selection by ID across refreshed ordering; if that photo disappeared,
   // show the first remaining photo (or the empty state).
@@ -27,7 +26,7 @@ export function LocationGallery({
     <dialog
       {...modal}
       className="pv-location-gallery"
-      aria-labelledby={titleId}
+      aria-label="Photos at this location"
       closedby="any"
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft" && index > 0) {
@@ -40,19 +39,11 @@ export function LocationGallery({
         }
       }}
     >
-      <header className="pv-location-gallery-header">
-        <h2 id={titleId} className="pv-h3" style={{ margin: 0 }}>
-          Photos at this location
-        </h2>
-        <p className="pv-sm pv-muted" style={{ margin: 0 }}>
-          Photos grouped at this map zoom
-        </p>
-        <form method="dialog" className="pv-location-gallery-close">
-          <Button type="submit" variant="ghost" size="lg" iconOnly aria-label="Close gallery">
-            <CloseIcon size={20} />
-          </Button>
-        </form>
-      </header>
+      <form method="dialog" className="pv-location-gallery-close">
+        <Button type="submit" variant="ghost" size="lg" iconOnly aria-label="Close gallery">
+          <CloseIcon size={20} />
+        </Button>
+      </form>
       <div className="pv-location-gallery-body">
         <Button
           variant="ghost"
@@ -86,7 +77,6 @@ export function LocationGallery({
                     : "This photo could not be processed."}
                 </p>
               )}
-              <figcaption className="pv-sm pv-muted">Photograph {photo.position}</figcaption>
             </figure>
           )}
         </div>

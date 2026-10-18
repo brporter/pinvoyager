@@ -22,11 +22,20 @@ const photo = (
   coordinate: { latitude: 43, longitude: 141, precision_m: 1000 },
 });
 
-it("uses a native modal, labeled heading, figures and a dialog close form", () => {
+it("uses a named native modal without a visible header and keeps the close form", () => {
   const onClose = vi.fn();
-  render(<LocationGallery photos={[photo("a")]} onClose={onClose} />);
+  render(<LocationGallery photos={[{ ...photo("a"), position: 19 }]} onClose={onClose} />);
   const dialog = screen.getByRole("dialog", { name: "Photos at this location" });
   expect(dialog.tagName).toBe("DIALOG");
+  expect(within(dialog).queryByRole("heading")).not.toBeInTheDocument();
+  expect(
+    within(dialog).queryByText("Photos at this location", { exact: true }),
+  ).not.toBeInTheDocument();
+  expect(within(dialog).queryByText("Photos grouped at this map zoom")).not.toBeInTheDocument();
+  expect(dialog.querySelector("header")).toBeNull();
+  expect(dialog.querySelector("figcaption")).toBeNull();
+  expect(within(dialog).queryByText("Photograph 19")).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("img", { name: "Photograph 19" })).toBeInTheDocument();
   expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalled();
   expect(within(dialog).getByText("1 of 1")).toBeInTheDocument();
   expect(within(dialog).queryByText(/~1 km/)).not.toBeInTheDocument();

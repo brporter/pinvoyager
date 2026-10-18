@@ -70,16 +70,20 @@ pin selection, resizing, unplaced photos, and refreshed photo removal.
 
 `web/src/components/LocationGallery.tsx` (`LocationGallery`) uses:
 
-- A native `<dialog>` opened by `showModal()` with a labeled heading.
+- A native `<dialog>` opened by `showModal()` and named “Photos at this location”
+  through `aria-label`. The title and zoom explanation are not displayed, so the
+  image uses the space previously occupied by the header.
 - Browser-managed focus within the dialog, disabled interaction with the page
   behind it, and dismissal with Escape.
 - A `<form method="dialog">` with an icon-only X submit button in the
   upper-right corner, named “Close gallery” for assistive technology.
 - Native previous/next buttons with arrow icons, descriptive names, and disabled
   states at the first and last photo. Left/Right arrow keys perform the same actions.
-- One `<figure>` / `<figcaption>` at a time, with descriptive image alt text and
-  a live “1 of N” counter. Selection is tracked by photo ID so readiness and order
-  changes do not replace the active photo; removal falls back to the first photo.
+- One `<figure>` at a time, with descriptive image alt text and
+  a live “1 of N” counter. The visible “Photograph N” caption is omitted, and the
+  image fills the space it previously occupied. Selection is tracked by photo ID
+  so readiness and order changes do not replace the active photo; removal falls
+  back to the first photo.
 - Authorized display WebP variants, explicit image dimensions, and asynchronous
   decoding. Only the active image is rendered and requested; originals are never
   requested.
@@ -102,7 +106,7 @@ including [light dismissal](https://html.spec.whatwg.org/multipage/interactive-e
 `web/src/styles/index.css` (`pv-location-gallery`) uses shared colors, spacing, radii,
 elevation, and focus styling. The modal fits inside the viewport and shows one image
 contained within the available area, with navigation to either side. Its layout uses a
-fixed header/footer and a flexible image frame with `min-height: 0` and `object-fit:
+fixed footer and a flexible image frame with `min-height: 0` and `object-fit:
 contain`. The dialog uses `overflow: hidden`, so gallery navigation does not require a
 scrollbar. The same layout fits narrow screens. The backdrop uses `--pv-overlay`.
 
@@ -110,6 +114,7 @@ scrollbar. The same layout fits narrow screens. The backdrop uses `--pv-overlay`
 
 `web/src/map/__tests__/VoyageMap.test.tsx` checks marker membership and gallery callbacks.
 `web/src/components/__tests__/LocationGallery.test.tsx` checks navigation, dismissal,
-processing states, and lifecycle handling. `VoyageDetail.test.tsx` checks page integration
+processing states, the absence of a visible header and photo caption, the dialog
+name, image alt text, and lifecycle handling. `VoyageDetail.test.tsx` checks page integration
 and focus restoration; `VoyageUploadFlow.test.tsx` checks readiness updates in an open gallery.
 These jsdom tests model native dialog behavior; see [testing](testing.md) for their limits.

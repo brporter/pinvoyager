@@ -73,17 +73,11 @@ body {
 .pv-location-gallery::backdrop {
   background: var(--pv-overlay);
 }
-.pv-location-gallery-header {
-  position: relative;
-  flex: none;
-  display: grid;
-  gap: var(--pv-space-2);
-  padding: var(--pv-space-4);
-  padding-right: calc(48px + 2 * var(--pv-space-4));
-  border-bottom: 1px solid var(--pv-border);
-}
 .pv-location-gallery-close {
   position: absolute;
+  z-index: 1;
+  background: var(--pv-bg);
+  border-radius: var(--pv-radius-md);
   top: var(--pv-space-2);
   right: var(--pv-space-2);
 }
@@ -105,8 +99,7 @@ body {
   height: 100%;
   margin: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: var(--pv-space-3);
+  grid-template-rows: minmax(0, 1fr);
 }
 .pv-location-gallery-stage img {
   display: block;
@@ -115,9 +108,6 @@ body {
   min-height: 0;
   object-fit: contain;
   border-radius: var(--pv-radius-md);
-}
-.pv-location-gallery-stage figcaption {
-  text-align: center;
 }
 .pv-location-gallery-footer {
   flex: none;
