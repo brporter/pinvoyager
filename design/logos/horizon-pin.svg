@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" color="#0c615b" role="img" aria-labelledby="title desc">
+<title id="title">PinVoyager — Horizon pin</title>
+<desc id="desc">A photo landscape inside a location pin. One-color vector logo concept.</desc>
+<path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="currentColor"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,7 +1,8 @@
+import horizonPin from "../../../../design/logos/horizon-pin.svg";
 import "@testing-library/jest-dom/vitest";
 
 import type { ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,7 +42,7 @@ describe("responsive shells", () => {
     expect(screen.getByRole("main")).toHaveAttribute("id", "pv-main");
   });
 
-  it("shows the brand bar only in the desktop authentication shell", () => {
+  it("shows the brand bar in the authentication shell at both widths", () => {
     mocks.isDesktop.mockReturnValue(true);
     const { unmount } = route(<AuthShell />);
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
@@ -50,7 +51,39 @@ describe("responsive shells", () => {
     unmount();
     mocks.isDesktop.mockReturnValue(false);
     route(<AuthShell />);
-    expect(screen.queryByRole("navigation", { name: "Main" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("main")).toBeInTheDocument();
   });
+});
+
+it.each([true, false])("provides legal footer links in both shells (desktop=%s)", (desktop) => {
+  mocks.isDesktop.mockReturnValue(desktop);
+  mocks.useAuth.mockReturnValue({ status: "anonymous", user: null });
+  for (const Shell of [AppShell, AuthShell]) {
+    const { unmount } = route(<Shell />);
+    const footer = within(screen.getByRole("contentinfo"));
+    expect(footer.getByRole("link", { name: "Terms of Service" })).toHaveAttribute(
+      "href",
+      "/terms",
+    );
+    expect(footer.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+    unmount();
+  }
+});
+
+it.each([true, false])("uses Horizon Pin in both shells (desktop=%s)", (desktop) => {
+  mocks.isDesktop.mockReturnValue(desktop);
+  mocks.useAuth.mockReturnValue({ status: "anonymous", user: null });
+  for (const Shell of [AppShell, AuthShell]) {
+    const { unmount } = route(<Shell />);
+    const brand = screen.getByRole("link", { name: "PinVoyager" });
+    expect(brand).toHaveAttribute("href", "/");
+    const logo = brand.querySelector("img");
+    expect(logo).toHaveAttribute("src", horizonPin);
+    expect(logo).toHaveAttribute("alt", "");
+    unmount();
+  }
 });

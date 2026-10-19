@@ -5,7 +5,8 @@ import { Link, NavLink } from "react-router";
 
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
-import { PinIcon, PlusIcon } from "./icons";
+import { Brand } from "./Brand";
+import { PlusIcon } from "./icons";
 
 export interface NavItem {
   label: string;
@@ -51,10 +52,7 @@ export function TopNav({
 }: TopNavProps) {
   return (
     <nav className="pv-topnav" aria-label={label}>
-      <Link className="pv-brand" to={brandTo}>
-        <PinIcon className="pv-brand-mark" size={22} />
-        PinVoyager
-      </Link>
+      <Brand to={brandTo} />
 
       <div className="pv-navlinks">
         {links.map((link) => (

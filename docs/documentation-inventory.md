@@ -21,6 +21,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | --- | --- |
 | [Voyage creation and photo ownership](voyage-owned-photos.md) | Creation, default and selected precision, upload/review, publication, covers, deletion, and ownership migration. |
 | [Location gallery](location-gallery.md) | Marker membership, photo navigation, processing states, native dialog dismissal, and focus handling. |
+| [Legal policies](legal-policies.md) | Public terms/privacy drafts, template attribution, moderation and data disclosures, operator details, and remaining publication requirements. |
 | [Voyage sharing](voyage-sharing.md) | Public URL copying, draft publication, errors, and dialog lifecycle. |
 | [Site administration](site-administration.md) | Administrator bootstrap, paged account/storage summaries, suspension, promotion, unpublishing, and account/data deletion. |
 | [Display names and profiles](display-names.md) | Name validation, unique claims, reservations, aliases, migration, and anonymous published-voyage profiles. |
@@ -51,6 +52,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 
 | Artifact | Purpose |
 | --- | --- |
+| [Logo concepts](../design/logos/README.md) | Three original single-color SVG proposals, comparison sheet, and web/print usage notes. |
 | [`config.toml`](../config.toml), [`.env.example`](../.env.example) | Configuration defaults and environment-variable reference. |
 | [`Dockerfile`](../Dockerfile), [`docker-compose.yml`](../docker-compose.yml) | API image recipe and local service definitions. |
 | [`dev/otel-collector.yaml`](../dev/otel-collector.yaml) | Development OTLP processing/export configuration. |

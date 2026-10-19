@@ -12,6 +12,7 @@ import { Outlet } from "react-router";
 import { SkipLink } from "./SkipLink";
 import { TabBar } from "./TabBar";
 import { TopNav } from "./TopNav";
+import { SiteFooter } from "./SiteFooter";
 import { useIsDesktop } from "./useIsDesktop";
 
 const MAIN_ID = "pv-main";
@@ -30,6 +31,8 @@ export function AppShell() {
       <main id={MAIN_ID} tabIndex={-1} style={{ flex: 1, minHeight: 0, outline: "none" }}>
         <Outlet />
       </main>
+
+      <SiteFooter />
 
       {desktop ? null : <TabBar />}
     </div>

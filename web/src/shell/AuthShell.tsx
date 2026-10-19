@@ -1,23 +1,16 @@
 /** Centered authentication layout with shared site identity. */
 
-import { Link, Outlet } from "react-router";
+import { Outlet } from "react-router";
 
-import { PinIcon } from "../components/icons";
-import { useIsDesktop } from "./useIsDesktop";
+import { Brand } from "../components/Brand";
+import { SiteFooter } from "./SiteFooter";
 
 export function AuthShell() {
-  const desktop = useIsDesktop();
-
   return (
     <div style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
-      {desktop ? (
-        <nav className="pv-topnav" aria-label="Main">
-          <Link className="pv-brand" to="/">
-            <PinIcon className="pv-brand-mark" size={22} />
-            PinVoyager
-          </Link>
-        </nav>
-      ) : null}
+      <nav className="pv-topnav" aria-label="Main">
+        <Brand />
+      </nav>
 
       <main
         style={{
@@ -30,6 +23,8 @@ export function AuthShell() {
       >
         <Outlet />
       </main>
+
+      <SiteFooter />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 # Application navigation
 
 [`App`](../../web/src/App.tsx) registers the routes. `main.tsx` wraps it in
-`QueryClientProvider` and `BrowserRouter`; `AuthProvider` wraps the route tree.
-An authenticated user with no display name sees `ChooseDisplayName` before the
+`QueryClientProvider` and `BrowserRouter`; `AuthProvider` wraps session-dependent routes.
+Legal routes render outside `AuthProvider`, using `AuthShell`; see [legal policies](../legal-policies.md). Both shells include footer links to the two documents.
+For other routes, an authenticated user with no display name sees `ChooseDisplayName` before the
 requested page. Saving the name resumes that page.
 
 | Path | Screen and access |
@@ -16,6 +17,7 @@ requested page. Saving the name resumes that page.
 | `/admin` | Site-administrator account list with photo/voyage counts and file storage totals. |
 | `/admin/users/:id` | Site-administrator user detail, voyage metadata, and modal-confirmed account/voyage actions. |
 | `/settings` | Signed-in display-name settings and provider linking. |
+| `/terms`, `/privacy` | Public legal drafts; render without session lookup or display-name setup. |
 | `/signin` | Provider selection. |
 | `/auth/callback` | Authentication result and redirect to the requested destination. |
 | Other paths | Not-found screen. |
@@ -52,3 +54,20 @@ public URL. See [photo ownership](../voyage-owned-photos.md),
 The account menu links site administrators to `/admin` on desktop and mobile.
 `Admin` checks the signed-in role; API handlers enforce it independently. Both admin
 routes are accepted sign-in return destinations. See [site administration](../site-administration.md).
+
+## Site identity
+
+Every page shows the Horizon Pin logo from `design/logos/horizon-pin.svg` beside
+PinVoyager, linking to `/`. `Brand` in `web/src/components/Brand.tsx` supplies this
+shared link. `TopNav` uses it on ordinary routes; `AuthShell` uses it on sign-in,
+callback, and legal routes at desktop and mobile widths. `ChooseDisplayName` also
+shows it while profile setup replaces the requested route. The image has empty
+alternative text because the adjacent site name labels the link.
+
+`web/index.html` declares `/favicon.svg` for every route. The favicon in
+`web/public/favicon.svg` copies the Horizon Pin SVG, preserving its teal color
+and transparent background. When changing the artwork, update that copy too.
+`web/src/components/__tests__/branding.test.ts` checks that it matches the source
+and is declared in the HTML. `web/src/shell/__tests__/Shells.test.tsx` checks both
+shells at both widths; `web/src/auth/__tests__/AuthProvider.test.tsx` checks the
+logo during display-name setup.

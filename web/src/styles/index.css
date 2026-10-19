@@ -254,3 +254,54 @@ body {
 .pv-admin a {
   color: var(--pv-accent-text);
 }
+
+.pv-site-footer {
+  flex: none;
+  padding: var(--pv-space-3) var(--pv-space-4);
+  border-top: 1px solid var(--pv-border);
+  background: var(--pv-bg);
+  font-size: var(--pv-text-sm);
+}
+.pv-site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--pv-space-2) var(--pv-space-6);
+}
+.pv-site-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pv-touch-min);
+  color: var(--pv-accent-text);
+}
+.pv-legal {
+  width: 100%;
+  max-width: 74ch;
+  margin: auto;
+  padding: var(--pv-space-8) var(--pv-space-4);
+  line-height: var(--pv-leading-relaxed);
+  overflow-wrap: anywhere;
+}
+.pv-legal h1 {
+  font-size: var(--pv-text-3xl);
+  line-height: var(--pv-leading-tight);
+}
+.pv-legal h2 {
+  margin-top: var(--pv-space-8);
+  font-size: var(--pv-text-xl);
+  line-height: var(--pv-leading-snug);
+}
+.pv-legal a {
+  color: var(--pv-accent-text);
+  text-decoration: underline;
+}
+.pv-legal-status,
+.pv-legal-attribution {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
+}
+.pv-legal-attribution {
+  margin-top: var(--pv-space-8);
+  padding-top: var(--pv-space-4);
+  border-top: 1px solid var(--pv-border);
+}
