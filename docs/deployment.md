@@ -124,6 +124,16 @@ Source: [Google OpenID Connect setup](https://developers.google.com/identity/ope
 
 ### Microsoft
 
+`web/public/.well-known/microsoft-identity-association.json` contains the public
+application association for client ID `857dc096-adfb-420c-911d-7734b26dd270`.
+Vite serves it at `/.well-known/microsoft-identity-association.json` during
+development and copies it into the production build. `deploy/Dockerfile.web`
+includes that build in the frontend image; `deploy/nginx.conf` serves the JSON
+file directly. The regression test in
+`web/src/components/__tests__/identityAssociation.test.ts` checks the public path
+and application ID. After deployment, verify that the HTTPS URL returns the JSON
+document without signing in.
+
 In Microsoft Entra's App registrations, select **Accounts in any organizational
 directory and personal Microsoft accounts** (`AzureADandPersonalMicrosoftAccount`)
 as the supported account type. For an existing registration, update its supported
