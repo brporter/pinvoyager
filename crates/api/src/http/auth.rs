@@ -68,6 +68,8 @@ const ALLOWED_REDIRECTS: &[&str] = &[
 /// Maximum number of bytes accepted in a return destination.
 const MAX_REDIRECT_LEN: usize = 512;
 
+mod native;
+
 /// Registers sign-in, linking, logout, and current-user routes. Both GET and
 /// form-POST callbacks are supported for provider response modes.
 pub fn routes() -> Router<AppState> {
@@ -88,7 +90,7 @@ pub fn routes() -> Router<AppState> {
     #[cfg(debug_assertions)]
     let router = router.route("/auth/dev/login", post(crate::auth::dev::login));
 
-    router
+    router.merge(native::routes())
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,7 +108,7 @@ async fn start(
     Query(query): Query<StartQuery>,
 ) -> AppResult<(CookieJar, Response)> {
     let kind = parse_provider(&provider)?;
-    let (url, binding) = begin(&state, kind, None, query.redirect_to.as_deref()).await?;
+    let (url, binding) = begin(&state, kind, None, query.redirect_to.as_deref(), None).await?;
 
     // 302 rather than 303: the browser is being sent onward to the provider,
     // not to the result of this request.
@@ -137,6 +139,7 @@ async fn link_start(
         kind,
         Some(user.user_id),
         query.redirect_to.as_deref(),
+        None,
     )
     .await?;
 
@@ -152,6 +155,7 @@ async fn begin(
     kind: ProviderKind,
     link_user_id: Option<Uuid>,
     redirect_to: Option<&str>,
+    native_attempt_id: Option<Uuid>,
 ) -> AppResult<(Url, BindingValue)> {
     let provider = state.providers.get(kind).ok_or(AppError::NotFound)?;
     let authorization = provider.authorize().map_err(auth_failed)?;
@@ -162,6 +166,7 @@ async fn begin(
     let binding = BindingValue::generate();
 
     let attempt = PendingAttempt {
+        native_attempt_id,
         state: authorization.state,
         provider: kind,
         nonce: authorization.nonce,
@@ -388,10 +393,21 @@ async fn complete(
     // Verification lives behind this call: JWKS signature, `iss`, `aud`, `exp`
     // and `nonce` for all three OIDC providers. Whatever
     // fails inside it reaches the client as the same sentence.
-    let identity = provider
-        .exchange(code, &attempt.pkce_verifier, &attempt.nonce)
-        .await
-        .map_err(auth_failed)?;
+    let expected_subject = if let Some(id) = attempt.native_attempt_id {
+        native::reauth_subject(state, id, kind).await?
+    } else {
+        None
+    };
+    let identity = if let Some(subject) = expected_subject {
+        provider
+            .exchange_for_deletion(code, &attempt.pkce_verifier, &attempt.nonce, &subject)
+            .await
+    } else {
+        provider
+            .exchange(code, &attempt.pkce_verifier, &attempt.nonce)
+            .await
+    }
+    .map_err(auth_failed)?;
 
     // A provider implementation that returned someone else's `ProviderKind`
     // would write a subject under the wrong provider, and the unique index
@@ -400,6 +416,11 @@ async fn complete(
         return Err(rejected(
             "provider returned an identity for another provider",
         ));
+    }
+
+    if let Some(native_id) = attempt.native_attempt_id {
+        let target = native::complete_verified(state, native_id, &identity).await?;
+        return Ok((jar, redirect(StatusCode::SEE_OTHER, target.as_str())?));
     }
 
     match attempt.link_user_id {
@@ -429,13 +450,22 @@ async fn complete(
 /// An identity linked to another account returns a conflict before any changes
 /// commit. Linking an identity already on this account succeeds. No session is issued.
 async fn link(state: &AppState, user_id: Uuid, identity: &VerifiedIdentity) -> AppResult<()> {
-    let provider = DbProvider::from(identity.provider);
-
     let mut tx = state.pool.begin().await?;
-    users::require_active(&mut tx, user_id).await?;
+    link_in_transaction(&mut tx, user_id, identity).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn link_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: Uuid,
+    identity: &VerifiedIdentity,
+) -> AppResult<()> {
+    let provider = DbProvider::from(identity.provider);
+    users::require_active(tx, user_id).await?;
 
     if let Some(existing) =
-        identities::find_by_provider_subject(&mut *tx, provider, &identity.subject).await?
+        identities::find_by_provider_subject(&mut **tx, provider, &identity.subject).await?
     {
         if existing.user_id != user_id {
             let provider_name = identity.provider.as_str();
@@ -455,11 +485,9 @@ async fn link(state: &AppState, user_id: Uuid, identity: &VerifiedIdentity) -> A
         return Ok(());
     }
 
-    identities::create(&mut *tx, user_id, provider, &identity.subject)
+    identities::create(&mut **tx, user_id, provider, &identity.subject)
         .await
         .map_err(link_identity_error)?;
-
-    tx.commit().await?;
 
     Ok(())
 }
@@ -523,8 +551,12 @@ struct LinkedProvider {
 
 /// Returns the current account and linked providers. Missing accounts return 401.
 async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<MeResponse>> {
+    Ok(Json(account_response(&state, user.user_id).await?))
+}
+
+async fn account_response(state: &AppState, user_id: Uuid) -> AppResult<MeResponse> {
     // A missing account is treated as an unauthenticated session.
-    let account = users::find_by_id(&state.pool, user.user_id)
+    let account = users::find_by_id(&state.pool, user_id)
         .await?
         .ok_or(AppError::Unauthorized)?;
 
@@ -535,12 +567,12 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<
          FROM identities
          WHERE user_id = $1
          ORDER BY created_at",
-        user.user_id,
+        user_id,
     )
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(Json(MeResponse {
+    Ok(MeResponse {
         user: MeUser {
             id: account.id,
             is_site_admin: account.is_site_admin,
@@ -556,7 +588,7 @@ async fn me(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<
                 last_seen_at: row.last_seen_at,
             })
             .collect(),
-    }))
+    })
 }
 
 /// Builds the session cookie with HttpOnly, SameSite=Lax, Path=/, and the

@@ -16,6 +16,8 @@ fn test_config() -> Config {
                 bind: "127.0.0.1:0".parse().expect("valid socket addr"),
                 shutdown_timeout_secs: 5,
                 request_timeout_secs: 5,
+                upload_request_timeout_secs: 5,
+                upload_body_idle_timeout_secs: 5,
             },
             database: DatabaseConfig {
                 url: SecretString::from("postgres://nobody@127.0.0.1:1/none"),
@@ -485,5 +487,33 @@ async fn shutdown_cancels_a_streamed_response_at_the_deadline() {
     assert!(
         response.bytes().await.is_err(),
         "client observes the truncated stream"
+    );
+}
+
+#[tokio::test]
+async fn shutdown_observation_starts_before_the_listener_is_bound() {
+    let reservation = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve address");
+    let bind = reservation.local_addr().expect("reserved address");
+    drop(reservation);
+    let mut config = test_config();
+    config.server.bind = bind;
+    let pool = PgPoolOptions::new()
+        .connect_lazy("postgres://nobody@127.0.0.1:1/none")
+        .expect("lazy pool");
+    let state = test_state_with_config(pool, config);
+    let (observed_tx, observed_rx) = tokio::sync::oneshot::channel();
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(serve_with_shutdown(state, async move {
+        let probe = std::net::TcpListener::bind(bind);
+        observed_tx.send(probe.is_ok()).expect("observer active");
+        drop(probe);
+        let _ = stop_rx.await;
+    }));
+    let observed_before_bind = observed_rx.await.expect("shutdown future polled");
+    stop_tx.send(()).expect("stop server");
+    server.await.expect("join server").expect("clean shutdown");
+    assert!(
+        observed_before_bind,
+        "the process must install signal handlers before announcing a listener"
     );
 }

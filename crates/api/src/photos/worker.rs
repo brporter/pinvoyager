@@ -193,8 +193,20 @@ async fn maintain(pool: &PgPool, config: &Config) {
     if let Err(error) = crate::auth::attempt::sweep_expired(pool).await {
         tracing::warn!(%error, "authorization cleanup will be retried");
     }
+    if let Err(error) = sqlx::query("DELETE FROM native_auth_attempts WHERE expires_at<=now()")
+        .execute(pool)
+        .await
+    {
+        tracing::warn!(%error,"native authentication cleanup failed");
+    }
+    if let Err(error) = crate::voyages::publication::sweep(pool).await {
+        tracing::warn!(%error,"publication reconciliation will be retried");
+    }
     if let Err(error) = super::cleanup::sweep(pool, &config.photos.storage_root).await {
         tracing::warn!(%error, "file cleanup will be retried");
+    }
+    if let Err(error) = crate::accounts::deletion::sweep(pool).await {
+        tracing::warn!(%error, "account deletion reconciliation will be retried");
     }
 }
 
@@ -306,7 +318,7 @@ pub async fn process(
         photo.status = tracing::field::Empty,
         otel.status_code = tracing::field::Empty);
     let _ = span.set_parent(job.context.clone());
-    async {
+    let result = async {
         let Err(err) = generate(pool, config, job, &span).await else {
             return Ok(());
         };
@@ -324,7 +336,11 @@ pub async fn process(
         Err(err)
     }
     .instrument(span.clone())
-    .await
+    .await;
+    if let Err(error) = crate::voyages::publication::photo_changed(pool, job.photo_id).await {
+        tracing::warn!(%error,"publication reconciliation will be retried");
+    }
+    result
 }
 
 /// Loads the photo, decodes and encodes without a database connection, then

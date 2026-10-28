@@ -36,6 +36,8 @@ flowchart LR
 | `web/src/screens/` | Page composition. `upload/` owns batch state and `voyage/` separates desktop/mobile layouts, shared controls, and presentation helpers. |
 | `web/src/components/` | Shared controls, cards, dialogs, and presentation utilities. |
 | `web/src/map/` | MapLibre lifecycle, geometry, clustering, markers, and four lazy map entry points. |
+| `ios/Sources/PinVoyagerDomain/`, `ios/Sources/PinVoyagerData/` | Native value types, privacy geometry, transactional Core Data workspace/outbox, files, transport, credentials, and synchronization interfaces. |
+| `ios/PinVoyager/` | Native SwiftUI composition, application model, MapKit/Photos/camera, authentication presentation, and system background adapters. See [implementation status](ios-implementation.md) for native verification and remaining release work. |
 | `design/` | Runtime tokens and component CSS imported by `web/src/styles/index.css`. |
 
 ## Startup, request handling, and shutdown
@@ -55,7 +57,10 @@ limit. Uploads enforce a lower configured limit. `AppError` returns safe applica
 errors; extractor and middleware failures can have other response shapes, which the
 client handles.
 
-When the server receives SIGINT or SIGTERM, it stops accepting new HTTP requests and
+The HTTP server polls its shutdown future before binding the listener or logging
+readiness, so signal handlers are installed before an immediate termination request.
+`http::tests::shutdown_observation_starts_before_the_listener_is_bound` checks this
+ordering without process-wide signals. When the server receives SIGINT or SIGTERM, it stops accepting new HTTP requests and
 lets requests already being processed finish. After `server.shutdown_timeout_secs` (30
 seconds by default), `serve_router` aborts and joins remaining HTTP/1 connection
 tasks, canceling their handlers and response streams before worker shutdown. It owns
@@ -157,7 +162,7 @@ tests.
 Registered by `http::{auth,admin,photos,voyages,profiles}::routes`. Missing and foreign
 drafts return 404. The separate administration endpoint exposes draft voyage names
 and descriptions without granting private photo access. There is no unscoped upload
-library, self-service account deletion, or provider-unlink endpoint. See
+library or provider-unlink endpoint. The versioned native protocol adds prepared self-service account deletion; see [native API behavior](native-api.md). See
 [site administration](site-administration.md) for account moderation, storage totals,
 first-administrator setup, and deletion cleanup.
 
@@ -231,6 +236,14 @@ and [development tile policy](osm-tile-policy.md).
 
 ## Frontend and verification
 
+The iOS client reads public routes through the shared API and uses its own local
+Core Data workspace. The implemented versioned native contracts provide provider
+sign-in, durable synchronization receipts, conditional mutations, owner downloads,
+and prepared account deletion. Capability discovery returning 404 never enables unsafe
+fallback writes. The client does not change D6/D7 privacy or authorize ordinary
+public image cache entries for offline use. See [iOS setup](ios-running.md) and
+[implementation status](ios-implementation.md).
+
 React Query holds server data. Discriminated session/upload state prevents combinations
 such as an authenticated session without a user or an uploaded row without a photo.
 `useModalDialog` in `web/src/components/useModalDialog.ts` opens and closes native
@@ -249,3 +262,13 @@ frontend images, private PostgreSQL, shared Caddy TLS, and Watchtower updates
 from GHCR. See [production deployment](deployment.md). Scheduled backups and
 release tile hosting remain external configuration requirements. [Documentation inventory](documentation-inventory.md)
 lists every maintained document and its purpose.
+
+## Native client protocol
+
+The native SwiftUI application uses the same accounts, voyage ownership, image
+pipeline, and public coordinate precision as the website. Native provider handoff,
+bearer-session isolation, conditional mutations, durable operation/upload receipts,
+and frozen publication requests are described in [native API behavior](native-api.md).
+`ios/` separates domain values, persistence/transport/synchronization adapters, and
+SwiftUI presentation; [iOS implementation status](ios-implementation.md) records
+remaining work and verification.

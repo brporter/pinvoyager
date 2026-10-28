@@ -116,3 +116,25 @@ fn source_chain_renders_each_cause_in_order() {
     let error = Outer(io::Error::other("root cause"));
     assert_eq!(SourceChain(&error).to_string(), "outer context: root cause");
 }
+
+#[tokio::test]
+async fn shared_internal_and_file_errors_preserve_private_causes() {
+    let (status, body) = response(AppError::internal(io::Error::other(
+        "private storage detail",
+    )))
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!body.to_string().contains("private storage detail"));
+    let (status, _) = response(AppError::from_file(io::Error::from(
+        io::ErrorKind::NotFound,
+    )))
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, body) = response(AppError::from_file(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "private path",
+    )))
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!body.to_string().contains("private path"));
+}

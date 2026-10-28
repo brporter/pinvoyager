@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleDisplayName</key><string>PinVoyager</string>
+    <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>pinvoyager</string></array></dict></array>
+    <key>PinVoyagerAPIOrigin</key><string>$(PINVOYAGER_API_ORIGIN)</string>
+    <key>PinVoyagerWebOrigin</key><string>$(PINVOYAGER_WEB_ORIGIN)</string>
+    <key>BGTaskSchedulerPermittedIdentifiers</key><array><string>com.pinvoyager.app.sync</string></array>
+    <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><true/></dict>
+    <key>UIBackgroundModes</key><array><string>processing</string><string>fetch</string></array>
+    <key>NSCameraUsageDescription</key><string>Take still photographs to save in your voyage.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Optionally include your current location in photographs you take in PinVoyager.</string>
+    <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+</dict></plist>

@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc"><title id="title">PinVoyager — Liquid Glass icon proposal</title><desc id="desc">Recommended teal icon, dark and clear appearance studies, original vector comparison, and small-size previews.</desc>
+<rect width="1600" height="1080" fill="#f5f4f2"/>
+<g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="#173f3b">
+<text x="80" y="70" font-size="15" letter-spacing="2.7">PINVOYAGER / iOS ICON PROPOSAL</text>
+<text x="80" y="130" font-size="46" font-weight="600" letter-spacing="-1.2">The same Horizon Pin. A new material.</text>
+<text x="80" y="170" font-size="20" fill="#575f5b">Original vector geometry, frosted glass, deep teal, and a quiet sense of depth.</text>
+<rect x="64" y="215" width="776" height="678" rx="30" fill="#e7ebe5"/>
+<text x="104" y="259" font-size="13" letter-spacing="1.6">01 / RECOMMENDED</text>
+<svg x="212" y="298" width="480" height="480" viewBox="0 0 128 128"><defs>
+<g id="default-212-298-mark"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="white"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<linearGradient id="default-212-298-background" x1="0" y1="0" x2="0.15" y2="1"><stop stop-color="#14988b"/><stop offset="0.48" stop-color="#0c615b"/><stop offset="1" stop-color="#0c3f3c"/></linearGradient>
+<radialGradient id="default-212-298-ambient" cx=".5" cy="0" r=".95"><stop stop-color="white" stop-opacity=".14"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+<linearGradient id="default-212-298-glass" x1="0" y1="0" x2=".18" y2="1"><stop stop-color="#f5fffc" stop-opacity=".98"/><stop offset=".3" stop-color="#c5e9df" stop-opacity=".80"/><stop offset=".56" stop-color="#eefbf8" stop-opacity=".94"/><stop offset="1" stop-color="#9acfc4" stop-opacity=".78"/></linearGradient>
+<linearGradient id="default-212-298-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="white" stop-opacity=".98"/><stop offset=".55" stop-color="#e9fff8" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity=".25"/></linearGradient>
+<mask id="default-212-298-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-212-298-mark"/></mask>
+<mask id="default-212-298-top-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-212-298-mark"/><g transform="translate(0 .65)" fill="black" stroke="black"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<mask id="default-212-298-bottom-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-212-298-mark"/><g transform="translate(0 -.7)"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<filter id="default-212-298-lift" x="-.4" y="-.3" width="1.8" height="1.8" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="1.3"/><feOffset dy="1.7" result="shadowAlpha"/><feFlood flood-color="#032c28" flood-opacity=".42"/><feComposite in2="shadowAlpha" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="default-212-298-enclosure"><path d="M32 0H96C118 0 128 10 128 32V96C128 118 118 128 96 128H32C10 128 0 118 0 96V32C0 10 10 0 32 0Z"/></clipPath>
+</defs><g clip-path="url(#default-212-298-enclosure)"><rect width="128" height="128" fill="url(#default-212-298-background)"/><rect width="128" height="128" fill="url(#default-212-298-ambient)"/><g transform="translate(16 16) scale(.75)" filter="url(#default-212-298-lift)">
+<rect width="128" height="128" fill="url(#default-212-298-glass)" mask="url(#default-212-298-shape)"/>
+<rect width="128" height="128" fill="#0c3f3c" opacity=".45" mask="url(#default-212-298-bottom-edge)"/>
+<rect width="128" height="128" fill="url(#default-212-298-edge)" mask="url(#default-212-298-top-edge)"/>
+</g></g></svg>
+<text x="452" y="830" text-anchor="middle" font-size="25" font-weight="500">PinVoyager</text>
+<text x="904" y="255" font-size="13" letter-spacing="1.6">02 / APPEARANCE STUDIES</text>
+<svg x="904" y="288" width="248" height="248" viewBox="0 0 128 128"><defs>
+<g id="dark-904-288-mark"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="white"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<linearGradient id="dark-904-288-background" x1="0" y1="0" x2="0.15" y2="1"><stop stop-color="#143e3b"/><stop offset="0.48" stop-color="#102b29"/><stop offset="1" stop-color="#081c1b"/></linearGradient>
+<radialGradient id="dark-904-288-ambient" cx=".5" cy="0" r=".95"><stop stop-color="white" stop-opacity=".14"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+<linearGradient id="dark-904-288-glass" x1="0" y1="0" x2=".18" y2="1"><stop stop-color="#bbf2e5" stop-opacity=".98"/><stop offset=".3" stop-color="#6db7a9" stop-opacity=".80"/><stop offset=".56" stop-color="#a8e8de" stop-opacity=".94"/><stop offset="1" stop-color="#508b82" stop-opacity=".78"/></linearGradient>
+<linearGradient id="dark-904-288-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="white" stop-opacity=".98"/><stop offset=".55" stop-color="#e9fff8" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity=".25"/></linearGradient>
+<mask id="dark-904-288-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#dark-904-288-mark"/></mask>
+<mask id="dark-904-288-top-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#dark-904-288-mark"/><g transform="translate(0 .65)" fill="black" stroke="black"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<mask id="dark-904-288-bottom-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#dark-904-288-mark"/><g transform="translate(0 -.7)"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<filter id="dark-904-288-lift" x="-.4" y="-.3" width="1.8" height="1.8" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="1.3"/><feOffset dy="1.7" result="shadowAlpha"/><feFlood flood-color="#032c28" flood-opacity=".42"/><feComposite in2="shadowAlpha" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="dark-904-288-enclosure"><path d="M32 0H96C118 0 128 10 128 32V96C128 118 118 128 96 128H32C10 128 0 118 0 96V32C0 10 10 0 32 0Z"/></clipPath>
+</defs><g clip-path="url(#dark-904-288-enclosure)"><rect width="128" height="128" fill="url(#dark-904-288-background)"/><rect width="128" height="128" fill="url(#dark-904-288-ambient)"/><g transform="translate(16 16) scale(.75)" filter="url(#dark-904-288-lift)">
+<rect width="128" height="128" fill="url(#dark-904-288-glass)" mask="url(#dark-904-288-shape)"/>
+<rect width="128" height="128" fill="#0c3f3c" opacity=".45" mask="url(#dark-904-288-bottom-edge)"/>
+<rect width="128" height="128" fill="url(#dark-904-288-edge)" mask="url(#dark-904-288-top-edge)"/>
+</g></g></svg>
+<svg x="1230" y="288" width="248" height="248" viewBox="0 0 128 128"><defs>
+<g id="clear-1230-288-mark"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="white"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<linearGradient id="clear-1230-288-background" x1="0" y1="0" x2="0.15" y2="1"><stop stop-color="#eeefec"/><stop offset="0.48" stop-color="#d5ded9"/><stop offset="1" stop-color="#b6c6bf"/></linearGradient>
+<radialGradient id="clear-1230-288-ambient" cx=".5" cy="0" r=".95"><stop stop-color="white" stop-opacity=".14"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+<linearGradient id="clear-1230-288-glass" x1="0" y1="0" x2=".18" y2="1"><stop stop-color="#fbfefa" stop-opacity=".98"/><stop offset=".3" stop-color="#c5d8cf" stop-opacity=".80"/><stop offset=".56" stop-color="#eff8f1" stop-opacity=".94"/><stop offset="1" stop-color="#91ada0" stop-opacity=".78"/></linearGradient>
+<linearGradient id="clear-1230-288-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="white" stop-opacity=".98"/><stop offset=".55" stop-color="#e9fff8" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity=".25"/></linearGradient>
+<mask id="clear-1230-288-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#clear-1230-288-mark"/></mask>
+<mask id="clear-1230-288-top-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#clear-1230-288-mark"/><g transform="translate(0 .65)" fill="black" stroke="black"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<mask id="clear-1230-288-bottom-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#clear-1230-288-mark"/><g transform="translate(0 -.7)"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<filter id="clear-1230-288-lift" x="-.4" y="-.3" width="1.8" height="1.8" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="1.3"/><feOffset dy="1.7" result="shadowAlpha"/><feFlood flood-color="#032c28" flood-opacity=".42"/><feComposite in2="shadowAlpha" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="clear-1230-288-enclosure"><path d="M32 0H96C118 0 128 10 128 32V96C128 118 118 128 96 128H32C10 128 0 118 0 96V32C0 10 10 0 32 0Z"/></clipPath>
+</defs><g clip-path="url(#clear-1230-288-enclosure)"><rect width="128" height="128" fill="url(#clear-1230-288-background)"/><rect width="128" height="128" fill="url(#clear-1230-288-ambient)"/><g transform="translate(16 16) scale(.75)" filter="url(#clear-1230-288-lift)">
+<rect width="128" height="128" fill="url(#clear-1230-288-glass)" mask="url(#clear-1230-288-shape)"/>
+<rect width="128" height="128" fill="#0c3f3c" opacity=".45" mask="url(#clear-1230-288-bottom-edge)"/>
+<rect width="128" height="128" fill="url(#clear-1230-288-edge)" mask="url(#clear-1230-288-top-edge)"/>
+</g></g></svg>
+<text x="904" y="574" font-size="22" font-weight="500">Dark</text>
+<text x="904" y="604" font-size="16" fill="#575f5b">Smoked teal, softer glass.</text>
+<text x="1230" y="574" font-size="22" font-weight="500">Clear</text>
+<text x="1230" y="604" font-size="16" fill="#575f5b">Neutral material study.</text>
+<path d="M904 645H1490" stroke="#ccd2cb"/>
+<text x="904" y="684" font-size="13" letter-spacing="1.6">03 / ORIGINAL ART + SMALL SIZES</text>
+<svg x="909" y="720" width="94" height="94" viewBox="0 0 128 128"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="#0c615b" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="#0c615b"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="#0c615b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<text x="956" y="851" text-anchor="middle" font-size="15" fill="#575f5b">Source</text>
+<svg x="1080" y="737" width="60" height="60" viewBox="0 0 128 128"><defs>
+<g id="default-1080-737-mark"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="white"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<linearGradient id="default-1080-737-background" x1="0" y1="0" x2="0.15" y2="1"><stop stop-color="#14988b"/><stop offset="0.48" stop-color="#0c615b"/><stop offset="1" stop-color="#0c3f3c"/></linearGradient>
+<radialGradient id="default-1080-737-ambient" cx=".5" cy="0" r=".95"><stop stop-color="white" stop-opacity=".14"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+<linearGradient id="default-1080-737-glass" x1="0" y1="0" x2=".18" y2="1"><stop stop-color="#f5fffc" stop-opacity=".98"/><stop offset=".3" stop-color="#c5e9df" stop-opacity=".80"/><stop offset=".56" stop-color="#eefbf8" stop-opacity=".94"/><stop offset="1" stop-color="#9acfc4" stop-opacity=".78"/></linearGradient>
+<linearGradient id="default-1080-737-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="white" stop-opacity=".98"/><stop offset=".55" stop-color="#e9fff8" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity=".25"/></linearGradient>
+<mask id="default-1080-737-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1080-737-mark"/></mask>
+<mask id="default-1080-737-top-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1080-737-mark"/><g transform="translate(0 .65)" fill="black" stroke="black"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<mask id="default-1080-737-bottom-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1080-737-mark"/><g transform="translate(0 -.7)"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<filter id="default-1080-737-lift" x="-.4" y="-.3" width="1.8" height="1.8" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="1.3"/><feOffset dy="1.7" result="shadowAlpha"/><feFlood flood-color="#032c28" flood-opacity=".42"/><feComposite in2="shadowAlpha" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="default-1080-737-enclosure"><path d="M32 0H96C118 0 128 10 128 32V96C128 118 118 128 96 128H32C10 128 0 118 0 96V32C0 10 10 0 32 0Z"/></clipPath>
+</defs><g clip-path="url(#default-1080-737-enclosure)"><rect width="128" height="128" fill="url(#default-1080-737-background)"/><rect width="128" height="128" fill="url(#default-1080-737-ambient)"/><g transform="translate(16 16) scale(.75)" filter="url(#default-1080-737-lift)">
+<rect width="128" height="128" fill="url(#default-1080-737-glass)" mask="url(#default-1080-737-shape)"/>
+<rect width="128" height="128" fill="#0c3f3c" opacity=".45" mask="url(#default-1080-737-bottom-edge)"/>
+<rect width="128" height="128" fill="url(#default-1080-737-edge)" mask="url(#default-1080-737-top-edge)"/>
+</g></g></svg>
+<svg x="1212" y="749" width="40" height="40" viewBox="0 0 128 128"><defs>
+<g id="default-1212-749-mark"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="white"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<linearGradient id="default-1212-749-background" x1="0" y1="0" x2="0.15" y2="1"><stop stop-color="#14988b"/><stop offset="0.48" stop-color="#0c615b"/><stop offset="1" stop-color="#0c3f3c"/></linearGradient>
+<radialGradient id="default-1212-749-ambient" cx=".5" cy="0" r=".95"><stop stop-color="white" stop-opacity=".14"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+<linearGradient id="default-1212-749-glass" x1="0" y1="0" x2=".18" y2="1"><stop stop-color="#f5fffc" stop-opacity=".98"/><stop offset=".3" stop-color="#c5e9df" stop-opacity=".80"/><stop offset=".56" stop-color="#eefbf8" stop-opacity=".94"/><stop offset="1" stop-color="#9acfc4" stop-opacity=".78"/></linearGradient>
+<linearGradient id="default-1212-749-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="white" stop-opacity=".98"/><stop offset=".55" stop-color="#e9fff8" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity=".25"/></linearGradient>
+<mask id="default-1212-749-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1212-749-mark"/></mask>
+<mask id="default-1212-749-top-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1212-749-mark"/><g transform="translate(0 .65)" fill="black" stroke="black"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<mask id="default-1212-749-bottom-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1212-749-mark"/><g transform="translate(0 -.7)"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<filter id="default-1212-749-lift" x="-.4" y="-.3" width="1.8" height="1.8" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="1.3"/><feOffset dy="1.7" result="shadowAlpha"/><feFlood flood-color="#032c28" flood-opacity=".42"/><feComposite in2="shadowAlpha" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="default-1212-749-enclosure"><path d="M32 0H96C118 0 128 10 128 32V96C128 118 118 128 96 128H32C10 128 0 118 0 96V32C0 10 10 0 32 0Z"/></clipPath>
+</defs><g clip-path="url(#default-1212-749-enclosure)"><rect width="128" height="128" fill="url(#default-1212-749-background)"/><rect width="128" height="128" fill="url(#default-1212-749-ambient)"/><g transform="translate(16 16) scale(.75)" filter="url(#default-1212-749-lift)">
+<rect width="128" height="128" fill="url(#default-1212-749-glass)" mask="url(#default-1212-749-shape)"/>
+<rect width="128" height="128" fill="#0c3f3c" opacity=".45" mask="url(#default-1212-749-bottom-edge)"/>
+<rect width="128" height="128" fill="url(#default-1212-749-edge)" mask="url(#default-1212-749-top-edge)"/>
+</g></g></svg>
+<svg x="1344" y="755" width="29" height="29" viewBox="0 0 128 128"><defs>
+<g id="default-1344-755-mark"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="white"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+<linearGradient id="default-1344-755-background" x1="0" y1="0" x2="0.15" y2="1"><stop stop-color="#14988b"/><stop offset="0.48" stop-color="#0c615b"/><stop offset="1" stop-color="#0c3f3c"/></linearGradient>
+<radialGradient id="default-1344-755-ambient" cx=".5" cy="0" r=".95"><stop stop-color="white" stop-opacity=".14"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+<linearGradient id="default-1344-755-glass" x1="0" y1="0" x2=".18" y2="1"><stop stop-color="#f5fffc" stop-opacity=".98"/><stop offset=".3" stop-color="#c5e9df" stop-opacity=".80"/><stop offset=".56" stop-color="#eefbf8" stop-opacity=".94"/><stop offset="1" stop-color="#9acfc4" stop-opacity=".78"/></linearGradient>
+<linearGradient id="default-1344-755-edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="white" stop-opacity=".98"/><stop offset=".55" stop-color="#e9fff8" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity=".25"/></linearGradient>
+<mask id="default-1344-755-shape" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1344-755-mark"/></mask>
+<mask id="default-1344-755-top-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1344-755-mark"/><g transform="translate(0 .65)" fill="black" stroke="black"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<mask id="default-1344-755-bottom-edge" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><use href="#default-1344-755-mark"/><g transform="translate(0 -.7)"><path d="M64 116S22 78 22 48a42 42 0 0 1 84 0c0 30-42 68-42 68Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/>
+<circle cx="77" cy="34" r="7" fill="black"/>
+<path d="m34 66 19-22 19 22 12-13 13 13" fill="none" stroke="black" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></mask>
+<filter id="default-1344-755-lift" x="-.4" y="-.3" width="1.8" height="1.8" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="1.3"/><feOffset dy="1.7" result="shadowAlpha"/><feFlood flood-color="#032c28" flood-opacity=".42"/><feComposite in2="shadowAlpha" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="default-1344-755-enclosure"><path d="M32 0H96C118 0 128 10 128 32V96C128 118 118 128 96 128H32C10 128 0 118 0 96V32C0 10 10 0 32 0Z"/></clipPath>
+</defs><g clip-path="url(#default-1344-755-enclosure)"><rect width="128" height="128" fill="url(#default-1344-755-background)"/><rect width="128" height="128" fill="url(#default-1344-755-ambient)"/><g transform="translate(16 16) scale(.75)" filter="url(#default-1344-755-lift)">
+<rect width="128" height="128" fill="url(#default-1344-755-glass)" mask="url(#default-1344-755-shape)"/>
+<rect width="128" height="128" fill="#0c3f3c" opacity=".45" mask="url(#default-1344-755-bottom-edge)"/>
+<rect width="128" height="128" fill="url(#default-1344-755-edge)" mask="url(#default-1344-755-top-edge)"/>
+</g></g></svg>
+<text x="1110" y="851" text-anchor="middle" font-size="15" fill="#575f5b">60 px</text>
+<text x="1232" y="851" text-anchor="middle" font-size="15" fill="#575f5b">40 px</text>
+<text x="1358" y="851" text-anchor="middle" font-size="15" fill="#575f5b">29 px</text>
+<path d="M80 935H1520" stroke="#ccd2cb"/>
+<text x="80" y="978" font-size="17" font-weight="500">Preserved: pin outline, mountain strokes, sun, proportions, and negative space.</text>
+<text x="80" y="1012" font-size="16" fill="#575f5b">Static material studies. Final lighting, refraction, and appearance rendering belong in Apple Icon Composer.</text>
+</g></svg>

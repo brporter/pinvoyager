@@ -28,12 +28,14 @@ import {
   Toast,
   WarningTriangleIcon,
 } from "../components";
+import { PublicationPanel } from "../components/PublicationPanel";
 import { useIsDesktop } from "../shell/useIsDesktop";
 
 export function VoyageEdit() {
   const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const query = useVoyage(id);
+  const [reloadVersion, setReloadVersion] = useState(0);
 
   if (
     id === undefined ||
@@ -100,7 +102,16 @@ export function VoyageEdit() {
   // Keyed so that navigating between two voyages re-seeds the form from the
   // one now on screen instead of leaving the previous voyage's text in the
   // inputs — which would otherwise be saved onto the wrong voyage.
-  return <EditForm key={query.data.id} voyage={query.data} />;
+  return (
+    <EditForm
+      key={`${query.data.id}:${reloadVersion}`}
+      voyage={query.data}
+      onReload={async () => {
+        const current = await query.refetch();
+        if (current.data) setReloadVersion((value) => value + 1);
+      }}
+    />
+  );
 }
 
 /* ==========================================================================
@@ -113,12 +124,13 @@ interface FormState {
   granularity: Granularity;
 }
 
-function EditForm({ voyage }: { voyage: Voyage }) {
+function EditForm({ voyage, onReload }: { voyage: Voyage; onReload: () => Promise<void> }) {
   const navigate = useNavigate();
   const desktop = useIsDesktop();
 
-  const update = useUpdateVoyage(voyage.id);
-  const remove = useDeleteVoyage();
+  const [baseRevision, setBaseRevision] = useState(voyage.revision);
+  const update = useUpdateVoyage(voyage.id, baseRevision);
+  const remove = useDeleteVoyage(baseRevision);
 
   const [form, setForm] = useState<FormState>({
     title: voyage.title,
@@ -129,6 +141,9 @@ function EditForm({ voyage }: { voyage: Voyage }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const failure = update.error;
+  const conflicted =
+    (isApiError(failure) && failure.status === 412) ||
+    (isApiError(remove.error) && remove.error.status === 412);
   const titleError = isApiError(failure) ? failure.fieldError("title") : undefined;
   // A failure the server did not attribute to an input. There is nothing to
   // put it beside, so it becomes a toast rather than being dropped.
@@ -145,7 +160,8 @@ function EditForm({ voyage }: { voyage: Voyage }) {
   const save = (published?: boolean) => {
     setSaved(null);
     update.mutate(published === undefined ? patch() : { ...patch(), published }, {
-      onSuccess: () => {
+      onSuccess: (current) => {
+        setBaseRevision(current?.revision);
         setSaved(published === undefined ? "saved" : published ? "published" : "unpublished");
       },
     });
@@ -203,7 +219,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
               variant={voyage.published ? "secondary" : "primary"}
               size="lg"
               loading={update.isPending}
-              disabled={update.isPending}
+              disabled={update.isPending || conflicted}
               onClick={() => save(!voyage.published)}
             >
               {voyage.published ? "Unpublish" : "Publish"}
@@ -212,7 +228,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
               variant="secondary"
               size="lg"
               loading={update.isPending}
-              disabled={update.isPending}
+              disabled={update.isPending || conflicted}
               onClick={() => save()}
             >
               Save
@@ -220,12 +236,23 @@ function EditForm({ voyage }: { voyage: Voyage }) {
           </div>
         </header>
 
+        {voyage.revision !== undefined && <PublicationPanel voyageId={voyage.id} />}
+
         {generalError !== null && (
           <div style={{ marginBottom: "var(--pv-space-3)" }}>
             <Toast tone="error" title="That did not save">
               {generalError}
             </Toast>
           </div>
+        )}
+
+        {conflicted && (
+          <p role="alert">
+            Your edits are kept here. Review the current server version before saving again.
+            <Button variant="secondary" onClick={() => void onReload()}>
+              Reload current version and discard these edits
+            </Button>
+          </p>
         )}
 
         {saved !== null && (
@@ -354,6 +381,7 @@ function EditForm({ voyage }: { voyage: Voyage }) {
                     variant="danger"
                     style={TOUCH}
                     loading={remove.isPending}
+                    disabled={conflicted}
                     onClick={() =>
                       remove.mutate(voyage.id, { onSuccess: () => void navigate("/") })
                     }

@@ -80,6 +80,7 @@ const DISCOVER_CLUSTER_CELL_PX: f64 = 44.0;
 /// Invalid bounds or zoom return a validation error; database failures propagate.
 pub(super) async fn discover_map(
     State(state): State<AppState>,
+    crate::auth::MaybeUser(user): crate::auth::MaybeUser,
     Query(query): Query<DiscoverMapQuery>,
 ) -> Result<Json<DiscoverMapResponse>, Rejection> {
     let bbox = Bbox::parse(&query)?;
@@ -89,7 +90,13 @@ pub(super) async fn discover_map(
     // Page by identity, then round and filter before applying the response cap.
     // This bounds memory without making public membership depend on hidden GPS.
     'scan: loop {
-        let page = repo::published_photo_page(&state.pool, after, 1000).await?;
+        let page = repo::published_photo_page_visible(
+            &state.pool,
+            after,
+            1000,
+            user.as_ref().map(|user| user.user_id),
+        )
+        .await?;
         let count = page.len();
         for row in page {
             after = Some(row.photo_id);

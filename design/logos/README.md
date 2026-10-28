@@ -1,5 +1,9 @@
 # PinVoyager logo concepts
 
+The [iOS Liquid Glass icon proposal](ios-liquid/README.md) applies a new material
+treatment to the original Horizon Pin geometry, with default, dark, and clear
+studies and separate vector source layers.
+
 Open [the comparison sheet](concepts.svg) to compare three original, single-color
 SVG concepts ([PNG preview](concepts-preview.png)), including 24 px samples and white-on-teal versions. These are
 proposals; the current site mark has not been replaced.

@@ -13,6 +13,7 @@ import { AuthShell } from "./shell/AuthShell";
 import { Discover } from "./screens/Discover";
 import { NotFound } from "./screens/NotFound";
 import { Profile } from "./screens/Profile";
+import { Moderation } from "./screens/Moderation";
 import { Admin } from "./screens/Admin";
 import { Settings } from "./screens/Settings";
 import { Upload } from "./screens/Upload";
@@ -50,6 +51,7 @@ function SessionRoutes() {
             <Route path="/upload" element={<Upload />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/admin/reports" element={<Moderation />} />
             <Route path="/admin/users/:id" element={<Admin />} />
           </Route>
 

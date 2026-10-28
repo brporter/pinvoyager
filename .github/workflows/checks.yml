@@ -73,3 +73,31 @@ jobs:
           name: backend-coverage
           path: backend-coverage.lcov
           if-no-files-found: ignore
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check bundled policy sources and link configuration
+        run: |
+          python3 ios/Scripts/bundle-legal.py --check
+          python3 -m unittest discover -s ios/Scripts -p 'test_association.py'
+      - name: Check Swift formatting
+        run: swift format lint --strict --recursive ios/Sources ios/Tests ios/PinVoyager ios/PinVoyagerTests ios/PinVoyagerUITests
+      - name: Test the native app and enforce aggregate coverage
+        run: ios/Scripts/test.sh
+      - name: Build the release app for Simulator
+        run: >-
+          xcodebuild build -project ios/PinVoyager.xcodeproj -scheme PinVoyager
+          -configuration Release -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath ios/.releaseDerivedData CODE_SIGN_IDENTITY=-
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: ios-test-results
+          path: ios/TestResults/
+          retention-days: 7
+          if-no-files-found: ignore

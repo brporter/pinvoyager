@@ -507,3 +507,82 @@ async fn google_does_not_request_email() {
         .into_owned();
     assert!(!scope.split_whitespace().any(|scope| scope == "email"));
 }
+
+#[tokio::test]
+async fn microsoft_discovery_rejects_malformed_documents_and_unavailable_signing_keys() {
+    use axum::{Json, Router, http::StatusCode, response::IntoResponse as _, routing::get};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock listener");
+    let address = listener.local_addr().expect("mock address");
+    let mode = Arc::new(AtomicU8::new(0));
+    let metadata_mode = mode.clone();
+    let keys_mode = mode.clone();
+    let app = Router::new().route("/.well-known/openid-configuration",get(move || {
+        let mode = metadata_mode.load(Ordering::Relaxed);
+        async move {
+            if mode==3 { return StatusCode::SERVICE_UNAVAILABLE.into_response(); }
+            if mode==0 { return Json(serde_json::json!({"issuer":MICROSOFT_ISSUER_TEMPLATE})).into_response(); }
+            Json(serde_json::json!({"issuer":MICROSOFT_ISSUER_TEMPLATE,"authorization_endpoint":format!("http://{address}/authorize"),"token_endpoint":format!("http://{address}/token"),"jwks_uri":format!("http://{address}/jwks"),"response_types_supported":["code"],"subject_types_supported":["public"],"id_token_signing_alg_values_supported":["RS256"]})).into_response()
+        }
+    })).route("/jwks",get(move || {
+        let mode = keys_mode.load(Ordering::Relaxed);
+        async move {
+            if mode==2 { StatusCode::SERVICE_UNAVAILABLE.into_response() }
+            else { Json(serde_json::json!({"keys":"not a key array"})).into_response() }
+        }
+    }));
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock server");
+    });
+    let issuer = IssuerUrl::new(format!("http://{address}")).expect("issuer");
+    let http = provider_http_client().expect("HTTP client");
+    for value in 0..4 {
+        mode.store(value, Ordering::Relaxed);
+        let result = discover_microsoft_metadata(&issuer, &http).await;
+        if value < 2 {
+            assert!(matches!(result, Err(AuthError::Configuration(_))));
+        } else {
+            assert!(matches!(result, Err(AuthError::Provider(_))));
+        }
+    }
+    server.abort();
+    let _ = server.await;
+}
+
+#[tokio::test]
+async fn apple_deletion_requires_confirmation_from_the_revocation_endpoint() {
+    let mock = support::MockOidcProvider::start().await;
+    let mut core = OidcCore::discover(
+        ProviderKind::Apple,
+        mock.issuer(),
+        support::CLIENT_ID,
+        Arc::new(StaticClientSecret::new(&SecretString::from(
+            support::CLIENT_SECRET,
+        ))),
+        RedirectUrl::new("http://pinvoyager.example/auth/apple/callback".into()).expect("callback"),
+        vec![],
+        vec![],
+    )
+    .await
+    .expect("provider");
+    core.revocation_url =
+        Url::parse("http://127.0.0.1:1/unreachable").expect("revocation endpoint");
+    let code = mock.token().issue();
+    let result = core
+        .exchange_for_deletion(
+            &code,
+            support::PKCE_VERIFIER,
+            support::NONCE,
+            support::SUBJECT,
+        )
+        .await;
+    assert!(
+        matches!(result,Err(AuthError::Provider(message)) if message=="Apple revocation could not be reached")
+    );
+    assert!(mock.revocations().is_empty());
+}

@@ -58,6 +58,8 @@ fn test_state_with(
             bind: "127.0.0.1:0".parse().expect("valid socket addr"),
             shutdown_timeout_secs: 5,
             request_timeout_secs: 5,
+            upload_request_timeout_secs: 5,
+            upload_body_idle_timeout_secs: 5,
         },
         database: DatabaseConfig {
             url: SecretString::from("postgres://nobody@127.0.0.1:1/none"),

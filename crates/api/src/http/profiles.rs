@@ -113,6 +113,7 @@ struct PublicProfile {
 
 async fn show(
     State(state): State<AppState>,
+    crate::auth::MaybeUser(viewer): crate::auth::MaybeUser,
     Path(identifier): Path<String>,
     Query(query): Query<PageQuery>,
 ) -> AppResult<Json<PublicProfile>> {
@@ -123,6 +124,15 @@ async fn show(
         }
     }
     .ok_or(AppError::NotFound)?;
+    if super::moderation::blocked(
+        &state.pool,
+        viewer.as_ref().map(|user| user.user_id),
+        account.id,
+    )
+    .await?
+    {
+        return Err(AppError::NotFound);
+    }
     let before = query
         .before
         .as_deref()

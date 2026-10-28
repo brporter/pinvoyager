@@ -130,6 +130,8 @@ export interface TraceContext {
 }
 
 export interface RequestOptions {
+  /** Content revision reviewed by the caller; separate from image cache validators. */
+  revision?: string;
   traceContext?: TraceContext;
   signal?: AbortSignal;
 }
@@ -211,6 +213,7 @@ async function request<T>(call: Call): Promise<T> {
   const headers = new Headers({ accept: "application/json" });
   const hasBody = call.body !== undefined;
   if (hasBody) headers.set("content-type", "application/json");
+  if (call.revision !== undefined) headers.set("if-match", `"v:${call.revision}"`);
   if (call.traceContext?.traceparent) headers.set("traceparent", call.traceContext.traceparent);
 
   let response: Response;
@@ -625,5 +628,34 @@ export function administerUser(id: string, body: AdminAction): Promise<void> {
     method: "POST",
     path: `/api/admin/users/${encodeURIComponent(id)}/actions`,
     body,
+  });
+}
+
+export function getReports(before?: string): Promise<import("./types").ReportPage> {
+  return request({ method: "GET", path: "/api/admin/reports", query: { before } });
+}
+export function resolveReport(id: string, body: import("./types").ReportResolution): Promise<void> {
+  return request({
+    method: "POST",
+    path: `/api/admin/reports/${encodeURIComponent(id)}/actions`,
+    body,
+  });
+}
+
+export function getPublicationIntents(
+  voyageId: string,
+): Promise<{ intents: import("./types").PublicationIntent[] }> {
+  return request({
+    method: "GET",
+    path: `/api/voyages/${encodeURIComponent(voyageId)}/publication-intents`,
+  });
+}
+export function cancelPublicationIntent(
+  voyageId: string,
+  intentId: string,
+): Promise<import("./types").PublicationIntent> {
+  return request({
+    method: "DELETE",
+    path: `/api/voyages/${encodeURIComponent(voyageId)}/publication-intents/${encodeURIComponent(intentId)}`,
   });
 }

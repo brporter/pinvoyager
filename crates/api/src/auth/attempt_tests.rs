@@ -4,6 +4,7 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 
 fn attempt(state: &str) -> PendingAttempt {
     PendingAttempt {
+        native_attempt_id: None,
         state: state.to_owned(),
         provider: ProviderKind::Google,
         nonce: "nonce-value".to_owned(),

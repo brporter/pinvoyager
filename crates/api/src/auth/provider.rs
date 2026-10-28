@@ -86,6 +86,27 @@ pub trait AuthProvider: Send + Sync {
         pkce_verifier: &str,
         nonce: &str,
     ) -> Result<VerifiedIdentity, AuthError>;
+    /// Same-account deletion proof. Apple overrides this to revoke freshly exchanged tokens.
+    async fn exchange_for_deletion(
+        &self,
+        code: &str,
+        pkce_verifier: &str,
+        nonce: &str,
+        expected_subject: &str,
+    ) -> Result<VerifiedIdentity, AuthError> {
+        if self.kind() == ProviderKind::Apple {
+            return Err(AuthError::Provider(
+                "Apple revocation is unavailable".into(),
+            ));
+        }
+        let identity = self.exchange(code, pkce_verifier, nonce).await?;
+        if identity.subject != expected_subject {
+            return Err(AuthError::TokenVerification(
+                "reauthentication identity mismatch".into(),
+            ));
+        }
+        Ok(identity)
+    }
 }
 
 /// The configured providers.

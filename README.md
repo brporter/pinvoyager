@@ -20,6 +20,7 @@ readable without an account. Authentication uses Google, Microsoft, or Apple ide
 | --- | --- |
 | `crates/api/` | Rust API using axum, Tokio, sqlx, and PostgreSQL; migrations and tests. |
 | `web/` | React/TypeScript application using Vite, React Query, React Router, and MapLibre. |
+| `ios/` | Native SwiftUI client, domain/data Swift package, durable offline authoring, background synchronization, and native API integration. See [iOS setup](docs/ios-running.md) and [verification and release requirements](docs/ios-implementation.md). |
 | `design/tokens.css` | Shared color, typography, spacing, and motion tokens imported by the app. |
 | `design/components.css` | Shared component styles imported by the app. |
 | `docs/` | Architecture, implemented behavior, and operating instructions. |

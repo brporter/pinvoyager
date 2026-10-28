@@ -1,12 +1,18 @@
 //! HTTP layer.
 //!
 
+pub(crate) mod account_deletions;
 pub mod admin;
 pub mod auth;
+pub(crate) mod downloads;
 pub mod health;
 pub mod middleware;
+pub(crate) mod moderation;
+pub(crate) mod mutations;
 pub mod photos;
 pub mod profiles;
+pub(crate) mod publication;
+pub(crate) mod uploads;
 pub mod voyages;
 
 use std::time::Duration;
@@ -33,9 +39,15 @@ pub fn router(state: AppState) -> Router {
         .route("/ready", get(health::ready))
         .merge(auth::routes())
         .merge(admin::routes())
+        .merge(account_deletions::routes())
+        .merge(downloads::routes())
+        .merge(moderation::routes())
         .merge(photos::routes())
         .merge(profiles::routes())
         .merge(voyages::routes())
+        .merge(mutations::routes())
+        .merge(uploads::routes())
+        .merge(publication::routes())
         .with_state(state);
 
     middleware::apply(routes, &config.server)
@@ -60,6 +72,18 @@ where
     let bind = state.config.server.bind;
     let drain_deadline = Duration::from_secs(state.config.server.shutdown_timeout_secs);
 
+    // Poll once before exposing readiness: async signal registration otherwise
+    // starts after the log, when an immediate SIGTERM can still kill the process.
+    let mut shutdown = Box::pin(shutdown);
+    let already_stopped = std::future::poll_fn(|context| {
+        std::task::Poll::Ready(shutdown.as_mut().poll(context).is_ready())
+    })
+    .await;
+    let shutdown = async move {
+        if !already_stopped {
+            shutdown.await;
+        }
+    };
     let listener = TcpListener::bind(bind).await?;
     // Log the resolved address rather than the configured one: binding port 0
     // is how the integration tests get an ephemeral port, and "listening on

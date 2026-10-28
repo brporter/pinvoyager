@@ -25,6 +25,7 @@ use crate::auth::{CurrentUser, MaybeUser};
 use crate::blocking::run_blocking_infallible;
 use crate::db::repo::photos::{self, NewPhoto, Photo};
 use crate::db::repo::voyages as voyages_repo;
+
 use crate::error::AppError;
 use crate::photos::storage::{self, ContentHash};
 use crate::photos::worker::{STATUS_PENDING, STATUS_READY, VariantJob};
@@ -51,7 +52,7 @@ const IMAGE_CACHE_CONTROL: &str = "private, no-cache, must-revalidate";
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/voyages/{id}/photos", post(upload_to_voyage).get(list))
-        .route("/api/photos/{id}", get(metadata).delete(destroy))
+        .route("/api/photos/{id}", get(metadata).delete(destroy_request))
         .route("/api/photos/{id}/{variant}", get(image))
 }
 
@@ -92,8 +93,8 @@ async fn upload_to_voyage(
 ///
 /// Enforces the request size limit, detects format from bytes, and checks image
 /// dimensions before decoding. Client filenames and MIME types do not choose the
-/// format. Each accepted file is saved and queued independently; a later failure
-/// does not roll back files already accepted in the same request.
+/// format. Browser requests accept each file independently. Native requests validate
+/// their complete one-file multipart body before accepting or queuing that photo.
 async fn upload(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -130,6 +131,32 @@ async fn upload(
                 .ok_or_else(|| AppError::BadRequest("Idempotency-Key must be a UUID.".to_owned()))
         })
         .transpose()?;
+    let native = headers.contains_key(header::AUTHORIZATION);
+    if native && upload_key.is_none() {
+        return Err(AppError::BadRequest(
+            "Native photo uploads require an Idempotency-Key.".to_owned(),
+        )
+        .into());
+    }
+    let visibility = if native {
+        Some(
+            match headers
+                .get("X-PinVoyager-Upload-Visibility")
+                .and_then(|value| value.to_str().ok())
+            {
+                Some("draft") => false,
+                Some("public") => true,
+                _ => {
+                    return Err(AppError::BadRequest(
+                        "Confirm draft or public upload visibility.".to_owned(),
+                    )
+                    .into());
+                }
+            },
+        )
+    } else {
+        None
+    };
     let mut multipart = read_multipart(headers, body, limits.max_upload_bytes).await?;
 
     // Temporaries live under the storage root rather than in the system temp
@@ -151,9 +178,31 @@ async fn upload(
             // `next_field` drains the body of a part the caller did not read.
             continue;
         }
-
         let key = upload_key.map(|key| format!("{key}:{}", created.len()));
-        created.push(
+        let photo = if native {
+            let staged = stage_part(&state, &mut part, &temp_dir).await?;
+            drop(part);
+            while let Some(extra) = multipart.next_field().await.map_err(multipart_error)? {
+                check_part_headers(&extra)?;
+                if extra.file_name().is_some() {
+                    return Err(AppError::BadRequest(
+                        "Send one photograph per native upload request.".to_owned(),
+                    )
+                    .into());
+                }
+            }
+            accept_staged(
+                &state,
+                user.user_id,
+                voyage_id,
+                staged,
+                UploadIdentity {
+                    key: key.as_deref(),
+                    visibility,
+                },
+            )
+            .await?
+        } else {
             ingest(
                 &state,
                 user.user_id,
@@ -162,8 +211,12 @@ async fn upload(
                 &temp_dir,
                 key.as_deref(),
             )
-            .await?,
-        );
+            .await?
+        };
+        created.push(photo);
+        if native {
+            break;
+        }
     }
 
     if created.is_empty() {
@@ -187,46 +240,56 @@ async fn ingest(
     temp_dir: &FsPath,
     upload_key: Option<&str>,
 ) -> Result<PhotoResponse, Rejection> {
-    // Content addressing means no caller-supplied string ever reaches the
-    // filesystem — including here, where the name is a fresh uuid.
-    let (temporary, file) = crate::photos::temporary::TemporaryUpload::create(temp_dir).await?;
-
-    let result = ingest_part(
-        state, owner_id, voyage_id, multipart, &temporary, file, upload_key,
+    let staged = stage_part(state, multipart, temp_dir).await?;
+    accept_staged(
+        state,
+        owner_id,
+        voyage_id,
+        staged,
+        UploadIdentity {
+            key: upload_key,
+            visibility: None,
+        },
     )
-    .await;
-
-    discard_failed_upload(temporary.path()).await;
-
-    result
+    .await
 }
 
-async fn discard_failed_upload(path: &FsPath) {
-    // Attempt temporary-file cleanup without replacing the upload result.
-    match tokio::fs::remove_file(path).await {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => {
-            let error_message = err.to_string();
-            tracing::warn!(error = %error_message, "could not remove a rejected upload's temporary file");
+#[derive(Clone, Copy)]
+struct UploadIdentity<'a> {
+    key: Option<&'a str>,
+    visibility: Option<bool>,
+}
+struct StagedPhoto {
+    temporary: crate::photos::temporary::TemporaryUpload,
+    format: ImageFormat,
+    byte_size: u64,
+}
+
+async fn stage_part(
+    state: &AppState,
+    multipart: &mut Field<'_>,
+    temp_dir: &FsPath,
+) -> Result<StagedPhoto, Rejection> {
+    let (temporary, file) = crate::photos::temporary::TemporaryUpload::create(temp_dir).await?;
+    match receive_part(state, multipart, file).await {
+        Ok((format, byte_size)) => Ok(StagedPhoto {
+            temporary,
+            format,
+            byte_size,
+        }),
+        Err(error) => {
+            discard_failed_upload(temporary.path()).await;
+            Err(error)
         }
     }
 }
 
-#[tracing::instrument(name = "photo.ingest", skip_all, fields(voyage.id = %voyage_id, photo.id = tracing::field::Empty, photo.bytes = tracing::field::Empty), err(Debug))]
-async fn ingest_part(
+async fn receive_part(
     state: &AppState,
-    owner_id: Uuid,
-    voyage_id: Uuid,
     multipart: &mut Field<'_>,
-    temporary: &crate::photos::temporary::TemporaryUpload,
     mut file: tokio::fs::File,
-    upload_key: Option<&str>,
-) -> Result<PhotoResponse, Rejection> {
+) -> Result<(ImageFormat, u64), Rejection> {
     let limits = &state.config.photos;
-
-    let temp_path = temporary.path();
-
     let mut header = Vec::with_capacity(SNIFF_BYTES);
     let mut format: Option<ImageFormat> = None;
     let mut byte_size: u64 = 0;
@@ -267,6 +330,55 @@ async fn ingest_part(
         None => sniff(&header)?,
     };
 
+    Ok((format, byte_size))
+}
+
+async fn accept_staged(
+    state: &AppState,
+    owner_id: Uuid,
+    voyage_id: Uuid,
+    staged: StagedPhoto,
+    identity: UploadIdentity<'_>,
+) -> Result<PhotoResponse, Rejection> {
+    let result = ingest_part(
+        state,
+        owner_id,
+        voyage_id,
+        &staged.temporary,
+        staged.format,
+        staged.byte_size,
+        identity,
+    )
+    .await;
+    discard_failed_upload(staged.temporary.path()).await;
+    result
+}
+
+async fn discard_failed_upload(path: &FsPath) {
+    // Attempt temporary-file cleanup without replacing the upload result.
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            let error_message = err.to_string();
+            tracing::warn!(error = %error_message, "could not remove a rejected upload's temporary file");
+        }
+    }
+}
+
+#[tracing::instrument(name = "photo.ingest", skip_all, fields(voyage.id = %voyage_id, photo.id = tracing::field::Empty, photo.bytes = tracing::field::Empty), err(Debug))]
+async fn ingest_part(
+    state: &AppState,
+    owner_id: Uuid,
+    voyage_id: Uuid,
+    temporary: &crate::photos::temporary::TemporaryUpload,
+    format: ImageFormat,
+    byte_size: u64,
+    identity: UploadIdentity<'_>,
+) -> Result<PhotoResponse, Rejection> {
+    let limits = &state.config.photos;
+    let temp_path = temporary.path();
+
     let max_megapixels = limits.max_megapixels;
     let probe_file = temporary.clone();
 
@@ -306,25 +418,35 @@ async fn ingest_part(
     // Reserve before opening a transaction: backpressure must not consume a
     // database connection. After commit, sending through this permit cannot
     // wait or report a closed queue after the photo has already been saved.
-    let permit = state
-        .variants
-        .reserve()
-        .await
-        .map_err(|_| AppError::ServiceUnavailable)?;
+    let permit = tokio::time::timeout(
+        std::time::Duration::from_secs(state.config.photos.variant_queue_wait_secs),
+        state.variants.reserve(),
+    )
+    .await
+    .map_err(|_| Rejection::Explicit {
+        status: StatusCode::SERVICE_UNAVAILABLE,
+        code: "service_unavailable",
+        message: "Photo processing is busy. Retry shortly.",
+        retry_after: Some(10),
+    })?
+    .map_err(|_| AppError::ServiceUnavailable)?;
     let mut tx = state.pool.begin().await?;
     // Lock the account before its voyage, matching administrator deletion, and
     // reject an upload whose account was suspended while its bytes arrived.
     crate::db::repo::users::require_active(&mut tx, owner_id).await?;
-    let owned: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+    let owned: Option<bool> =
+        sqlx::query_scalar("SELECT published FROM voyages WHERE id=$1 AND owner_id=$2 FOR UPDATE")
             .bind(voyage_id)
             .bind(owner_id)
             .fetch_optional(&mut *tx)
             .await?;
-    if owned.is_none() {
-        return Err(AppError::NotFound.into());
-    }
-    if let Some(key) = upload_key {
+    let published = owned.ok_or(AppError::NotFound)?;
+    if let Some(key) = identity.key {
+        if let Some(photo) =
+            super::uploads::replay(&mut tx, owner_id, voyage_id, key, hash.as_str()).await?
+        {
+            return Ok(photo.into());
+        }
         let existing: Option<Uuid> =
             sqlx::query_scalar("SELECT id FROM photos WHERE voyage_id=$1 AND upload_key=$2")
                 .bind(voyage_id)
@@ -341,11 +463,27 @@ async fn ingest_part(
                 )
                 .into());
             }
+            super::uploads::accepted(&mut tx, owner_id, voyage_id, key, &photo, None).await?;
+            tx.commit().await?;
             return Ok(photo.into());
         }
     }
+    if identity
+        .visibility
+        .is_some_and(|expected| expected != published)
+    {
+        return Err(AppError::PreconditionFailed.into());
+    }
+    crate::voyages::publication::authorize_expected_upload(
+        &mut tx,
+        voyage_id,
+        identity.key,
+        hash.as_str(),
+    )
+    .await?;
     photos::lock_content(&mut tx, hash.as_str()).await?;
     storage::commit_original(&limits.storage_root, temp_path, &hash).await?;
+    let previous_revision = super::mutations::revision(&mut tx, voyage_id, None).await?;
     let photo = photos::create(
         &mut *tx,
         &NewPhoto {
@@ -364,18 +502,30 @@ async fn ingest_part(
     )
     .await?;
 
-    if let Some(key) = upload_key {
+    if let Some(key) = identity.key {
         sqlx::query("UPDATE photos SET upload_key=$1 WHERE id=$2")
             .bind(key)
             .bind(photo.id)
             .execute(&mut *tx)
             .await?;
+        super::uploads::accepted(
+            &mut tx,
+            owner_id,
+            voyage_id,
+            key,
+            &photo,
+            Some(previous_revision),
+        )
+        .await?;
     }
     tx.commit().await?;
     tracing::Span::current().record("photo.id", photo.id.to_string());
     tracing::Span::current().record("photo.bytes", byte_size);
 
     permit.send(VariantJob::new(photo.id).with_voyage(voyage_id));
+    if let Err(error) = crate::voyages::publication::finalize(&state.pool, voyage_id).await {
+        tracing::warn!(%error,"publication reconciliation will be retried");
+    }
 
     Ok(PhotoResponse::from(photo))
 }
@@ -528,7 +678,11 @@ async fn viewable(
         return Ok(photo);
     }
 
-    if voyages_repo::photo_is_publicly_visible(&state.pool, id).await? {
+    let voyage: Uuid = sqlx::query_scalar("SELECT voyage_id FROM photos WHERE id=$1")
+        .bind(id)
+        .fetch_one(&state.pool)
+        .await?;
+    if super::moderation::can_view(&state.pool, user.map(|user| user.user_id), voyage).await? {
         return Ok(photo);
     }
 
@@ -707,32 +861,99 @@ pub(super) async fn destroy(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.pool.begin().await?;
+    destroy_in(&mut tx, user.user_id, id, None, None).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub(super) async fn destroy_in(
+    connection: &mut sqlx::PgConnection,
+    owner: Uuid,
+    id: Uuid,
+    expected_voyage: Option<Uuid>,
+    expected_revision: Option<i64>,
+) -> Result<(Uuid, i64), AppError> {
     let row: Option<(Uuid, String)> =
         sqlx::query_as("SELECT voyage_id, content_hash FROM photos WHERE id=$1 AND owner_id=$2")
             .bind(id)
-            .bind(user.user_id)
-            .fetch_optional(&mut *tx)
+            .bind(owner)
+            .fetch_optional(&mut *connection)
             .await?;
     let Some((voyage_id, hash)) = row else {
         return Err(AppError::NotFound);
     };
-    crate::db::repo::users::require_active(&mut tx, user.user_id).await?;
+    if expected_voyage.is_some_and(|expected| expected != voyage_id) {
+        return Err(AppError::NotFound);
+    }
+    crate::db::repo::users::require_active(connection, owner).await?;
     sqlx::query("SELECT id FROM voyages WHERE id=$1 FOR UPDATE")
         .bind(voyage_id)
-        .execute(&mut *tx)
+        .execute(&mut *connection)
         .await?;
-    photos::lock_content(&mut tx, &hash).await?;
+    super::mutations::revision(connection, voyage_id, expected_revision).await?;
+    photos::lock_content(connection, &hash).await?;
     let Some((hash, orphaned)) =
-        photos::delete_returning_orphaned(&mut *tx, id, user.user_id).await?
+        photos::delete_returning_orphaned(&mut *connection, id, owner).await?
     else {
         return Err(AppError::NotFound);
     };
 
     if orphaned {
-        crate::photos::cleanup::schedule(&mut tx, &hash).await?;
+        crate::photos::cleanup::schedule(connection, &hash).await?;
     }
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+    let revision = super::mutations::revision(connection, voyage_id, None).await?;
+    Ok((voyage_id, revision))
+}
+
+async fn destroy_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    destroy_with_headers(
+        &state,
+        user,
+        id,
+        None,
+        &headers,
+        format!("/api/photos/{id}"),
+    )
+    .await
+}
+
+pub(super) async fn destroy_with_headers(
+    state: &AppState,
+    user: CurrentUser,
+    id: Uuid,
+    voyage_id: Option<Uuid>,
+    headers: &HeaderMap,
+    path: String,
+) -> Result<Response, AppError> {
+    if !super::mutations::conditional(headers) && voyage_id.is_none() {
+        return Ok(destroy(State(state.clone()), user, Path(id))
+            .await?
+            .into_response());
+    }
+    super::mutations::run(
+        state,
+        user.user_id,
+        headers,
+        super::mutations::Request {
+            method: "DELETE",
+            path,
+            payload: serde_json::Value::Null,
+            requires_revision: true,
+        },
+        async move |connection, expected| {
+            let (voyage_id, revision) =
+                destroy_in(connection, user.user_id, id, voyage_id, expected).await?;
+            Ok(super::mutations::Outcome::deleted(
+                id, voyage_id, "photo", revision,
+            ))
+        },
+    )
+    .await
 }
 
 /// Axum streams fields while its body limit counts all multipart framing.
@@ -763,6 +984,18 @@ fn check_part_headers(field: &Field<'_>) -> Result<(), Rejection> {
 }
 
 fn multipart_error(error: MultipartError) -> Rejection {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(&error);
+    while let Some(cause) = source {
+        if cause.is::<tower_http::timeout::TimeoutError>() {
+            return Rejection::Explicit {
+                status: StatusCode::REQUEST_TIMEOUT,
+                code: "request_timeout",
+                message: "The upload stopped sending data. Retry when connected.",
+                retry_after: Some(2),
+            };
+        }
+        source = cause.source();
+    }
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
         Rejection::too_large()
     } else {

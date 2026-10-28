@@ -46,6 +46,8 @@ export interface VoyagePhoto {
 
 /** Rust: `VoyageResponse`. The full read of one voyage. */
 export interface Voyage {
+  /** Owner-only content revision used for conditional mutations. */
+  revision?: string;
   id: string;
   owner_id: string;
   title: string;
@@ -223,6 +225,7 @@ export interface ApiError {
     | "unauthorized"
     | "forbidden"
     | "conflict"
+    | "revision_conflict"
     | "service_unavailable"
     | "internal"
     // From the handler-local rejection type in crates/api/src/http/voyages.rs
@@ -273,3 +276,101 @@ export interface AdminUserDetail {
 export type AdminAction =
   | { action: "suspend" | "enable" | "delete" | "promote" | "unpublish_all" }
   | { action: "unpublish_voyage"; voyage_id: string };
+
+/** Private moderation evidence; available only through administrator routes. */
+export interface ContentReport {
+  id: string;
+  reporter_id: string | null;
+  target_owner_id: string | null;
+  voyage_id: string | null;
+  target: string;
+  reason: string;
+  details: string;
+  created_at: string;
+  status: "open" | "held" | "resolved";
+  moderator_id: string | null;
+  moderator_note: string | null;
+  resolved_at: string | null;
+}
+export interface ReportPage {
+  reports: ContentReport[];
+  next_before: string | null;
+}
+export interface ReportResolution {
+  action: "hold" | "release" | "dismiss";
+  note: string;
+}
+
+export interface PublicationIntent {
+  id: string;
+  status:
+    | "waiting_for_uploads"
+    | "processing"
+    | "published"
+    | "canceled"
+    | "expired"
+    | "needs_review"
+    | "failed";
+  revision: string;
+  published: boolean;
+  expires_at: string;
+  waiting_count: number;
+  processing_count: number;
+  reason: string | null;
+}
+
+/** The native client and website share these server response contracts. */
+export interface NativeCapabilities {
+  native_authentication: boolean;
+  native_protocol_versions: number[];
+  providers: string[];
+  formats: string[];
+  max_upload_bytes: number;
+  max_pixels: number;
+  upload_timeout_secs: number;
+  max_order_entries: number;
+  max_manifest_entries: number;
+  canonical_web_origin: string;
+  owner_offline_downloads: boolean;
+}
+export interface NativeSessionExchange extends Me {
+  session_token: string;
+  idle_deadline: string;
+  absolute_deadline: string;
+}
+export interface OwnerOfflineManifest {
+  voyage_id: string;
+  owner_id: string;
+  revision: string;
+  title: string;
+  description: string | null;
+  granularity: Granularity;
+  published: boolean;
+  retention_permission: "owner_offline_copy_v1";
+  authorized_at: string;
+  photos: {
+    id: string;
+    position: number;
+    captured_at: string | null;
+    width: number;
+    height: number;
+    latitude: number | null;
+    longitude: number | null;
+    variants: {
+      kind: "thumb" | "display" | "full";
+      url: string;
+      byte_count: number;
+      sha256: string;
+    }[];
+  }[];
+}
+
+export interface NativeRejectedOperationReceipt {
+  status: "rejected";
+  target_id: string | null;
+  voyage_id: string | null;
+  revision: string | null;
+  response_status: number;
+  code: ApiError["code"];
+  message: string;
+}

@@ -86,6 +86,7 @@ async fn concurrent_first_sign_in_unique_violation_is_a_safe_rejection(pool: sql
     crate::auth::attempt::create(
         &pool,
         &PendingAttempt {
+            native_attempt_id: None,
             state: state.to_owned(),
             provider: ProviderKind::Google,
             nonce: "nonce".to_owned(),
@@ -176,6 +177,7 @@ async fn link_unique_violation_is_reported_as_already_linked(pool: sqlx::PgPool)
     crate::auth::attempt::create(
         &pool,
         &PendingAttempt {
+            native_attempt_id: None,
             state: state.to_owned(),
             provider: ProviderKind::Google,
             nonce: "nonce".to_owned(),
@@ -242,6 +244,7 @@ async fn callback_rejects_an_identity_labelled_as_another_provider(pool: sqlx::P
     crate::auth::attempt::create(
         &pool,
         &PendingAttempt {
+            native_attempt_id: None,
             state: state.to_owned(),
             provider: ProviderKind::Google,
             nonce: "nonce".to_owned(),

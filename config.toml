@@ -21,6 +21,8 @@ shutdown_timeout_secs = 30
 
 # Per-request ceiling, including upload requests and queue backpressure.
 request_timeout_secs = 30
+upload_request_timeout_secs = 900
+upload_body_idle_timeout_secs = 90
 
 [database]
 # Required — there is no default, and startup fails naming this key if it is
@@ -68,6 +70,7 @@ upload_rate_per_minute = 60
 
 # Maximum queued conversion jobs. Uploads wait when the queue is full.
 variant_queue_depth = 256
+variant_queue_wait_secs = 10
 
 # Maximum concurrent conversions on the blocking pool, independent of queue depth.
 variant_concurrency = 4

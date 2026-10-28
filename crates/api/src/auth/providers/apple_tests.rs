@@ -254,3 +254,79 @@ async fn apple_provider_uses_form_post_without_requesting_profile_names() {
 
     assert_eq!(identity.provider, ProviderKind::Apple);
 }
+
+#[tokio::test]
+async fn deletion_revokes_fresh_apple_tokens_only_after_same_subject_verification() {
+    use crate::auth::AuthProvider as _;
+    let mock = support::MockOidcProvider::start().await;
+    let apple = apple_provider_against_mock(&mock).await;
+    let code = mock
+        .token()
+        .audience("com.example.pinvoyager.service")
+        .issue();
+    assert!(
+        apple
+            .exchange_for_deletion(
+                &code,
+                support::PKCE_VERIFIER,
+                support::NONCE,
+                "another-subject"
+            )
+            .await
+            .is_err()
+    );
+    assert!(mock.revocations().is_empty());
+    let identity = apple
+        .exchange_for_deletion(
+            &code,
+            support::PKCE_VERIFIER,
+            support::NONCE,
+            support::SUBJECT,
+        )
+        .await
+        .expect("fresh token revoked");
+    assert_eq!(identity.subject, support::SUBJECT);
+    let calls = mock.revocations();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["token"], code);
+    assert_eq!(calls[0]["client_id"], "com.example.pinvoyager.service");
+    assert_eq!(calls[0]["token_type_hint"], "access_token");
+    mock.fail_revocation();
+    assert!(
+        apple
+            .exchange_for_deletion(
+                &code,
+                support::PKCE_VERIFIER,
+                support::NONCE,
+                support::SUBJECT
+            )
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn deletion_prefers_revoking_a_fresh_refresh_token_when_apple_returns_one() {
+    use crate::auth::AuthProvider as _;
+    let mock = support::MockOidcProvider::start().await;
+    mock.include_refresh_token();
+    let apple = apple_provider_against_mock(&mock).await;
+    let code = mock
+        .token()
+        .audience("com.example.pinvoyager.service")
+        .issue();
+    let identity = apple
+        .exchange_for_deletion(
+            &code,
+            support::PKCE_VERIFIER,
+            support::NONCE,
+            support::SUBJECT,
+        )
+        .await
+        .expect("fresh refresh token revoked");
+    assert_eq!(identity.subject, support::SUBJECT);
+    let calls = mock.revocations();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["token_type_hint"], "refresh_token");
+    assert_eq!(calls[0]["token"], format!("fresh-refresh-{code}"));
+}

@@ -66,6 +66,7 @@ impl BindingValue {
 
 #[derive(Debug, Clone)]
 pub struct PendingAttempt {
+    pub native_attempt_id: Option<Uuid>,
     pub state: String,
     pub provider: ProviderKind,
     /// Must match the ID token's `nonce` claim. Replay protection.
@@ -93,8 +94,8 @@ pub async fn create(
     sqlx::query!(
         "INSERT INTO auth_attempts
              (state, provider, nonce, pkce_verifier, link_user_id, redirect_to, expires_at,
-              binding_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+              binding_hash, native_attempt_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         attempt.state,
         attempt.provider.as_str(),
         attempt.nonce,
@@ -103,6 +104,7 @@ pub async fn create(
         attempt.redirect_to.as_deref(),
         attempt.expires_at,
         attempt.binding_hash,
+        attempt.native_attempt_id,
     )
     .execute(executor)
     .await?;
@@ -123,7 +125,7 @@ pub async fn consume(
         "DELETE FROM auth_attempts
           WHERE state = $1
          RETURNING state, provider, nonce, pkce_verifier, link_user_id, redirect_to, expires_at,
-                   binding_hash",
+                   binding_hash, native_attempt_id",
         state,
     )
     .fetch_optional(executor)
@@ -144,6 +146,7 @@ pub async fn consume(
     };
 
     Ok(Some(PendingAttempt {
+        native_attempt_id: row.native_attempt_id,
         state: row.state,
         provider,
         nonce: row.nonce,

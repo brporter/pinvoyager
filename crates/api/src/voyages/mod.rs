@@ -5,5 +5,6 @@
 //! other than the owner. See [`granularity`] for coordinate rounding.
 
 pub mod granularity;
+pub mod publication;
 
 pub use granularity::{Coordinate, Granularity};

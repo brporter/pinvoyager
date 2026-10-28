@@ -192,7 +192,10 @@ struct MockState {
     jwks_requests: Arc<AtomicUsize>,
     omit_token_endpoint: Arc<std::sync::atomic::AtomicBool>,
     omit_id_token: Arc<std::sync::atomic::AtomicBool>,
+    include_refresh_token: Arc<std::sync::atomic::AtomicBool>,
     microsoft_common: Arc<std::sync::atomic::AtomicBool>,
+    revocations: Arc<Mutex<Vec<HashMap<String, String>>>>,
+    fail_revocation: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// A running OIDC provider on 127.0.0.1, with an ephemeral port so that
@@ -232,7 +235,10 @@ impl MockOidcProvider {
             jwks_requests: Arc::new(AtomicUsize::new(0)),
             omit_token_endpoint: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             omit_id_token: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            include_refresh_token: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             microsoft_common: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            revocations: Arc::new(Mutex::new(Vec::new())),
+            fail_revocation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
         let app = Router::new()
@@ -240,6 +246,7 @@ impl MockOidcProvider {
             .route("/jwks", get(jwks))
             .route("/authorize", get(authorize))
             .route("/token", post(token))
+            .route("/auth/revoke", post(revoke))
             .route("/userinfo", get(userinfo))
             .with_state(state.clone());
 
@@ -261,6 +268,18 @@ impl MockOidcProvider {
 
     /// The issuer URL to configure the service with, and the base for joining
     /// endpoint paths onto.
+    pub fn revocations(&self) -> Vec<HashMap<String, String>> {
+        self.state.revocations.lock().expect("revocations").clone()
+    }
+    pub fn include_refresh_token(&self) {
+        self.state
+            .include_refresh_token
+            .store(true, Ordering::Relaxed);
+    }
+
+    pub fn fail_revocation(&self) {
+        self.state.fail_revocation.store(true, Ordering::Relaxed);
+    }
     pub fn issuer(&self) -> &Url {
         &self.issuer
     }
@@ -407,6 +426,9 @@ async fn token(State(state): State<MockState>, body: String) -> Response {
         "expires_in": 3600,
         "scope": "openid profile",
     });
+    if state.include_refresh_token.load(Ordering::Relaxed) {
+        response["refresh_token"] = json!(format!("fresh-refresh-{code}"));
+    }
     if !state.omit_id_token.load(Ordering::Relaxed) {
         response["id_token"] = json!(id_token);
     }
@@ -583,4 +605,16 @@ impl TokenBuilder<'_> {
 
 fn base64_json(value: &Value) -> String {
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(value).expect("JSON should serialize"))
+}
+
+async fn revoke(State(state): State<MockState>, body: String) -> StatusCode {
+    let params = url::form_urlencoded::parse(body.as_bytes())
+        .into_owned()
+        .collect();
+    state.revocations.lock().expect("revocations").push(params);
+    if state.fail_revocation.load(Ordering::Relaxed) {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::OK
+    }
 }

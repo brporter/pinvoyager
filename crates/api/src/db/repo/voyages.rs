@@ -322,8 +322,17 @@ pub async fn list_published(
     before: Option<PublishedCursor>,
     limit: i64,
 ) -> Result<Vec<Voyage>, sqlx::Error> {
-    sqlx::query_as("SELECT id, owner_id, title, description, published, granularity, created_at, published_at FROM voyages WHERE published AND published_at IS NOT NULL AND ($1::timestamptz IS NULL OR (published_at,id) < ($1,$2)) ORDER BY published_at DESC, id DESC LIMIT $3")
-        .bind(before.map(|c| c.at)).bind(before.map(|c| c.id)).bind(limit).fetch_all(executor).await
+    list_published_visible(executor, before, limit, None).await
+}
+
+pub async fn list_published_visible(
+    executor: impl PgExecutor<'_>,
+    before: Option<PublishedCursor>,
+    limit: i64,
+    viewer: Option<Uuid>,
+) -> Result<Vec<Voyage>, sqlx::Error> {
+    sqlx::query_as("SELECT id, owner_id, title, description, published, granularity, created_at, published_at FROM voyages WHERE published AND NOT moderation_held AND NOT EXISTS(SELECT 1 FROM account_blocks b WHERE b.account_id=$4 AND b.blocked_id=voyages.owner_id) AND published_at IS NOT NULL AND ($1::timestamptz IS NULL OR (published_at,id) < ($1,$2)) ORDER BY published_at DESC, id DESC LIMIT $3")
+        .bind(before.map(|c| c.at)).bind(before.map(|c| c.id)).bind(limit).bind(viewer).fetch_all(executor).await
 }
 
 /// A user's own voyages, drafts included.
@@ -358,29 +367,6 @@ pub async fn list_for_owner(
     .await
 }
 
-/// Returns whether the photo belongs to a published voyage. Drafts do not
-/// grant public image access. Database failures return an error.
-pub async fn photo_is_publicly_visible(
-    executor: impl PgExecutor<'_>,
-    photo_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    // EXISTS can stop after finding a published voyage containing this photo.
-    let visible: Option<bool> = sqlx::query_scalar!(
-        r#"SELECT EXISTS (
-               SELECT 1
-                 FROM voyage_photos vp
-                 JOIN voyages v ON v.id = vp.voyage_id
-                WHERE vp.photo_id = $1
-                  AND v.published
-           )"#,
-        photo_id,
-    )
-    .fetch_one(executor)
-    .await?;
-
-    Ok(visible.unwrap_or(false))
-}
-
 /// One placed photograph in a published voyage, for the discovery map.
 ///
 /// Coordinates are **exact**, like every other row type here, and the
@@ -401,13 +387,14 @@ pub struct DiscoverPhoto {
 
 /// Scan public candidates in bounded ID pages. Exact coordinates never decide
 /// membership or truncation: the HTTP layer applies granularity first.
-pub async fn published_photo_page(
+pub async fn published_photo_page_visible(
     executor: impl PgExecutor<'_>,
     after: Option<Uuid>,
     limit: i64,
+    viewer: Option<Uuid>,
 ) -> Result<Vec<DiscoverPhoto>, sqlx::Error> {
-    sqlx::query_as("SELECT p.id AS photo_id, v.id AS voyage_id, v.title AS voyage_title, v.granularity, p.latitude::float8 AS latitude, p.longitude::float8 AS longitude FROM photos p JOIN voyages v ON v.id=p.voyage_id WHERE v.published AND p.latitude IS NOT NULL AND ($1::uuid IS NULL OR p.id > $1) ORDER BY p.id LIMIT $2")
-        .bind(after).bind(limit).fetch_all(executor).await
+    sqlx::query_as("SELECT p.id AS photo_id, v.id AS voyage_id, v.title AS voyage_title, v.granularity, p.latitude::float8 AS latitude, p.longitude::float8 AS longitude FROM photos p JOIN voyages v ON v.id=p.voyage_id WHERE v.published AND NOT v.moderation_held AND NOT EXISTS(SELECT 1 FROM account_blocks b WHERE b.account_id=$3 AND b.blocked_id=v.owner_id) AND p.latitude IS NOT NULL AND ($1::uuid IS NULL OR p.id > $1) ORDER BY p.id LIMIT $2")
+        .bind(after).bind(limit).bind(viewer).fetch_all(executor).await
 }
 
 /// Cover metadata for a page, in one query rather than one query per card.
@@ -444,7 +431,7 @@ pub async fn list_published_for_owner(
     before: Option<PublishedCursor>,
     limit: i64,
 ) -> Result<Vec<Voyage>, sqlx::Error> {
-    sqlx::query_as("SELECT id, owner_id, title, description, published, granularity, created_at, published_at FROM voyages WHERE published AND owner_id=$1 AND published_at IS NOT NULL AND ($2::timestamptz IS NULL OR (published_at,id) < ($2,$3)) ORDER BY published_at DESC, id DESC LIMIT $4")
+    sqlx::query_as("SELECT id, owner_id, title, description, published, granularity, created_at, published_at FROM voyages WHERE published AND NOT moderation_held AND owner_id=$1 AND published_at IS NOT NULL AND ($2::timestamptz IS NULL OR (published_at,id) < ($2,$3)) ORDER BY published_at DESC, id DESC LIMIT $4")
         .bind(owner_id).bind(before.map(|c| c.at)).bind(before.map(|c| c.id)).bind(limit).fetch_all(executor).await
 }
 

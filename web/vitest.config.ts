@@ -9,6 +9,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: "jsdom",
+      // Browser storage comes from jsdom, not Node's experimental file-backed API.
+      execArgv: ["--no-experimental-webstorage"],
       globals: true,
       setupFiles: ["./src/test/setup.ts"],
       // Process CSS during tests. The components apply design-system class

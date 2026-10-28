@@ -17,6 +17,8 @@ import { useDeleteVoyage, useUpdateVoyage, useVoyage } from "../../api/hooks";
 import type { Voyage, VoyagePhoto } from "../../api/types";
 import { VoyageEdit } from "../VoyageEdit";
 
+vi.mock("../../components/PublicationPanel", () => ({ PublicationPanel: () => null }));
+
 vi.mock("../../auth/useAuth", () => ({ useAuth: () => ({ user: { id: "u1" } }) }));
 
 vi.mock("../../api/hooks", () => ({
@@ -594,4 +596,35 @@ it("withholds editor controls from a different owner", () => {
   setup({ data: voyage({ owner_id: "another-owner", published: true }) });
   expect(screen.getByText("Only the owner can edit this voyage")).toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: /title/i })).not.toBeInTheDocument();
+});
+
+it("keeps unsaved edits on a revision conflict and requires an explicit reload", async () => {
+  const failure = new ApiRequestError({
+    status: 412,
+    code: "revision_conflict",
+    message: "This voyage changed.",
+    requestId: "conflict-id",
+  });
+  const mutate = vi.fn();
+  vi.mocked(useVoyage).mockReturnValue(queryResult({ data: voyage({ revision: "17" }) }));
+  vi.mocked(useUpdateVoyage).mockReturnValue(mutationResult({ error: failure, mutate }));
+  vi.mocked(useDeleteVoyage).mockReturnValue(
+    mutationResult({}) as unknown as ReturnType<typeof useDeleteVoyage>,
+  );
+  render(
+    <MemoryRouter initialEntries={["/voyages/v1/edit"]}>
+      <Routes>
+        <Route path="/voyages/:id/edit" element={<VoyageEdit />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const user = userEvent.setup();
+  await user.clear(screen.getByRole("textbox", { name: /Title/ }));
+  await user.type(screen.getByRole("textbox", { name: /Title/ }), "Unsaved local work");
+  expect(screen.getByRole("textbox", { name: /Title/ })).toHaveValue("Unsaved local work");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Reload current version and discard these edits" }),
+  ).toBeVisible();
+  expect(useUpdateVoyage).toHaveBeenLastCalledWith("v1", "17");
 });

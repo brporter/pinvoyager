@@ -12,9 +12,8 @@ use uuid::Uuid;
 
 use crate::{
     auth::CurrentUser,
-    db::repo::{photos, users},
+    db::repo::users,
     error::{AppError, AppResult},
-    photos::cleanup,
     state::AppState,
 };
 
@@ -26,7 +25,7 @@ pub fn routes() -> Router<AppState> {
 }
 
 /// Read the role on every request; a cached browser role never authorizes access.
-async fn authorize(connection: &mut PgConnection, id: Uuid) -> AppResult<()> {
+pub(super) async fn authorize(connection: &mut PgConnection, id: Uuid) -> AppResult<()> {
     let allowed: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND is_site_admin AND NOT suspended)",
     )
@@ -238,27 +237,7 @@ async fn act(
             }
         }
         Action::Delete => {
-            sqlx::query("SELECT id FROM voyages WHERE owner_id=$1 ORDER BY id FOR UPDATE")
-                .bind(id)
-                .fetch_all(&mut *tx)
-                .await?;
-            let hashes: Vec<String> = sqlx::query_scalar(
-                "SELECT DISTINCT content_hash FROM photos WHERE owner_id=$1 ORDER BY content_hash",
-            )
-            .bind(id)
-            .fetch_all(&mut *tx)
-            .await?;
-            for hash in &hashes {
-                photos::lock_content(&mut tx, hash).await?;
-            }
-            // Names remain reserved by the profile_names ON DELETE SET NULL rule.
-            sqlx::query("DELETE FROM users WHERE id=$1")
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-            for hash in &hashes {
-                cleanup::schedule(&mut tx, hash).await?;
-            }
+            crate::accounts::deletion::remove(&mut tx, id).await?;
         }
     }
     tx.commit().await?;

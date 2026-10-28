@@ -71,3 +71,18 @@ and transparent background. When changing the artwork, update that copy too.
 and is declared in the HTML. `web/src/shell/__tests__/Shells.test.tsx` checks both
 shells at both widths; `web/src/auth/__tests__/AuthProvider.test.tsx` checks the
 logo during display-name setup.
+
+## Native iOS navigation
+
+`ios/PinVoyager/App/RootView.swift` owns one `SceneRouter` per window. Each tab has
+its own typed `NavigationStack` path; iPad uses a sidebar around the same destinations.
+SceneStorage preserves these paths and intended authentication routes. Local voyage
+routes use local IDs before a remote ID exists. Account changes clear private paths.
+`PinVoyagerApp` shares `AppModel` and synchronization across windows, so a background
+completion updates durable state without navigating a window.
+
+Universal links use the trusted configured website origin. `SceneRouter.handle` saves
+an open editor's working copy before navigating and keeps a failed link for retry.
+Owner edit/import links verify ownership before opening local screens. Sign-in and
+initial-name setup resume only the invoking window's intended route; explicit cancel
+clears that route. See `SceneRouterTests` and the native implementation reference.

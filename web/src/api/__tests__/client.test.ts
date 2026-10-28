@@ -355,3 +355,13 @@ describe("endpoint wrappers", () => {
     expect(ordinary.retryAfterSeconds).toBeNull();
   });
 });
+
+it("sends a reviewed strong content revision and preserves a 412 conflict", async () => {
+  stubFetch(respond(412, { code: "revision_conflict", message: "Review the current version." }));
+  await expect(
+    updateVoyage("v1", { title: "Local edits" }, { revision: "17" }),
+  ).rejects.toMatchObject({ status: 412, code: "revision_conflict" });
+  expect(new Headers(vi.mocked(globalThis.fetch).mock.calls[0][1]?.headers).get("if-match")).toBe(
+    '"v:17"',
+  );
+});

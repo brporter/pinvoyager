@@ -83,6 +83,17 @@ impl crate::auth::AuthProvider for AppleProvider {
     ) -> Result<VerifiedIdentity, AuthError> {
         self.core.exchange(code, pkce_verifier, nonce).await
     }
+    async fn exchange_for_deletion(
+        &self,
+        code: &str,
+        verifier: &str,
+        nonce: &str,
+        expected_subject: &str,
+    ) -> Result<VerifiedIdentity, AuthError> {
+        self.core
+            .exchange_for_deletion(code, verifier, nonce, expected_subject)
+            .await
+    }
 }
 
 /// Mints and caches Apple's client-secret JWT.

@@ -1,0 +1,1 @@
+{"canonical_web_origin":"https://pinvoyager.test","formats":["heic","jpeg","png","webp"],"max_manifest_entries":10000,"max_order_entries":10000,"max_pixels":100000000,"max_upload_bytes":26214400,"native_authentication":true,"native_protocol_versions":[1],"owner_offline_downloads":true,"providers":[],"upload_timeout_secs":900}

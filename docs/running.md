@@ -1,5 +1,9 @@
 # Running locally
 
+For the native SwiftUI project, simulator signing, and native test commands, see
+[running iOS](ios-running.md). Its server-dependent workflows remain in progress;
+the commands below describe the current API and browser application.
+
 ## Native prerequisites
 
 The API uses libheif to decode HEIC images and libwebp to encode WebP variants. The

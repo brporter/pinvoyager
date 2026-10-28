@@ -27,7 +27,7 @@ use std::collections::HashSet;
 mod discovery;
 
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
@@ -69,10 +69,17 @@ const MINE_REQUIRES_A_SESSION: &str = "Listing your own voyages requires signing
 /// The literal `photos/order` segment takes precedence over `photos/{photo}`.
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/voyages", post(create).get(list))
-        .route("/api/voyages/{id}", get(read).patch(update).delete(destroy))
-        .route("/api/voyages/{id}/photos/order", patch(reorder))
-        .route("/api/voyages/{id}/photos/{photo}", delete(detach))
+        .route("/api/voyages", post(create_request).get(list))
+        .route(
+            "/api/voyages/{id}",
+            get(read).patch(update_request).delete(destroy_request),
+        )
+        .route("/api/voyages/{id}/photos/order", patch(reorder_request))
+        .route(
+            "/api/voyages/{id}/photo-order",
+            axum::routing::put(complete_order),
+        )
+        .route("/api/voyages/{id}/photos/{photo}", delete(detach_request))
         .route("/api/voyages/{id}/map", get(map))
         .route("/api/map", get(discovery::discover_map))
 }
@@ -150,6 +157,8 @@ fn place_count(coordinates: impl IntoIterator<Item = Coordinate>) -> usize {
 /// Voyage detail with photo coordinates rounded to its selected granularity.
 #[derive(Debug, Serialize)]
 struct VoyageResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<String>,
     id: Uuid,
     owner_id: Uuid,
     title: String,
@@ -282,6 +291,7 @@ impl VoyageResponse {
         let place_count = place_count(photos.iter().filter_map(|photo| photo.coordinate));
 
         Self {
+            revision: None,
             id: voyage.id,
             owner_id: voyage.owner_id,
             title: voyage.title,
@@ -326,7 +336,7 @@ impl From<Voyage> for VoyageSummary {
 // Create, update, delete
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CreateRequest {
     /// Optional draft title. Publishing requires a nonblank title.
     title: Option<String>,
@@ -342,44 +352,92 @@ async fn create(
     user: CurrentUser,
     Json(body): Json<CreateRequest>,
 ) -> Result<(StatusCode, Json<VoyageResponse>), Rejection> {
+    let mut tx = state.pool.begin().await?;
+    let response = create_in(&mut tx, user.user_id, body).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+async fn create_in(
+    connection: &mut sqlx::PgConnection,
+    owner: Uuid,
+    body: CreateRequest,
+) -> Result<VoyageResponse, Rejection> {
     let title = clean_title(body.title.as_deref())?;
     let description = clean_description(body.description.as_deref())?;
-    let granularity = match body.granularity.as_deref() {
-        Some(spelling) => parse_granularity(spelling)?,
-        None => Granularity::Km1,
-    };
-
-    let mut tx = state.pool.begin().await?;
-    crate::db::repo::users::require_active(&mut tx, user.user_id).await?;
+    let granularity = body
+        .granularity
+        .as_deref()
+        .map(parse_granularity)
+        .transpose()?
+        .unwrap_or(Granularity::Km1);
+    crate::db::repo::users::require_active(connection, owner).await?;
     let voyage = repo::create(
-        &mut *tx,
+        &mut *connection,
         &NewVoyage {
-            owner_id: user.user_id,
+            owner_id: owner,
             title,
             description,
             granularity: granularity.as_str().to_owned(),
         },
     )
     .await?;
-
-    tx.commit().await?;
-    tracing::Span::current().record("voyage.id", voyage.id.to_string());
-
-    // New voyages have no photos, so the response needs no photo query.
-    Ok((
-        StatusCode::CREATED,
-        Json(VoyageResponse::build(voyage, Vec::new())),
-    ))
+    let revision = super::mutations::revision(connection, voyage.id, None).await?;
+    let mut response = VoyageResponse::build(voyage, Vec::new());
+    response.revision = Some(revision.to_string());
+    Ok(response)
 }
 
-#[derive(Debug, Default, Deserialize)]
+async fn create_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Json(body): Json<CreateRequest>,
+) -> Result<Response, Rejection> {
+    if !super::mutations::conditional(&headers) {
+        return Ok(create(State(state), user, Json(body))
+            .await?
+            .into_response());
+    }
+    let payload = json!(body);
+    super::mutations::run(
+        &state,
+        user.user_id,
+        &headers,
+        super::mutations::Request {
+            method: "POST",
+            path: "/api/voyages".to_owned(),
+            payload,
+            requires_revision: false,
+        },
+        async move |connection, _| {
+            let response = create_in(connection, user.user_id, body).await?;
+            let revision = super::mutations::revision(connection, response.id, None).await?;
+            Ok(super::mutations::Outcome::json(
+                StatusCode::CREATED,
+                response.id,
+                response.id,
+                "voyage",
+                revision,
+                response,
+            )?)
+        },
+    )
+    .await
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct UpdateRequest {
     title: Option<String>,
     /// Three states, not two. Absent leaves the description alone; `null`
     /// clears it; a string sets it. A plain `Option<String>` cannot tell the
     /// first two apart, which would make "remove my description" impossible to
     /// express.
-    #[serde(default, deserialize_with = "present")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     description: Option<Option<String>>,
     granularity: Option<String>,
     published: Option<bool>,
@@ -410,10 +468,23 @@ async fn update(
     Json(body): Json<UpdateRequest>,
 ) -> Result<Json<VoyageResponse>, Rejection> {
     let mut tx = state.pool.begin().await?;
+    let response = update_in(&mut tx, id, user.user_id, body, None).await?;
+    tx.commit().await?;
+    Ok(Json(response))
+}
+
+async fn update_in(
+    connection: &mut sqlx::PgConnection,
+    id: Uuid,
+    owner: Uuid,
+    body: UpdateRequest,
+    expected: Option<i64>,
+) -> Result<VoyageResponse, Rejection> {
     // Hold the voyage lock through validation and update: title and publication
     // are one invariant even when two requests patch different fields.
-    lock_owned(&mut tx, id, user.user_id).await?;
-    let current = repo::find_by_id(&mut *tx, id)
+    lock_owned(connection, id, owner).await?;
+    super::mutations::revision(connection, id, expected).await?;
+    let current = repo::find_by_id(&mut *connection, id)
         .await?
         .ok_or(AppError::NotFound)?;
 
@@ -435,6 +506,9 @@ async fn update(
     let effective_title = title.as_deref().unwrap_or(&current.title);
     let effective_published = body.published.unwrap_or(current.published);
     publishable(effective_title, effective_published)?;
+    if effective_published {
+        crate::voyages::publication::ensure_eligible(connection, id).await?;
+    }
 
     let patch = VoyagePatch {
         title,
@@ -445,14 +519,54 @@ async fn update(
 
     // The lock above prevents concurrent deletion. Retain the repository's
     // ownership predicate and handle a missing row as 404.
-    let voyage = repo::update(&mut *tx, id, user.user_id, &patch)
+    let voyage = repo::update(&mut *connection, id, owner, &patch)
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let photos = repo::photos_for_voyage(&mut *tx, id).await?;
-    tx.commit().await?;
+    let photos = repo::photos_for_voyage(&mut *connection, id).await?;
+    let revision = super::mutations::revision(connection, id, None).await?;
+    let mut response = VoyageResponse::build(voyage, photos);
+    response.revision = Some(revision.to_string());
+    Ok(response)
+}
 
-    Ok(Json(VoyageResponse::build(voyage, photos)))
+async fn update_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateRequest>,
+) -> Result<Response, Rejection> {
+    if !super::mutations::conditional(&headers) {
+        return Ok(update(State(state), user, Path(id), Json(body))
+            .await?
+            .into_response());
+    }
+    let payload = json!(body);
+    super::mutations::run(
+        &state,
+        user.user_id,
+        &headers,
+        super::mutations::Request {
+            method: "PATCH",
+            path: format!("/api/voyages/{id}"),
+            payload,
+            requires_revision: true,
+        },
+        async move |connection, expected| {
+            let response = update_in(connection, id, user.user_id, body, expected).await?;
+            let revision = super::mutations::revision(connection, id, None).await?;
+            Ok(super::mutations::Outcome::json(
+                StatusCode::OK,
+                id,
+                id,
+                "voyage",
+                revision,
+                response,
+            )?)
+        },
+    )
+    .await
 }
 
 /// Deletes a voyage, owner only.
@@ -464,29 +578,69 @@ async fn destroy(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, Rejection> {
     let mut tx = state.pool.begin().await?;
-    lock_owned(&mut tx, id, user.user_id).await?;
+    destroy_in(&mut tx, id, user.user_id, None).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn destroy_in(
+    connection: &mut sqlx::PgConnection,
+    id: Uuid,
+    owner: Uuid,
+    expected: Option<i64>,
+) -> Result<i64, Rejection> {
+    lock_owned(connection, id, owner).await?;
+    let revision = super::mutations::revision(connection, id, expected).await?;
     let hashes: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT content_hash FROM photos WHERE voyage_id=$1 ORDER BY content_hash",
     )
     .bind(id)
-    .fetch_all(&mut *tx)
+    .fetch_all(&mut *connection)
     .await?;
     for hash in &hashes {
-        photos_repo::lock_content(&mut tx, hash).await?;
+        photos_repo::lock_content(connection, hash).await?;
     }
-    repo::delete(&mut *tx, id, user.user_id).await?;
+    repo::delete(&mut *connection, id, owner).await?;
     for hash in &hashes {
-        crate::photos::cleanup::schedule(&mut tx, hash).await?;
+        crate::photos::cleanup::schedule(connection, hash).await?;
     }
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(revision + 1)
+}
+
+async fn destroy_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, Rejection> {
+    if !super::mutations::conditional(&headers) {
+        return Ok(destroy(State(state), user, Path(id)).await?.into_response());
+    }
+    super::mutations::run(
+        &state,
+        user.user_id,
+        &headers,
+        super::mutations::Request {
+            method: "DELETE",
+            path: format!("/api/voyages/{id}"),
+            payload: json!(null),
+            requires_revision: true,
+        },
+        async move |connection, expected| {
+            let revision = destroy_in(connection, id, user.user_id, expected).await?;
+            Ok(super::mutations::Outcome::deleted(
+                id, id, "voyage", revision,
+            ))
+        },
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
 // Photos in a voyage
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct PhotoIdsRequest {
     photo_ids: Vec<Uuid>,
 }
@@ -513,6 +667,29 @@ async fn detach(
         .map_err(Rejection::App)
 }
 
+async fn detach_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((id, photo)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> Result<Response, Rejection> {
+    if !super::mutations::conditional(&headers) {
+        return Ok(detach(State(state), user, Path((id, photo)))
+            .await?
+            .into_response());
+    }
+    super::photos::destroy_with_headers(
+        &state,
+        user,
+        photo,
+        Some(id),
+        &headers,
+        format!("/api/voyages/{id}/photos/{photo}"),
+    )
+    .await
+    .map_err(Rejection::App)
+}
+
 /// Sets an explicit order (T4).
 ///
 /// Listed photos come first in request order. The repository ignores unknown
@@ -523,18 +700,116 @@ async fn reorder(
     Path(id): Path<Uuid>,
     Json(body): Json<PhotoIdsRequest>,
 ) -> Result<Json<VoyageResponse>, Rejection> {
-    let photo_ids = clean_photo_ids(body.photo_ids)?;
-
     let mut tx = state.pool.begin().await?;
-    lock_owned(&mut tx, id, user.user_id).await?;
-    let voyage = repo::find_by_id(&mut *tx, id)
+    let response = reorder_in(&mut tx, id, user.user_id, body, None, false).await?;
+    tx.commit().await?;
+    Ok(Json(response))
+}
+
+async fn reorder_in(
+    connection: &mut sqlx::PgConnection,
+    id: Uuid,
+    owner: Uuid,
+    body: PhotoIdsRequest,
+    expected: Option<i64>,
+    complete: bool,
+) -> Result<VoyageResponse, Rejection> {
+    lock_owned(connection, id, owner).await?;
+    super::mutations::revision(connection, id, expected).await?;
+    let photo_ids = if complete {
+        let actual: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM photos WHERE voyage_id=$1")
+            .bind(id)
+            .fetch_all(&mut *connection)
+            .await?;
+        if body.photo_ids.len() > 10_000
+            || body.photo_ids.len() != actual.len()
+            || body.photo_ids.iter().collect::<HashSet<_>>().len() != body.photo_ids.len()
+            || body.photo_ids.iter().copied().collect::<HashSet<_>>()
+                != actual.into_iter().collect()
+        {
+            return Err(AppError::BadRequest(
+                "The order must include every photo exactly once.".to_owned(),
+            )
+            .into());
+        }
+        body.photo_ids
+    } else {
+        clean_photo_ids(body.photo_ids)?
+    };
+    let voyage = repo::find_by_id(&mut *connection, id)
         .await?
         .ok_or(AppError::NotFound)?;
-    repo::reorder(&mut *tx, id, user.user_id, &photo_ids).await?;
-    let photos = repo::photos_for_voyage(&mut *tx, id).await?;
-    tx.commit().await?;
+    repo::reorder(&mut *connection, id, owner, &photo_ids).await?;
+    let photos = repo::photos_for_voyage(&mut *connection, id).await?;
+    let revision = super::mutations::revision(connection, id, None).await?;
+    let mut response = VoyageResponse::build(voyage, photos);
+    response.revision = Some(revision.to_string());
+    Ok(response)
+}
 
-    Ok(Json(VoyageResponse::build(voyage, photos)))
+async fn reorder_request(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(body): Json<PhotoIdsRequest>,
+) -> Result<Response, Rejection> {
+    if !super::mutations::conditional(&headers) {
+        return Ok(reorder(State(state), user, Path(id), Json(body))
+            .await?
+            .into_response());
+    }
+    reorder_operation(&state, user.user_id, id, &headers, body, false).await
+}
+
+async fn complete_order(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(body): Json<PhotoIdsRequest>,
+) -> Result<Response, Rejection> {
+    reorder_operation(&state, user.user_id, id, &headers, body, true).await
+}
+
+async fn reorder_operation(
+    state: &AppState,
+    owner: Uuid,
+    id: Uuid,
+    headers: &HeaderMap,
+    body: PhotoIdsRequest,
+    complete: bool,
+) -> Result<Response, Rejection> {
+    let payload = json!(body);
+    let path = if complete {
+        format!("/api/voyages/{id}/photo-order")
+    } else {
+        format!("/api/voyages/{id}/photos/order")
+    };
+    super::mutations::run(
+        state,
+        owner,
+        headers,
+        super::mutations::Request {
+            method: if complete { "PUT" } else { "PATCH" },
+            path,
+            payload,
+            requires_revision: true,
+        },
+        async move |connection, expected| {
+            let response = reorder_in(connection, id, owner, body, expected, complete).await?;
+            let revision = super::mutations::revision(connection, id, None).await?;
+            Ok(super::mutations::Outcome::json(
+                StatusCode::OK,
+                id,
+                id,
+                "voyage",
+                revision,
+                response,
+            )?)
+        },
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -550,10 +825,35 @@ async fn read(
     MaybeUser(user): MaybeUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<VoyageResponse>, Rejection> {
-    let voyage = visible(&state, user.as_ref(), id).await?;
-    let photos = repo::photos_for_voyage(&state.pool, id).await?;
-
-    Ok(Json(VoyageResponse::build(voyage, photos)))
+    let mut tx = state.pool.begin().await?;
+    let found: Option<Uuid> = sqlx::query_scalar("SELECT id FROM voyages WHERE id=$1 FOR SHARE")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    found.ok_or(AppError::NotFound)?;
+    let voyage = repo::find_by_id(&mut *tx, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let owner = user
+        .as_ref()
+        .is_some_and(|user| user.user_id == voyage.owner_id);
+    if !super::moderation::can_view(&mut *tx, user.as_ref().map(|user| user.user_id), id).await? {
+        return Err(AppError::NotFound.into());
+    }
+    let photos = repo::photos_for_voyage(&mut *tx, id).await?;
+    let revision = if owner {
+        Some(
+            super::mutations::revision(&mut tx, id, None)
+                .await?
+                .to_string(),
+        )
+    } else {
+        None
+    };
+    tx.commit().await?;
+    let mut response = VoyageResponse::build(voyage, photos);
+    response.revision = revision;
+    Ok(Json(response))
 }
 
 /// Returns map data with the same visibility and precision rules as voyage detail.
@@ -639,7 +939,13 @@ async fn list(
             .map(|value| repo::PublishedCursor::parse(value).ok_or_else(bad_cursor))
             .transpose()?;
 
-        repo::list_published(&state.pool, before, limit).await?
+        repo::list_published_visible(
+            &state.pool,
+            before,
+            limit,
+            user.as_ref().map(|user| user.user_id),
+        )
+        .await?
     };
 
     // A full page implies there may be more; a short one is the end. Cheaper
@@ -703,7 +1009,8 @@ async fn visible(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let readable = voyage.published || user.is_some_and(|user| user.user_id == voyage.owner_id);
+    let readable =
+        super::moderation::can_view(&state.pool, user.map(|user| user.user_id), id).await?;
 
     if !readable {
         return Err(AppError::NotFound.into());

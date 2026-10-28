@@ -20,6 +20,12 @@ import errorValidation from "../__fixtures__/error_validation.json";
 import publicProfile from "../__fixtures__/public_profile.json";
 import adminUsers from "../__fixtures__/admin_users.json";
 import adminUserDetail from "../__fixtures__/admin_user_detail.json";
+import nativeCapabilities from "../__fixtures__/native_capabilities.json";
+import nativeSession from "../__fixtures__/native_session_exchange.json";
+import nativeProcessing from "../__fixtures__/native_publication_processing.json";
+import nativePublished from "../__fixtures__/native_publication_published.json";
+import nativeManifest from "../__fixtures__/native_offline_manifest.json";
+import nativeRejected from "../__fixtures__/native_operation_rejected.json";
 import me from "../__fixtures__/me.json";
 import photo from "../__fixtures__/photo.json";
 import photoList from "../__fixtures__/photo_list.json";
@@ -36,6 +42,11 @@ import voyageUpdated from "../__fixtures__/voyage_updated.json";
 
 import type { ApiErrorBody } from "../client";
 import type {
+  NativeCapabilities,
+  NativeRejectedOperationReceipt,
+  NativeSessionExchange,
+  PublicationIntent,
+  OwnerOfflineManifest,
   AdminUserPage,
   AdminUserDetail,
   ApiError,
@@ -134,6 +145,12 @@ type Assert<T extends true> = T;
  * Exported so that `noUnusedLocals` does not delete the entire check.
  */
 export const assigned: {
+  nativeCapabilities: FromJson<NativeCapabilities>;
+  nativeRejected: FromJson<NativeRejectedOperationReceipt>;
+  nativeSession: FromJson<NativeSessionExchange>;
+  nativeProcessing: FromJson<PublicationIntent>;
+  nativePublished: FromJson<PublicationIntent>;
+  nativeManifest: FromJson<OwnerOfflineManifest>;
   adminUsers: FromJson<AdminUserPage>;
   adminUserDetail: FromJson<AdminUserDetail>;
   me: FromJson<Me>;
@@ -157,6 +174,12 @@ export const assigned: {
   // which accepts arbitrary codes and optional field errors.
   errorValidation: ApiErrorBody;
 } = {
+  nativeCapabilities,
+  nativeRejected,
+  nativeSession,
+  nativeProcessing,
+  nativePublished,
+  nativeManifest,
   adminUsers,
   adminUserDetail,
   me,
@@ -192,6 +215,12 @@ export type ContractHasNoExtraFields = [
   NoExtraFields<ExtraKeys<typeof adminUsers, AdminUserPage>>,
   NoExtraFields<ExtraKeys<typeof adminUserDetail, AdminUserDetail>>,
   NoExtraFields<ExtraKeys<typeof me, Me>>,
+  NoExtraFields<ExtraKeys<typeof nativeCapabilities, NativeCapabilities>>,
+  NoExtraFields<ExtraKeys<typeof nativeSession, NativeSessionExchange>>,
+  NoExtraFields<ExtraKeys<typeof nativeProcessing, PublicationIntent>>,
+  NoExtraFields<ExtraKeys<typeof nativePublished, PublicationIntent>>,
+  NoExtraFields<ExtraKeys<typeof nativeManifest, OwnerOfflineManifest>>,
+  NoExtraFields<ExtraKeys<typeof nativeRejected, NativeRejectedOperationReceipt>>,
   NoExtraFields<ExtraKeys<typeof publicProfile, PublicProfilePage>>,
   NoExtraFields<ExtraKeys<typeof photo, Photo>>,
   NoExtraFields<ExtraKeys<typeof photoList, PhotoList>>,

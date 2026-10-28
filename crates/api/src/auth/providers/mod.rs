@@ -22,8 +22,9 @@
 //! ## D1
 //!
 //! No access token or refresh token leaves these modules. The token response is
-//! consumed for its ID token, the ID token is verified for its subject, and both
-//! are dropped when `exchange` returns. [`VerifiedIdentity`] has nowhere to put
+//! consumed for its ID token and verified subject. Deletion-only Apple exchanges
+//! immediately revoke a fresh token after matching the expected subject. Tokens
+//! are dropped before exchange returns. [`VerifiedIdentity`] has nowhere to put
 //! a credential, which is the structural half of the guarantee.
 //!
 //! [`VerifiedIdentity`]: crate::auth::VerifiedIdentity

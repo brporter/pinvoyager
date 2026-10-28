@@ -33,3 +33,12 @@ dist/
 
 # CI coverage export
 /backend-coverage.lcov
+
+# Native build products, local signing state, and test reports
+/ios/.build*/
+/ios/.derivedData/
+/ios/.releaseDerivedData/
+/ios/TestResults/
+/ios/Scripts/__pycache__/
+**/xcuserdata/
+*.xcuserstate

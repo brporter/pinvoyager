@@ -16,8 +16,9 @@ use openidconnect::core::{
 };
 use openidconnect::{
     AuthType, AuthorizationCode, ClaimsVerificationError, ClientId, ClientSecret, CsrfToken,
-    EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, Scope, SignatureVerificationError, TokenResponse,
+    EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce, OAuth2TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, SignatureVerificationError,
+    TokenResponse,
 };
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
@@ -84,6 +85,7 @@ pub(crate) struct OidcCore {
     client_id: ClientId,
     secret: Arc<dyn ClientSecretSource>,
     redirect_uri: RedirectUrl,
+    revocation_url: Url,
     scopes: Vec<Scope>,
     /// Authorization-request parameters the OIDC spec does not model. Apple's
     /// `response_mode=form_post` is the only user today.
@@ -186,6 +188,10 @@ impl OidcCore {
     ) -> Result<Self, AuthError> {
         let common = microsoft_common(kind, issuer);
         let issuer = issuer_url(issuer)?;
+        let revocation_url = issuer
+            .url()
+            .join("/auth/revoke")
+            .map_err(|error| AuthError::Configuration(error.to_string()))?;
         let http = provider_http_client()?;
 
         let (metadata, microsoft_jwks) = if common {
@@ -201,6 +207,7 @@ impl OidcCore {
         Ok(Self {
             kind,
             client_id: ClientId::new(client_id.to_owned()),
+            revocation_url,
             secret,
             redirect_uri,
             scopes,
@@ -305,6 +312,28 @@ impl OidcCore {
         pkce_verifier: &str,
         nonce: &str,
     ) -> Result<VerifiedIdentity, AuthError> {
+        self.exchange_with_revocation(code, pkce_verifier, nonce, None)
+            .await
+    }
+
+    pub(crate) async fn exchange_for_deletion(
+        &self,
+        code: &str,
+        verifier: &str,
+        nonce: &str,
+        expected_subject: &str,
+    ) -> Result<VerifiedIdentity, AuthError> {
+        self.exchange_with_revocation(code, verifier, nonce, Some(expected_subject))
+            .await
+    }
+
+    async fn exchange_with_revocation(
+        &self,
+        code: &str,
+        pkce_verifier: &str,
+        nonce: &str,
+        revoke_subject: Option<&str>,
+    ) -> Result<VerifiedIdentity, AuthError> {
         let client = self.client(Some(self.secret.client_secret()?));
 
         let token_response = client
@@ -322,8 +351,8 @@ impl OidcCore {
             .map_err(|err| AuthError::Provider(format!("code exchange failed: {err}")))?;
 
         // D1: `token_response` also carries an access token, and possibly a
-        // refresh token. Neither is read, returned, or stored — both are dropped
-        // with this binding at the end of the function.
+        // refresh token. They remain in this function; deletion revokes a fresh
+        // token after verifying the expected subject, then drops both.
         let id_token = token_response.id_token().ok_or_else(|| {
             AuthError::TokenVerification("provider returned no ID token".to_owned())
         })?;
@@ -361,14 +390,47 @@ impl OidcCore {
             Err(err) => return Err(AuthError::TokenVerification(err.to_string())),
         };
 
-        Ok(VerifiedIdentity {
+        let identity = VerifiedIdentity {
             provider: self.kind,
             subject: claims.subject().as_str().to_owned(),
             avatar_url: claims
                 .picture()
                 .and_then(|picture| picture.get(None))
                 .map(|picture| picture.as_str().to_owned()),
-        })
+        };
+        if let Some(subject) = revoke_subject {
+            if self.kind != ProviderKind::Apple || subject != identity.subject {
+                return Err(AuthError::TokenVerification(
+                    "deletion subject mismatch".into(),
+                ));
+            }
+            let (token, hint) = match token_response.refresh_token() {
+                Some(token) => (token.secret().as_str(), "refresh_token"),
+                None => (
+                    token_response.access_token().secret().as_str(),
+                    "access_token",
+                ),
+            };
+            let secret = self.secret.client_secret()?;
+            let response = self
+                .http
+                .post(self.revocation_url.clone())
+                .form(&[
+                    ("client_id", self.client_id.as_str()),
+                    ("client_secret", secret.secret().as_str()),
+                    ("token", token),
+                    ("token_type_hint", hint),
+                ])
+                .send()
+                .await
+                .map_err(|_| AuthError::Provider("Apple revocation could not be reached".into()))?;
+            if response.status() != reqwest::StatusCode::OK {
+                return Err(AuthError::Provider(
+                    "Apple revocation was not confirmed".into(),
+                ));
+            }
+        }
+        Ok(identity)
     }
 
     /// Refetches the JWKS, at most once per [`JWKS_MIN_REFETCH_INTERVAL`].

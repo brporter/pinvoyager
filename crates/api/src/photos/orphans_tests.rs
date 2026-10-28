@@ -173,3 +173,20 @@ async fn orphan_cleanup_rechecks_references_and_file_age_after_waiting_for_the_l
         assert_eq!(path.exists(), action != "remove");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn non_unicode_and_root_paths_cannot_be_interpreted_as_content_hashes() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt as _};
+    let invalid = OsString::from_vec(vec![0xff, 0xfe]);
+    assert!(!is_shard(&invalid));
+    assert!(content_hash(Path::new("/storage"), Path::new("/"), "originals").is_none());
+    assert!(
+        content_hash(
+            Path::new("/storage"),
+            &Path::new("/storage/originals/aa/aa").join(invalid),
+            "originals"
+        )
+        .is_none()
+    );
+}

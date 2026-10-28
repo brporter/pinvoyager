@@ -1,5 +1,14 @@
 # Tests and coverage
 
+The native Swift package and Xcode project add domain, persistence, media,
+transport, synchronization, main-actor model, and simulator UI suites. Run
+`ios/Scripts/test.sh` with full Xcode selected; see [iOS setup](ios-running.md)
+for signed Keychain tests and complete production Swift coverage. The script
+requires at least 95% executable-line coverage across production Swift, including
+native adapters and UI. Physical-device/system acceptance remains unfinished.
+[Implementation status](ios-implementation.md) records test results and release
+requirements for the native client and implemented backend protocol.
+
 The backend has Rust unit tests, PostgreSQL-backed API integration tests, native
 image regression fixtures, and trace/export tests. Frontend tests use Vitest,
 Testing Library, jsdom, and a MapLibre substitute. JSON fixture contracts connect

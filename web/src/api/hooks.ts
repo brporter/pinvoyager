@@ -253,20 +253,25 @@ export function useCreateVoyage(
   });
 }
 
-export function useUpdateVoyage(id: string): UseMutationResult<Voyage, Error, UpdateVoyageInput> {
+export function useUpdateVoyage(
+  id: string,
+  revision?: string,
+): UseMutationResult<Voyage, Error, UpdateVoyageInput> {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (patch: UpdateVoyageInput) => updateVoyage(id, patch),
+    mutationFn: (patch: UpdateVoyageInput) =>
+      revision === undefined ? updateVoyage(id, patch) : updateVoyage(id, patch, { revision }),
     onSuccess: (voyage) => voyageChanged(client, voyage),
   });
 }
 
-export function useDeleteVoyage(): UseMutationResult<void, Error, string> {
+export function useDeleteVoyage(revision?: string): UseMutationResult<void, Error, string> {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteVoyage(id),
+    mutationFn: (id: string) =>
+      revision === undefined ? deleteVoyage(id) : deleteVoyage(id, { revision }),
     onSuccess: (_result, id) => {
       invalidatePublicViews(client);
       client.removeQueries({ queryKey: keys.voyages.detail(id) });

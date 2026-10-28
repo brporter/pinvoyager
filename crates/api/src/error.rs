@@ -33,6 +33,12 @@ pub enum AppError {
     #[error("conflict: {0}")]
     Conflict(String),
 
+    #[error("request rate limit reached")]
+    RateLimited { retry_after: u64 },
+
+    #[error("content revision changed")]
+    PreconditionFailed,
+
     /// A dependency is unavailable — most commonly pool acquisition timing
     /// out under load (D8). Distinct from `Internal` because it is retryable
     /// and should not page anyone on its own.
@@ -47,6 +53,18 @@ pub enum AppError {
 }
 
 impl AppError {
+    pub fn internal(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Internal(Box::new(error))
+    }
+
+    pub fn from_file(error: std::io::Error) -> Self {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            Self::NotFound
+        } else {
+            Self::internal(error)
+        }
+    }
+
     /// Status plus a stable machine-readable code.
     ///
     /// The codes are part of the API surface — clients are expected to branch
@@ -60,6 +78,8 @@ impl AppError {
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             AppError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             AppError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
+            AppError::PreconditionFailed => (StatusCode::PRECONDITION_FAILED, "revision_conflict"),
+            AppError::RateLimited { .. } => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
             AppError::ServiceUnavailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable")
             }
@@ -90,6 +110,12 @@ impl AppError {
             AppError::Unauthorized => "Authentication is required.",
             AppError::Forbidden => "You do not have access to this resource.",
             AppError::Conflict(msg) => msg,
+            AppError::RateLimited { .. } => {
+                "The daily report limit has been reached. Contact support for urgent concerns."
+            }
+            AppError::PreconditionFailed => {
+                "This voyage changed. Review the current version before saving."
+            }
             _ => match self.status_and_code().0 {
                 StatusCode::SERVICE_UNAVAILABLE => {
                     "The service is temporarily unavailable. Please try again."
@@ -131,11 +157,17 @@ impl IntoResponse for AppError {
             );
         }
 
-        (
+        let mut response = (
             status,
             Json(json!({ "code": code, "message": self.client_message() })),
         )
-            .into_response()
+            .into_response();
+        if let AppError::RateLimited { retry_after } = self {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, retry_after.into());
+        }
+        response
     }
 }
 

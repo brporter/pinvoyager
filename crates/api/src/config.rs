@@ -69,6 +69,9 @@ pub struct PhotosConfig {
     /// Maximum queued variant jobs. Uploads wait for capacity before saving a photo.
     pub variant_queue_depth: usize,
 
+    /// Maximum seconds an upload waits for image-processing capacity.
+    pub variant_queue_wait_secs: u64,
+
     /// Maximum concurrent image conversions on the blocking pool, independent
     /// of the number of queued jobs.
     pub variant_concurrency: usize,
@@ -146,8 +149,12 @@ pub struct ServerConfig {
     pub bind: SocketAddr,
     /// How long to let in-flight requests finish after a shutdown signal.
     pub shutdown_timeout_secs: u64,
-    /// Per-request timeout, including uploads and queue backpressure.
+    /// Deadline for requests other than photo uploads.
     pub request_timeout_secs: u64,
+    /// Deadline for receiving, validating, and accepting a photo upload.
+    pub upload_request_timeout_secs: u64,
+    /// Maximum inactivity while receiving upload body frames.
+    pub upload_body_idle_timeout_secs: u64,
 }
 
 /// Database connection settings. `SecretString` redacts the URL in Debug output.
@@ -255,6 +262,8 @@ impl Default for ServerConfig {
             // a stuck request does not hold up a restart indefinitely.
             shutdown_timeout_secs: 30,
             request_timeout_secs: 30,
+            upload_request_timeout_secs: 900,
+            upload_body_idle_timeout_secs: 90,
         }
     }
 }
@@ -269,6 +278,7 @@ impl Default for PhotosConfig {
             max_megapixels: 100,
             upload_rate_per_minute: 60,
             variant_queue_depth: 256,
+            variant_queue_wait_secs: 10,
             // Leave headroom: the blocking pool also serves file I/O, and
             // saturating every core with image work makes the service
             // unresponsive in exactly the way D8 warns about.

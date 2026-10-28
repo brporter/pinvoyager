@@ -5,6 +5,7 @@
 //! is async; CPU-heavy image work and blocking file operations use the blocking
 //! pool. Image handlers authorize requests and serve only re-encoded variants.
 
+pub mod accounts;
 pub mod auth;
 pub mod blocking;
 pub mod config;

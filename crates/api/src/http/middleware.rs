@@ -11,12 +11,16 @@ use std::time::Duration;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderValue, Request, StatusCode};
+use axum::{
+    extract::{MatchedPath, State},
+    middleware::{Next, from_fn_with_state},
+    response::{IntoResponse, Response},
+};
 use tower::ServiceBuilder;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{
     MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
 };
-use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::OnResponse;
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse, TraceLayer};
 use tracing::Level;
@@ -48,7 +52,7 @@ pub fn apply(router: Router, config: &ServerConfig) -> Router {
                 // INFO, not the DEBUG default: this is the access log, and it
                 // is the line that carries the request id, latency and status.
                 .on_response(
-                    |response: &axum::http::Response<tower_http::limit::ResponseBody<Body>>,
+                    |response: &axum::http::Response<Body>,
                      latency: Duration,
                      span: &tracing::Span| {
                         DefaultOnResponse::new()
@@ -69,9 +73,13 @@ pub fn apply(router: Router, config: &ServerConfig) -> Router {
             );
             response
         })
-        .layer(TimeoutLayer::with_status_code(
-            StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(config.request_timeout_secs),
+        .layer(from_fn_with_state(
+            Deadlines {
+                request: Duration::from_secs(config.request_timeout_secs),
+                upload: Duration::from_secs(config.upload_request_timeout_secs),
+                upload_idle: Duration::from_secs(config.upload_body_idle_timeout_secs),
+            },
+            timeout_request,
         ))
         .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_BYTES))
         // `RequestBodyLimit` hands its inner service a `Limited<Body>`, but
@@ -83,6 +91,48 @@ pub fn apply(router: Router, config: &ServerConfig) -> Router {
         .map_request(|req: Request<_>| req.map(Body::new));
 
     router.layer(stack)
+}
+
+#[derive(Clone, Copy)]
+struct Deadlines {
+    request: Duration,
+    upload: Duration,
+    upload_idle: Duration,
+}
+
+async fn timeout_request(
+    State(deadlines): State<Deadlines>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let upload = request.method() == axum::http::Method::POST
+        && request
+            .extensions()
+            .get::<MatchedPath>()
+            .is_some_and(|path| path.as_str() == "/api/voyages/{id}/photos");
+    let request = if upload {
+        request.map(|body| {
+            Body::new(tower_http::timeout::TimeoutBody::new(
+                deadlines.upload_idle,
+                body,
+            ))
+        })
+    } else {
+        request
+    };
+    match tokio::time::timeout(
+        if upload {
+            deadlines.upload
+        } else {
+            deadlines.request
+        },
+        next.run(request),
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(_) => StatusCode::REQUEST_TIMEOUT.into_response(),
+    }
 }
 
 /// Builds the per-request span.

@@ -1,0 +1,29 @@
+{
+  "configurations": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Tests",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": true
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:PinVoyager.xcodeproj",
+        "identifier": "3DC66ECB9B8BF859D6697FBD",
+        "name": "PinVoyagerTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:PinVoyager.xcodeproj",
+        "identifier": "02C39D37CED37712CBDD9283",
+        "name": "PinVoyagerUITests"
+      }
+    }
+  ],
+  "version": 1
+}

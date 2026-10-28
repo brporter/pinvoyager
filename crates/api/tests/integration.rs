@@ -149,6 +149,16 @@ async fn the_same_subject_under_a_different_provider_is_allowed() {
 /// check, and each exemption is checked for continued existence.
 const PERMITTED: &[(&str, &str)] = &[
     ("sessions", "token_hash"),
+    ("native_sessions", "token_hash"),
+    ("deletion_proofs", "token_hash"),
+    ("deletion_proofs", "subject_hash"),
+    ("account_deletions", "request_hash"),
+    ("account_deletions", "status_hash"),
+    ("account_deletions", "apple_subject_hash"),
+    ("account_deletions", "hashes"),
+    ("native_auth_attempts", "handoff_hash"),
+    ("native_operations", "request_hash"),
+    ("upload_receipts", "content_hash"),
     ("auth_attempts", "binding_hash"),
     ("photos", "content_hash"),
     ("photo_cleanup", "content_hash"),

@@ -83,6 +83,7 @@ function AdminContent({ id, actorId }: { id?: string; actorId: string }) {
     <section className="pv-admin pv-stack-4">
       <header>
         {id && <Link to="/admin">All users</Link>}
+        <Link to="/admin/reports">Content reports</Link>
         <h1 className="pv-h2">{id ? "User administration" : "Site administration"}</h1>
         <p className="pv-muted">
           Storage includes original uploads and generated images. Shared content counts once per

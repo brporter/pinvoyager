@@ -43,6 +43,19 @@ pub(crate) async fn sign_in(
     state: &AppState,
     identity: SignInIdentity<'_>,
 ) -> AppResult<(Uuid, SessionToken)> {
+    let mut tx = state.pool.begin().await?;
+    let user_id = resolve_identity(&mut tx, identity).await?;
+    let token = session::create(&mut *tx, user_id, &state.config.auth.session).await?;
+    tx.commit().await?;
+    Ok((user_id, token))
+}
+
+/// Applies account policy inside the caller's transaction. Native handoffs issue
+/// a session only after the app proves its own PKCE verifier.
+pub(crate) async fn resolve_identity(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    identity: SignInIdentity<'_>,
+) -> AppResult<Uuid> {
     #[cfg(debug_assertions)]
     let grant_admin = matches!(
         &identity,
@@ -64,26 +77,22 @@ pub(crate) async fn sign_in(
     };
     let provider = DbProvider::from(kind);
 
-    // Account creation, identity activity, promotion, and session insertion
-    // commit or roll back together. No provider calls occur in this transaction.
-    let mut tx = state.pool.begin().await?;
-
-    let user_id = match identities::find_by_provider_subject(&mut *tx, provider, subject).await? {
+    let user_id = match identities::find_by_provider_subject(&mut **tx, provider, subject).await? {
         Some(existing) => {
             // Acquire the write lock before checking status: concurrent
             // sign-ins must not both upgrade a shared lock to promote.
             sqlx::query("SELECT id FROM users WHERE id=$1 FOR UPDATE")
                 .bind(existing.user_id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
-            users::require_active(&mut tx, existing.user_id).await?;
+            users::require_active(tx, existing.user_id).await?;
             // Both sign-in paths update identity activity without overwriting
             // the account's chosen display name or avatar.
             sqlx::query!(
                 "UPDATE identities SET last_seen_at = now() WHERE id = $1",
                 existing.id,
             )
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             existing.user_id
@@ -92,9 +101,9 @@ pub(crate) async fn sign_in(
             // D2: the first sign-in *is* the signup. There is no separate
             // registration step to reach, which is why this is an insert rather
             // than a 404 pointing at one.
-            let user = users::create(&mut *tx, None, avatar_url).await?;
+            let user = users::create(&mut **tx, None, avatar_url).await?;
 
-            identities::create(&mut *tx, user.id, provider, subject)
+            identities::create(&mut **tx, user.id, provider, subject)
                 .await
                 .map_err(first_sign_in_identity_error)?;
 
@@ -105,12 +114,9 @@ pub(crate) async fn sign_in(
     #[cfg(debug_assertions)]
     if grant_admin {
         sqlx::query("UPDATE users SET is_site_admin=true,updated_at=now() WHERE id=$1 AND NOT is_site_admin")
-            .bind(user_id).execute(&mut *tx).await?;
+            .bind(user_id).execute(&mut **tx).await?;
     }
-    let token = session::create(&mut *tx, user_id, &state.config.auth.session).await?;
-
-    tx.commit().await?;
-    Ok((user_id, token))
+    Ok(user_id)
 }
 
 /// Roll back a colliding first sign-in and ask the caller to start again, allowing

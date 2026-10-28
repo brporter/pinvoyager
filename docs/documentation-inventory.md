@@ -1,6 +1,7 @@
 # Documentation inventory
 
-The documentation covers current architecture, implemented behavior, and operation.
+The documentation covers current architecture, implemented behavior, operation,
+and explicitly labeled proposals.
 Start with [architecture](architecture.md) and [running locally](running.md).
 
 ## Architecture
@@ -25,6 +26,14 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | [Voyage sharing](voyage-sharing.md) | Public URL copying, draft publication, errors, and dialog lifecycle. |
 | [Site administration](site-administration.md) | Administrator bootstrap, paged account/storage summaries, suspension, promotion, unpublishing, and account/data deletion. |
 | [Display names and profiles](display-names.md) | Name validation, unique claims, reservations, aliases, migration, and anonymous published-voyage profiles. |
+| [Native iOS implementation](ios-implementation.md) | Implemented native layers and server integration, local behavior, design review, test evidence, and required release acceptance. |
+| [Native API behavior](native-api.md) | Native provider handoff and sessions, conditional mutations and receipts, publication manifests, upload deadlines, owner downloads, moderation, and account deletion recovery. |
+
+## Proposed designs
+
+| Document | Purpose |
+| --- | --- |
+| [Native iOS application design](ios-app-design.md) | Reviewed implementation target for native screens, navigation, offline authoring, synchronization, proposed API extensions, and acceptance checks. See the implementation reference for current delivery status. |
 
 ## Operation and verification
 
@@ -32,6 +41,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | --- | --- |
 | [Production deployment](deployment.md) | GHCR publication, VM containers, Caddy routing, credentials, verification, persistence, and rollback. |
 | [Running locally](running.md) | Native dependencies, PostgreSQL, configuration, startup, development login, SQL metadata, and persistent container storage. |
+| [Running iOS](ios-running.md) | Xcode project, trusted origins, simulator signing, unit/UI tests, native coverage, storage/background configuration, and required device checks. |
 | [Testing](testing.md) | Backend/frontend commands, coverage scope, focused suites, native fixtures, and browser-test boundaries. |
 | [Backend coverage gaps](todo/coverage-gaps.md) | Dated coverage shortfall, untested failure paths, instrumentation uncertainty, and reproduction commands. |
 | [Tracing](tracing.md) | Collector/Jaeger setup, trace context, span meanings, configuration, and diagnostic commands. |
@@ -67,3 +77,5 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 
 Generated coverage, build output, dependencies, local traces, and benchmark outputs are
 generated files outside this documentation inventory.
+
+[Native API behavior](native-api.md) records implemented native server contracts and verification.
