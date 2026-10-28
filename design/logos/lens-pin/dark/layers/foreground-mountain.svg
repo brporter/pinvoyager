@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="foreground-mountain-title foreground-mountain-desc">
+  <title id="foreground-mountain-title">PinVoyager experiment — foreground mountain layer — dark</title>
+  <desc id="foreground-mountain-desc">A deeper purple nearer mountain with a rounded peak on the left.</desc>
+  <g id="foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#6f588c"/>
+  </g>
+</svg>

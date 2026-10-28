@@ -1,0 +1,231 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="sheet-title sheet-desc">
+<title id="sheet-title">PinVoyager — layered icon experiment</title>
+<desc id="sheet-desc">The assembled icon, its six separate SVG layers, and previews at small sizes.</desc>
+<rect width="1600" height="1120" fill="#f5f4f2"/>
+<g font-family="-apple-system, BlinkMacSystemFont, sans-serif" fill="#1b1817">
+<text x="72" y="73" font-size="15" font-weight="600" letter-spacing="3">PINVOYAGER / DESIGN EXPLORATION 01</text>
+<text x="72" y="153" font-size="60" font-weight="600" letter-spacing="-2">A lens. A horizon. A visited place.</text>
+<text x="74" y="200" font-size="22" fill="#57524d">A simpler mark in six independent vector layers.</text>
+<path d="M72 237H1528" stroke="#d9d6d2"/>
+<svg x="74" y="278" width="648" height="648" viewBox="0 0 1024 1024"><defs><clipPath id="hero-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#hero-tile)">
+  <g id="hero-sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+
+
+  <g id="hero-stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="hero-background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+
+
+  <g id="hero-foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+
+
+  <g id="hero-lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="hero-push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</g></svg>
+<text x="76" y="971" font-size="19" font-weight="600">Lens + horizon + push pin</text>
+<text x="76" y="1003" font-size="17" fill="#57524d">Warm sky, purple mountains, and a black camera lens.</text>
+<text x="76" y="1063" font-size="14" fill="#6e6963">EXPERIMENT / Current icon and image retained.</text>
+<rect x="828" y="278" width="80" height="80" rx="18" fill="#ebe9e6"/><svg x="828" y="278" width="80" height="80" viewBox="0 0 1024 1024"><defs><clipPath id="layer-0-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#layer-0-tile)">
+  <g id="layer-0-sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+</g></svg><text x="942" y="307" font-size="23" font-weight="600">01 / Sky</text><text x="942" y="337" font-size="17" fill="#57524d">A full-bleed warm cream background.</text><rect x="828" y="370" width="80" height="80" rx="18" fill="#ebe9e6"/><svg x="828" y="370" width="80" height="80" viewBox="0 0 1024 1024"><defs><clipPath id="layer-1-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#layer-1-tile)">
+  <g id="layer-1-stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+</g></svg><text x="942" y="399" font-size="23" font-weight="600">02 / Stars</text><text x="942" y="429" font-size="17" fill="#57524d">Five small stars on a transparent canvas.</text><rect x="828" y="462" width="80" height="80" rx="18" fill="#ebe9e6"/><svg x="828" y="462" width="80" height="80" viewBox="0 0 1024 1024"><defs><clipPath id="layer-2-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#layer-2-tile)">
+  <g id="layer-2-background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+</g></svg><text x="942" y="491" font-size="23" font-weight="600">03 / Background mountain</text><text x="942" y="521" font-size="17" fill="#57524d">Light lavender on the distant right peak.</text><rect x="828" y="554" width="80" height="80" rx="18" fill="#ebe9e6"/><svg x="828" y="554" width="80" height="80" viewBox="0 0 1024 1024"><defs><clipPath id="layer-3-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#layer-3-tile)">
+  <g id="layer-3-foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+</g></svg><text x="942" y="583" font-size="23" font-weight="600">04 / Foreground mountain</text><text x="942" y="613" font-size="17" fill="#57524d">Deeper purple on the nearer left peak.</text><rect x="828" y="646" width="80" height="80" rx="18" fill="#ebe9e6"/><svg x="828" y="646" width="80" height="80" viewBox="0 0 1024 1024"><defs><clipPath id="layer-4-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#layer-4-tile)">
+  <g id="layer-4-lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</g></svg><text x="942" y="675" font-size="23" font-weight="600">05 / Camera lens</text><text x="942" y="705" font-size="17" fill="#57524d">Black barrel, grey rim, and pale reflections.</text><rect x="828" y="738" width="80" height="80" rx="18" fill="#ebe9e6"/><svg x="828" y="738" width="80" height="80" viewBox="0 0 1024 1024"><defs><clipPath id="layer-5-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#layer-5-tile)">
+  <g id="layer-5-push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</g></svg><text x="942" y="767" font-size="23" font-weight="600">06 / Push pin</text><text x="942" y="797" font-size="17" fill="#57524d">A round head and pointed shaft mark a place.</text><path d="M828 852H1528" stroke="#d9d6d2"/><text x="828" y="895" font-size="14" letter-spacing="2">SMALL SIZE STUDIES</text><svg x="828" y="922.0" width="96" height="96" viewBox="0 0 1024 1024"><defs><clipPath id="small-96-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#small-96-tile)">
+  <g id="small-96-sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+
+
+  <g id="small-96-stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="small-96-background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+
+
+  <g id="small-96-foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+
+
+  <g id="small-96-lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="small-96-push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</g></svg><text x="876.0" y="1055" text-anchor="middle" font-size="15" fill="#57524d">96 px</text><svg x="1002" y="940.0" width="60" height="60" viewBox="0 0 1024 1024"><defs><clipPath id="small-60-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#small-60-tile)">
+  <g id="small-60-sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+
+
+  <g id="small-60-stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="small-60-background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+
+
+  <g id="small-60-foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+
+
+  <g id="small-60-lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="small-60-push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</g></svg><text x="1032.0" y="1055" text-anchor="middle" font-size="15" fill="#57524d">60 px</text><svg x="1146" y="950.0" width="40" height="40" viewBox="0 0 1024 1024"><defs><clipPath id="small-40-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#small-40-tile)">
+  <g id="small-40-sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+
+
+  <g id="small-40-stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="small-40-background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+
+
+  <g id="small-40-foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+
+
+  <g id="small-40-lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="small-40-push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</g></svg><text x="1166.0" y="1055" text-anchor="middle" font-size="15" fill="#57524d">40 px</text><svg x="1280" y="955.5" width="29" height="29" viewBox="0 0 1024 1024"><defs><clipPath id="small-29-tile"><rect width="1024" height="1024" rx="224"/></clipPath></defs><g clip-path="url(#small-29-tile)">
+  <g id="small-29-sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+
+
+  <g id="small-29-stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="small-29-background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+
+
+  <g id="small-29-foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+
+
+  <g id="small-29-lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="small-29-push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</g></svg><text x="1294.5" y="1055" text-anchor="middle" font-size="15" fill="#57524d">29 px</text></g></svg>

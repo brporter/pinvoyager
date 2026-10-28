@@ -62,7 +62,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 
 | Artifact | Purpose |
 | --- | --- |
-| [Logo concepts](../design/logos/README.md) | Three original single-color SVG proposals, comparison sheet, and web/print usage notes. |
+| [Logo concepts](../design/logos/README.md) | Original SVG proposals, the iOS material study, and the six-layer icon experiment with separate sources and daytime/sun-rays and nighttime/stars-and-moon color variations. |
 | [`config.toml`](../config.toml), [`.env.example`](../.env.example) | Configuration defaults and environment-variable reference. |
 | [`Dockerfile`](../Dockerfile), [`docker-compose.yml`](../docker-compose.yml) | API image recipe and local service definitions. |
 | [`dev/otel-collector.yaml`](../dev/otel-collector.yaml) | Development OTLP processing/export configuration. |

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="push-pin-title push-pin-desc">
+  <title id="push-pin-title">PinVoyager experiment — push pin layer</title>
+  <desc id="push-pin-desc">A simple round-headed orange map pin with a dark grey pointed shaft, marking a visited place inside the lens.</desc>
+  <g id="push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+</svg>

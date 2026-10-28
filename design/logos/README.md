@@ -1,5 +1,13 @@
 # PinVoyager logo concepts
 
+The [lens and push pin experiment](lens-pin/README.md) explores six separate
+SVG layers: sky, stars, background mountain, foreground mountain, camera lens,
+and a visible orange push pin. The [daytime/nighttime comparison](lens-pin/appearances.svg)
+adds a green daytime scene with a rayed sun and a purple nighttime scene with
+stars and a crescent moon. Daytime has six independent vector source layers;
+nighttime has seven. The experiment includes
+an assembled icon and a review sheet without replacing any existing artwork.
+
 The [iOS Liquid Glass icon proposal](ios-liquid/README.md) applies a new material
 treatment to the original Horizon Pin geometry, with default, dark, and clear
 studies and separate vector source layers.

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="moon-title moon-desc">
+  <title id="moon-title">PinVoyager experiment — crescent moon layer — dark</title>
+  <desc id="moon-desc">A pale warm crescent moon made from one filled path on a transparent canvas.</desc>
+  <g id="moon" transform="translate(644 268)">
+    <path d="M18-30A35 35 0 1 0 18 30A32 32 0 0 1 18-30Z" fill="#fff1c9"/>
+  </g>
+</svg>

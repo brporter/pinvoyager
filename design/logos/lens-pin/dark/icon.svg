@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="icon-title icon-desc">
+  <title id="icon-title">PinVoyager — dark scene</title>
+  <desc id="icon-desc">A deep navy nighttime sky, a crescent moon, and five pale stars above layered purple mountains, framed by a grey camera lens with an orange map pin.</desc>
+
+  <g id="sky">
+    <rect width="1024" height="1024" fill="#182039"/>
+  </g>
+
+
+  <g id="stars" fill="#eee9fa">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m512 230 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="moon" transform="translate(644 268)">
+    <path d="M18-30A35 35 0 1 0 18 30A32 32 0 0 1 18-30Z" fill="#fff1c9"/>
+  </g>
+
+
+  <g id="background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#a38dbf"/>
+  </g>
+
+
+  <g id="foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#6f588c"/>
+  </g>
+
+
+  <g id="lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#6e707c" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#adb0bc" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#b9bcc7" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#f5f4f2" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#e1dfdc"/>
+    <circle cy="-80" r="88" fill="#f27318"/>
+  </g>
+
+</svg>

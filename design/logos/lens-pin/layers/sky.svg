@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="sky-title sky-desc">
+  <title id="sky-title">PinVoyager experiment — sky layer</title>
+  <desc id="sky-desc">A solid warm cream sky filling the entire icon canvas.</desc>
+  <g id="sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+</svg>

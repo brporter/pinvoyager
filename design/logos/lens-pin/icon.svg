@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="icon-title icon-desc">
+  <title id="icon-title">PinVoyager — lens and push pin experiment</title>
+  <desc id="icon-desc">Softly rounded overlapping purple mountains sit beneath a warm cream sky and five stars behind a stylized black and grey camera lens, with a round-headed map pin marking a visited place inside the lens.</desc>
+
+  <g id="sky">
+    <rect width="1024" height="1024" fill="#ffedd5"/>
+  </g>
+
+
+  <g id="stars" fill="#8b6ba8">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m648 240 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+
+
+  <g id="background-mountain">
+    <path d="M0 714C116 710 228 768 352 702L650 462Q704 418 752 466L920 634Q966 680 1024 630V1024H0Z" fill="#bca7d4"/>
+  </g>
+
+
+  <g id="foreground-mountain">
+    <path d="M0 728Q78 708 140 648L274 508Q316 464 358 510L584 740Q634 786 696 760L862 694Q940 666 1024 714V1024H0Z" fill="#8b6ba8"/>
+  </g>
+
+
+  <g id="lens">
+    <circle cx="512" cy="512" r="380" fill="none" stroke="#1b1817" stroke-width="44"/>
+    <circle cx="512" cy="512" r="334" fill="none" stroke="#6e6963" stroke-width="12"/>
+    <path d="M240 385A300 300 0 0 1 460 216" fill="none" stroke="#bcb8b3" stroke-width="18" stroke-linecap="round"/>
+    <path d="M742 705A300 300 0 0 1 652 777" fill="none" stroke="#fafaf9" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+
+  <g id="push-pin" transform="translate(528 472) rotate(24)">
+    <path d="M-13-32H13L9 120 0 174-9 120Z" fill="#57524d"/>
+    <circle cy="-80" r="88" fill="#d95c09"/>
+  </g>
+
+</svg>
