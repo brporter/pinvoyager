@@ -5,15 +5,18 @@ public struct TransferSession: Equatable, Sendable {
   public let accountId: UUID
   public let generation: Int
   public let cellularException: Bool
+
   public init(accountId: UUID, generation: Int, cellularException: Bool = false) {
     self.accountId = accountId
     self.generation = generation
     self.cellularException = cellularException
   }
+
   public var identifier: String {
     "com.pinvoyager.upload.\(accountId.uuidString.lowercased()).\(generation)"
       + (cellularException ? ".cellular" : "")
   }
+
   public init?(identifier: String) {
     let parts = identifier.split(separator: ".", omittingEmptySubsequences: false)
     guard parts.count == 5 || (parts.count == 6 && parts[5] == "cellular"),
@@ -30,13 +33,17 @@ public struct BackgroundTransferRecovery: Sendable {
   private let store: any WorkspaceStore
   private let credentials: any CredentialStore
   private let driver: any TransferDriver
+
   public init(
-    store: any WorkspaceStore, credentials: any CredentialStore, driver: any TransferDriver
+    store: any WorkspaceStore,
+    credentials: any CredentialStore,
+    driver: any TransferDriver
   ) {
     self.store = store
     self.credentials = credentials
     self.driver = driver
   }
+
   public func restore() async throws {
     for accountId in try await store.accountIds() {
       let state = try await store.read(accountId: accountId)
@@ -47,7 +54,8 @@ public struct BackgroundTransferRecovery: Sendable {
         else { continue }
         await driver.configure(
           sessionIdentifier: identifier,
-          policy: state.policy.forUpload(cellularException: session.cellularException))
+          policy: state.policy.forUpload(cellularException: session.cellularException)
+        )
         for completion in try await driver.pendingCompletions(sessionIdentifier: identifier) {
           try await completed(completion)
         }
@@ -96,12 +104,14 @@ public struct BackgroundTransferRecovery: Sendable {
       }
     }
   }
+
   public func completed(_ descriptor: TransferDescriptor) async throws {
     try await completed(TransferCompletion(descriptor: descriptor))
   }
 
   public func completed(
-    _ completion: TransferCompletion, now: Date = Date(),
+    _ completion: TransferCompletion,
+    now: Date = Date(),
     randomUnit: Double = Double.random(in: 0...1)
   ) async throws {
     let descriptor = completion.descriptor
@@ -129,19 +139,24 @@ public struct BackgroundTransferRecovery: Sendable {
       // A successful HTTP response still needs its authoritative server receipt.
       state.operations[operation].state = .uncertain
       failure?.apply(
-        to: &state, operationId: descriptor.operationId, generation: descriptor.generation,
-        now: now, randomUnit: randomUnit)
+        to: &state,
+        operationId: descriptor.operationId,
+        generation: descriptor.generation,
+        now: now,
+        randomUnit: randomUnit
+      )
     }
     if failure?.disposition == .signIn {
       await cancel(accountId: descriptor.accountId, generation: descriptor.generation)
     }
     await driver.discardCompletion(completion)
   }
+
   public func cancel(operation: OutboxOperation) async {
     guard let state = try? await store.read(accountId: operation.accountId) else { return }
     for identifier in Set(
-      state.transfers.filter { $0.operationId == operation.id }.map(\.sessionIdentifier))
-    {
+      state.transfers.filter { $0.operationId == operation.id }.map(\.sessionIdentifier)
+    ) {
       guard TransferSession(identifier: identifier)?.accountId == operation.accountId else {
         continue
       }

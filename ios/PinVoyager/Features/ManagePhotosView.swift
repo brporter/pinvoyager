@@ -3,19 +3,42 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct ManagePhotosView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   let voyage: LocalVoyage
-  @State private var arrangement = PhotoArrangement(ids: [])
-  @State private var selecting = false
-  @State private var reordering = false
-  @State private var importing = false
-  @State private var removalConfirmation = false
-  @State private var removed: Set<UUID> = []
-  @State private var saving = false
-  @State private var error: String?
+
+  @State
+  private var arrangement = PhotoArrangement(ids: [])
+
+  @State
+  private var selecting = false
+
+  @State
+  private var reordering = false
+
+  @State
+  private var importing = false
+
+  @State
+  private var removalConfirmation = false
+
+  @State
+  private var removed: Set<UUID> = []
+
+  @State
+  private var saving = false
+
+  @State
+  private var error: String?
+
   private var photos: [LocalPhoto] { model.workspace?.photos(for: voyage.id) ?? [] }
+
   private var ids: [UUID] { photos.map(\.id) }
+
   private var armed: Bool {
     guard let state = model.workspace else { return false }
     return state.publicationIntents.contains {
@@ -32,7 +55,8 @@ struct ManagePhotosView: View {
           }
           if reordering {
             Text(
-              "Move photos, then save the complete order. New arrivals append to your arrangement.")
+              "Move photos, then save the complete order. New arrivals append to your arrangement."
+            )
           } else if selecting {
             Text("\(arrangement.selected.count) selected")
           }
@@ -52,7 +76,8 @@ struct ManagePhotosView: View {
                   .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.accessibilityLabel("Select \(photo.filename)")
                   .accessibilityValue(
-                    arrangement.selected.contains(id) ? "Selected" : "Not selected")
+                    arrangement.selected.contains(id) ? "Selected" : "Not selected"
+                  )
               }
               LocalPhotoImage(photo: photo).frame(width: 52, height: 52)
               Text(photo.filename)
@@ -62,7 +87,8 @@ struct ManagePhotosView: View {
                   arrangement.move(id, by: -1)
                 } label: {
                   Image(systemName: "arrow.up").frame(width: 44, height: 44).contentShape(
-                    Rectangle())
+                    Rectangle()
+                  )
                 }
                 .accessibilityLabel("Move \(photo.filename) earlier")
                 .disabled(arrangement.ids.first == id)
@@ -70,7 +96,8 @@ struct ManagePhotosView: View {
                   arrangement.move(id, by: 1)
                 } label: {
                   Image(systemName: "arrow.down").frame(width: 44, height: 44).contentShape(
-                    Rectangle())
+                    Rectangle()
+                  )
                 }
                 .accessibilityLabel("Move \(photo.filename) later")
                 .disabled(arrangement.ids.last == id)
@@ -88,7 +115,10 @@ struct ManagePhotosView: View {
               let order = arrangement.ids
               commit {
                 try await model.repository.reorder(
-                  accountId: voyage.ownerId, voyageId: voyage.id, photoIds: order)
+                  accountId: voyage.ownerId,
+                  voyageId: voyage.id,
+                  photoIds: order
+                )
                 reordering = false
               }
             }.disabled(saving || arrangement.ids == ids || armed)
@@ -128,7 +158,10 @@ struct ManagePhotosView: View {
               let ids = removed
               commit {
                 try await model.repository.undoPhotoRemovals(
-                  accountId: voyage.ownerId, voyageId: voyage.id, photoIds: ids)
+                  accountId: voyage.ownerId,
+                  voyageId: voyage.id,
+                  photoIds: ids
+                )
                 removed = []
               }
             }.disabled(saving)
@@ -139,13 +172,17 @@ struct ManagePhotosView: View {
       .sheet(isPresented: $importing) { PhotoImportView(voyage: voyage) }
       .confirmationDialog(
         "Remove \(arrangement.selected.count) photographs?",
-        isPresented: $removalConfirmation, titleVisibility: .visible
+        isPresented: $removalConfirmation,
+        titleVisibility: .visible
       ) {
         Button("Remove \(arrangement.selected.count) photographs", role: .destructive) {
           let selected = arrangement.selected
           commit {
             try await model.repository.removePhotos(
-              accountId: voyage.ownerId, voyageId: voyage.id, photoIds: selected)
+              accountId: voyage.ownerId,
+              voyageId: voyage.id,
+              photoIds: selected
+            )
             removed = selected
           }
         }

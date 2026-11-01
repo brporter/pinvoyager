@@ -4,7 +4,8 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class PhotoZoomTests: XCTestCase {
+@MainActor
+final class PhotoZoomTests: XCTestCase {
   func testZoomRequestsHigherResolutionOnlyOnce() {
     let coordinator = ZoomablePhoto.Coordinator()
     var requests = 0

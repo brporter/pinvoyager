@@ -1,17 +1,22 @@
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class AccountFlowTests: XCTestCase {
+@MainActor
+final class AccountFlowTests: XCTestCase {
   func testAccountNameMethodsBlockingExportAndHelp() throws {
     var fixture = try FixtureLaunch()
     fixture.workspace.blockedAccounts = [UUID()]
     fixture.workspace.voyages = [
       LocalVoyage(
         ownerId: fixture.workspace.account.id,
-        fields: VoyageFields(title: "Winter in Hokkaido", description: "Test voyage"))
+        fields: VoyageFields(title: "Winter in Hokkaido", description: "Test voyage")
+      )
     ]
     fixture.reply(
-      "/api/me", body: Data("{\"message\":\"That name is unavailable.\"}".utf8), status: 409)
+      "/api/me",
+      body: Data("{\"message\":\"That name is unavailable.\"}".utf8),
+      status: 409
+    )
     let app = try fixture.launch()
     app.buttons["Account"].tap()
     app.buttons["Change display name"].tap()
@@ -38,7 +43,8 @@ import XCTest
     app.buttons["Delete account"].tap()
     XCTAssertTrue(
       app.staticTexts["Verify a linked sign-in method before confirming deletion."]
-        .waitForExistence(timeout: 5))
+        .waitForExistence(timeout: 5)
+    )
     app.buttons["Verify with Google"].tap()
     XCTAssertTrue(app.staticTexts["This content is unavailable."].waitForExistence(timeout: 5))
     app.buttons["Export local work"].tap()
@@ -106,7 +112,10 @@ extension AccountFlowTests {
   func testStorageControlsRequireCleanupConsentAndOfferVoyageExportsAndDownloads() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
     ]
     app.launch()
     app.buttons["Account"].tap()
@@ -137,7 +146,8 @@ extension AccountFlowTests {
     app.buttons["Export local draft"].tap()
     app.staticTexts["Winter in Hokkaido"].tap()
     XCTAssertTrue(
-      app.staticTexts["Exact photo locations may be included."].waitForExistence(timeout: 5))
+      app.staticTexts["Exact photo locations may be included."].waitForExistence(timeout: 5)
+    )
     app.buttons["Prepare export of local work"].tap()
     XCTAssertTrue(app.buttons["Save export to Files"].waitForExistence(timeout: 5))
     app.buttons["Save export to Files"].tap()
@@ -156,7 +166,10 @@ extension AccountFlowTests {
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
       fields: VoyageFields(
-        title: "Scheduled before sign out", description: "This may publish independently"))
+        title: "Scheduled before sign out",
+        description: "This may publish independently"
+      )
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     var photo = LocalPhoto(voyageId: voyage.id, filename: "Scheduled photo")
@@ -187,14 +200,20 @@ extension AccountFlowTests {
       var fixture = try FixtureLaunch()
       var capabilities = try XCTUnwrap(
         try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("native_capabilities"))
-          as? [String: Any])
+          as? [String: Any]
+      )
       capabilities["native_protocol_versions"] = [1]
       fixture.reply(
-        "/api/client-capabilities", body: try JSONSerialization.data(withJSONObject: capabilities))
+        "/api/client-capabilities",
+        body: try JSONSerialization.data(withJSONObject: capabilities)
+      )
       var voyage = LocalVoyage(
         ownerId: fixture.workspace.account.id,
         fields: VoyageFields(
-          title: "Publication won the race", description: "Do not claim it stayed private"))
+          title: "Publication won the race",
+          description: "Do not claim it stayed private"
+        )
+      )
       voyage.serverId = UUID()
       voyage.revision = "7"
       var photo = LocalPhoto(voyageId: voyage.id, filename: "Reviewed photograph")
@@ -205,8 +224,11 @@ extension AccountFlowTests {
       intent.serverId = UUID()
       intent.status = .processing
       var publish = OutboxOperation(
-        accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-        kind: .publish(intentId: intent.id))
+        accountId: fixture.workspace.account.id,
+        generation: 0,
+        voyageId: voyage.id,
+        kind: .publish(intentId: intent.id)
+      )
       publish.state = .applied
       fixture.workspace.voyages = [voyage]
       fixture.workspace.photos = [photo]
@@ -215,16 +237,22 @@ extension AccountFlowTests {
       fixture.reply(
         "/api/voyages/\(voyage.serverId!)/publication-intents/\(intent.serverId!)",
         body: try JSONSerialization.data(withJSONObject: [
-          "id": intent.serverId!.uuidString, "status": "published", "revision": "7",
+          "id": intent.serverId!.uuidString,
+          "status": "published",
+          "revision": "7",
           "published": true,
-        ]))
+        ])
+      )
       fixture.reply(
         "/api/sync/operations/*",
         body: try JSONSerialization.data(withJSONObject: [
-          "status": "applied", "publication_intent_id": intent.serverId!.uuidString,
-          "publication_status": "published", "voyage_id": voyage.serverId!.uuidString,
+          "status": "applied",
+          "publication_intent_id": intent.serverId!.uuidString,
+          "publication_status": "published",
+          "voyage_id": voyage.serverId!.uuidString,
           "revision": "7",
-        ]))
+        ])
+      )
       fixture.reply("/api/voyages/\(voyage.serverId!)", body: Data("{\"published\":true}".utf8))
       fixture.reply("/auth/native/logout", body: Data(), status: 204)
       let app = try fixture.launch()

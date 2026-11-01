@@ -8,10 +8,12 @@ enum Fixtures {
       let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
       return root.appendingPathComponent(
-        name == "api" ? "web/src/api/__fixtures__" : "crates/api/tests/fixtures")
+        name == "api" ? "web/src/api/__fixtures__" : "crates/api/tests/fixtures"
+      )
     #else
       return Bundle(for: FixtureBundle.self).resourceURL!.appendingPathComponent(
-        name == "api" ? "__fixtures__" : "fixtures")
+        name == "api" ? "__fixtures__" : "fixtures"
+      )
     #endif
   }
 }

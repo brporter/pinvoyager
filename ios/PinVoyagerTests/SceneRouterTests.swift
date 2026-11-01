@@ -4,8 +4,12 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class SceneRouterTests: XCTestCase {
-  private func model(_ state: Workspace? = nil, transport: any HTTPTransport = StubHTTP([]))
+@MainActor
+final class SceneRouterTests: XCTestCase {
+  private func model(
+    _ state: Workspace? = nil,
+    transport: any HTTPTransport = StubHTTP([])
+  )
     async throws -> AppModel
   {
     let store = try CoreDataWorkspaceStore(url: nil)
@@ -13,13 +17,18 @@ import XCTest
     let credentials = TestCredentials()
     if let state {
       await credentials.save(
-        SessionCredential(accountId: state.account.id, token: "synthetic-route-session"))
+        SessionCredential(accountId: state.account.id, token: "synthetic-route-session")
+      )
     }
     let model = AppModel(
       store: store,
       client: APIClient(
         origin: try testOrigin(),
-        transport: transport, credentials: credentials), credentials: credentials)
+        transport: transport,
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state?.account.id)
     return model
   }
@@ -96,8 +105,11 @@ extension SceneRouterTests {
       var detail = try XCTUnwrap(
         try JSONSerialization.jsonObject(
           with: Data(
-            contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_detail.json")))
-          as? [String: Any])
+            contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_detail.json")
+          )
+        )
+          as? [String: Any]
+      )
       detail["owner_id"] = state.account.id.uuidString
       let remoteId = try XCTUnwrap(UUID(uuidString: try XCTUnwrap(detail["id"] as? String)))
       state.voyages[0].serverId = remoteId
@@ -112,7 +124,8 @@ extension SceneRouterTests {
       XCTAssertEqual(router.selectedTab, .voyages)
       XCTAssertEqual(router.voyagePath, [.localVoyage(state.voyages[0].id)])
       XCTAssertEqual(
-        router.ownerAction, importing ? .addPhotos(state.voyages[0].id) : .edit(state.voyages[0].id)
+        router.ownerAction,
+        importing ? .addPhotos(state.voyages[0].id) : .edit(state.voyages[0].id)
       )
       XCTAssertNil(model.error)
     }
@@ -131,15 +144,19 @@ extension SceneRouterTests {
       var detail = try XCTUnwrap(
         try JSONSerialization.jsonObject(
           with: Data(
-            contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_detail.json")))
-          as? [String: Any])
+            contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_detail.json")
+          )
+        )
+          as? [String: Any]
+      )
       detail["owner_id"] = (owned ? state.account.id : UUID()).uuidString
       let model = try await model(
         state,
         transport: StubHTTP([
           HTTPResponse(status: 200, body: try JSONSerialization.data(withJSONObject: detail)),
           HTTPResponse(status: 200, body: Data("{\"voyages\":[],\"next_before\":null}".utf8)),
-        ]))
+        ])
+      )
       await router.handle(URL(string: "https://pinvoyager.com/voyages/\(id)/edit")!, model: model)
       XCTAssertNotNil(model.error)
       XCTAssertNil(router.ownerAction)

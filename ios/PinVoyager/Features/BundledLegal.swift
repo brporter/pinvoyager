@@ -20,10 +20,17 @@ enum BundledLegal {
 }
 
 struct BundledLegalView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   let id: String
-  @State private var document: LegalDocument?
-  @State private var error: String?
+
+  @State
+  private var document: LegalDocument?
+
+  @State
+  private var error: String?
+
   var body: some View {
     ScrollView {
       if let document {

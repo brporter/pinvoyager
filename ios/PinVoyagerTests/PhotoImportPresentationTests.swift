@@ -8,6 +8,7 @@ import XCTest
 private struct PresentationPhotoSource: PhotoAcquiring {
   let filename: String
   let bytes: Data?
+
   func acquire() throws -> URL {
     guard let bytes else { throw FileVaultError.missingSource }
     let file = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -17,7 +18,8 @@ private struct PresentationPhotoSource: PhotoAcquiring {
   }
 }
 
-@MainActor final class PhotoImportPresentationTests: XCTestCase {
+@MainActor
+final class PhotoImportPresentationTests: XCTestCase {
   func testImportProgressKeepsFailuresAndReportsSavedOnlyAfterTheLocalCopyIsDurable() async throws {
     let state = workspaceWithPhotos()
     let store = try CoreDataWorkspaceStore(url: nil)
@@ -38,8 +40,12 @@ private struct PresentationPhotoSource: PhotoAcquiring {
     ]
     var changes = 0
     await presentation.importPhotos(
-      sources, accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 1_000_000,
-      publicConsent: false, cellularException: true
+      sources,
+      accountId: state.account.id,
+      voyageId: state.voyages[0].id,
+      maxBytes: 1_000_000,
+      publicConsent: false,
+      cellularException: true
     ) {
       XCTAssertTrue(presentation.preparing)
       changes += 1
@@ -52,11 +58,16 @@ private struct PresentationPhotoSource: PhotoAcquiring {
     XCTAssertTrue(
       saved.photos.contains {
         $0.filename == "Saved.jpg" && $0.source != nil && $0.cellularException == true
-      })
+      }
+    )
     XCTAssertTrue(
-      saved.photos.contains { $0.filename == "Unavailable.jpg" && $0.transfer == .needsSource })
+      saved.photos.contains { $0.filename == "Unavailable.jpg" && $0.transfer == .needsSource }
+    )
     await presentation.importPhotos(
-      [], accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 1,
+      [],
+      accountId: state.account.id,
+      voyageId: state.voyages[0].id,
+      maxBytes: 1,
       publicConsent: false
     ) {}
     XCTAssertEqual(presentation.failures.count, 1)
@@ -71,7 +82,8 @@ extension PhotoImportPresentationTests {
     let root = try temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }
     let presentation = PhotoImportPresentation(
-      service: PhotoImportService(store: store, vault: try FileVault(root: root)))
+      service: PhotoImportService(store: store, vault: try FileVault(root: root))
+    )
     let bytes = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).jpegData(
       withCompressionQuality: 0.8
     ) {
@@ -85,13 +97,20 @@ extension PhotoImportPresentationTests {
       [
         PresentationPhotoSource(filename: "Keep.jpg", bytes: bytes),
         PresentationPhotoSource(filename: "Skipped.jpg", bytes: bytes),
-      ], accountId: account, voyageId: voyage, maxBytes: 1_000_000, publicConsent: false
+      ],
+      accountId: account,
+      voyageId: voyage,
+      maxBytes: 1_000_000,
+      publicConsent: false
     ) {
       if !stopped {
         stopped = true
         await presentation.importPhotos(
-          [PresentationPhotoSource(filename: "Concurrent.jpg", bytes: bytes)], accountId: account,
-          voyageId: voyage, maxBytes: 1_000_000, publicConsent: false
+          [PresentationPhotoSource(filename: "Concurrent.jpg", bytes: bytes)],
+          accountId: account,
+          voyageId: voyage,
+          maxBytes: 1_000_000,
+          publicConsent: false
         ) {}
         await presentation.stop()
       }
@@ -99,7 +118,8 @@ extension PhotoImportPresentationTests {
     let saved = try await store.read(accountId: account)
     XCTAssertTrue(saved.photos.contains { $0.filename == "Keep.jpg" && $0.source != nil })
     XCTAssertTrue(
-      saved.photos.contains { $0.filename == "Skipped.jpg" && $0.transfer == .needsSource })
+      saved.photos.contains { $0.filename == "Skipped.jpg" && $0.transfer == .needsSource }
+    )
     XCTAssertFalse(saved.photos.contains { $0.filename == "Concurrent.jpg" })
     XCTAssertEqual(presentation.failures.count, 1)
     XCTAssertFalse(presentation.preparing)
@@ -113,10 +133,13 @@ extension PhotoImportPresentationTests {
     let root = try temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }
     let presentation = PhotoImportPresentation(
-      service: PhotoImportService(store: store, vault: try FileVault(root: root)))
+      service: PhotoImportService(store: store, vault: try FileVault(root: root))
+    )
     await presentation.importPhotos(
       [PresentationPhotoSource(filename: "No consent.jpg", bytes: nil)],
-      accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 1_000_000,
+      accountId: state.account.id,
+      voyageId: state.voyages[0].id,
+      maxBytes: 1_000_000,
       publicConsent: false
     ) {}
     XCTAssertFalse(presentation.preparing)

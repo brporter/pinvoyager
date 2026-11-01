@@ -15,14 +15,17 @@ struct AppEnvironment: Sendable {
   var transfers: SystemTransferDriver
   var activeAccountId: UUID?
 
-  @MainActor static func system(testing: Bool) throws -> Self {
+  @MainActor
+  static func system(testing: Bool) throws -> Self {
     guard
       let apiURL = URL(
         string: Bundle.main.object(forInfoDictionaryKey: "PinVoyagerAPIOrigin") as? String
-          ?? "https://pinvoyager.com"),
+          ?? "https://pinvoyager.com"
+      ),
       let webURL = URL(
         string: Bundle.main.object(forInfoDictionaryKey: "PinVoyagerWebOrigin") as? String
-          ?? "https://pinvoyager.com")
+          ?? "https://pinvoyager.com"
+      )
     else { throw OriginError.invalid }
     let directory =
       testing
@@ -33,23 +36,31 @@ struct AppEnvironment: Sendable {
       let transport: any HTTPTransport = URLSessionTransport()
     #endif
     return Self(
-      testing: testing, directory: directory,
+      testing: testing,
+      directory: directory,
       cacheDirectory: testing
         ? directory.appendingPathComponent("cache")
         : URL.cachesDirectory.appendingPathComponent("PinVoyager/images"),
-      apiURL: apiURL, webURL: webURL,
+      apiURL: apiURL,
+      webURL: webURL,
       credentials: KeychainCredentialStore(
         service: testing
-          ? "com.pinvoyager.ui-test.sessions.\(UUID())" : "com.pinvoyager.native.sessions"),
+          ? "com.pinvoyager.ui-test.sessions.\(UUID())" : "com.pinvoyager.native.sessions"
+      ),
       deletionRecovery: KeychainDeletionRecoveryStore(
         service: testing
-          ? "com.pinvoyager.ui-test.deletions.\(UUID())" : "com.pinvoyager.native.deletions"),
+          ? "com.pinvoyager.ui-test.deletions.\(UUID())" : "com.pinvoyager.native.deletions"
+      ),
       preferences: UserDefaultsDevicePreferences(
         suiteName: testing
           ? ProcessInfo.processInfo.environment["PINVOYAGER_TEST_PREFERENCES"]
-            ?? "com.pinvoyager.ui-test.preferences.\(UUID())" : nil),
-      transport: transport, transfers: .shared,
+            ?? "com.pinvoyager.ui-test.preferences.\(UUID())" : nil
+      ),
+      transport: transport,
+      transfers: .shared,
       activeAccountId: UserDefaults.standard.string(forKey: "activeAccountId").flatMap(
-        UUID.init(uuidString:)))
+        UUID.init(uuidString:)
+      )
+    )
   }
 }

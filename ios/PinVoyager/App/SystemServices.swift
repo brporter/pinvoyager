@@ -8,6 +8,7 @@ import UserNotifications
 @MainActor
 final class NetworkObserver {
   private let monitor = NWPathMonitor()
+
   init(changed: @escaping @MainActor (NetworkState) -> Void) {
     monitor.pathUpdateHandler = { path in
       let state: NetworkState =
@@ -19,6 +20,7 @@ final class NetworkObserver {
     }
     monitor.start(queue: DispatchQueue(label: "com.pinvoyager.network"))
   }
+
   deinit { monitor.cancel() }
 }
 
@@ -27,20 +29,24 @@ final class SystemTransferDriver: NSObject, TransferDriver {
   static let shared = SystemTransferDriver()
   var onCompletion: (@Sendable (TransferCompletion) async throws -> Void)?
   private let evidence: TransferEvidenceFiles
+
   init(evidenceRoot: URL = AppBootstrap.directory.appendingPathComponent("files")) {
     evidence = TransferEvidenceFiles(root: evidenceRoot)
     super.init()
   }
+
   func pendingCompletions(sessionIdentifier: String) async throws -> [TransferCompletion] {
     let evidence = evidence
     return try await Task.detached {
       try evidence.completions(sessionIdentifier: sessionIdentifier)
     }.value
   }
+
   func discardCompletion(_ completion: TransferCompletion) async {
     let evidence = evidence
     await Task.detached { evidence.discard(completion) }.value
   }
+
   private var sessions: [String: URLSession] = [:]
   private var handlers: [String: [() -> Void]] = [:]
   private var finishedBatches: Set<String> = []
@@ -52,7 +58,9 @@ final class SystemTransferDriver: NSObject, TransferDriver {
   }
 
   func reconnect(
-    _ identifier: String, policy: SyncPolicy = SyncPolicy(), completion: (() -> Void)? = nil
+    _ identifier: String,
+    policy: SyncPolicy = SyncPolicy(),
+    completion: (() -> Void)? = nil
   ) {
     guard TransferSession(identifier: identifier) != nil else {
       completion?()
@@ -84,7 +92,8 @@ final class SystemTransferDriver: NSObject, TransferDriver {
     let delegate = TransferDelegate(
       evidence: evidence,
       completed: { [weak self] descriptor in self?.completed(descriptor, identifier: identifier) },
-      finished: { [weak self] in self?.finished(identifier) })
+      finished: { [weak self] in self?.finished(identifier) }
+    )
     let queue = OperationQueue()
     queue.maxConcurrentOperationCount = 1
     queue.name = "com.pinvoyager.transfer-events"
@@ -104,7 +113,10 @@ final class SystemTransferDriver: NSObject, TransferDriver {
   }
 
   func createSuspended(
-    sessionIdentifier: String, request: URLRequest, body: URL, descriptor: TransferDescriptor,
+    sessionIdentifier: String,
+    request: URLRequest,
+    body: URL,
+    descriptor: TransferDescriptor,
     policy: SyncPolicy
   ) async throws -> SystemTransfer {
     let task = session(sessionIdentifier, policy: policy).uploadTask(with: request, fromFile: body)
@@ -137,7 +149,8 @@ final class SystemTransferDriver: NSObject, TransferDriver {
         do { try await callback?(completion) } catch {
           // The durable evidence remains available for foreground receipt reconciliation.
         }
-      })
+      }
+    )
   }
 
   private func finished(_ identifier: String) {
@@ -167,7 +180,6 @@ final class SystemTransferDriver: NSObject, TransferDriver {
       finishedBatches.insert(identifier)
     }
   }
-
 }
 
 struct TransferEvidenceRecord: Codable {
@@ -179,11 +191,13 @@ struct TransferEvidenceRecord: Codable {
 
 struct TransferEvidenceFiles: Sendable {
   let root: URL
+
   func url(_ descriptor: TransferDescriptor, taskId: Int) -> URL {
     root.appendingPathComponent(
       "\(descriptor.accountId)/transfer-evidence/\(descriptor.generation)/\(descriptor.cellularException ? "cellular/" : "")\(descriptor.operationId)/\(taskId)"
     )
   }
+
   func completions(sessionIdentifier: String) throws -> [TransferCompletion] {
     guard let session = TransferSession(identifier: sessionIdentifier) else { return [] }
     let directory = root.appendingPathComponent(
@@ -192,16 +206,20 @@ struct TransferEvidenceFiles: Sendable {
     guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
     var results: [TransferCompletion] = []
     for operation in try FileManager.default.contentsOfDirectory(
-      at: directory, includingPropertiesForKeys: nil)
-    {
+      at: directory,
+      includingPropertiesForKeys: nil
+    ) {
       guard let id = UUID(uuidString: operation.lastPathComponent) else { continue }
       for file in try FileManager.default.contentsOfDirectory(
-        at: operation, includingPropertiesForKeys: nil)
-      {
+        at: operation,
+        includingPropertiesForKeys: nil
+      ) {
         guard file.pathExtension == "json",
           let taskId = Int(file.deletingPathExtension().lastPathComponent), taskId > 0,
           let record = try? APIJSON.decoder().decode(
-            TransferEvidenceRecord.self, from: read(file, limit: 16384))
+            TransferEvidenceRecord.self,
+            from: read(file, limit: 16384)
+          )
         else { continue }
         var headers: [String: String] = [:]
         headers["x-request-id"] = record.requestId
@@ -211,21 +229,28 @@ struct TransferEvidenceFiles: Sendable {
           TransferCompletion(
             descriptor: TransferDescriptor(
               accountId: session.accountId,
-              generation: session.generation, operationId: id,
-              cellularException: session.cellularException), taskId: taskId,
+              generation: session.generation,
+              operationId: id,
+              cellularException: session.cellularException
+            ),
+            taskId: taskId,
             response: record.status > 0
               ? HTTPResponse(status: record.status, headers: headers, body: body) : nil,
-            transportError: record.transportError.flatMap { URLError.Code(rawValue: $0) }))
+            transportError: record.transportError.flatMap { URLError.Code(rawValue: $0) }
+          )
+        )
       }
     }
     return results
   }
+
   func discard(_ completion: TransferCompletion) {
     guard let id = completion.taskId else { return }
     let path = url(completion.descriptor, taskId: id)
     try? FileManager.default.removeItem(at: path.appendingPathExtension("json"))
     try? FileManager.default.removeItem(at: path)
   }
+
   private func read(_ url: URL, limit: Int) throws -> Data {
     let file = try FileHandle(forReadingFrom: url)
     defer { try? file.close() }
@@ -237,6 +262,7 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, @unchecked Senda
   let completed: @MainActor @Sendable (TransferCompletion) -> Void
   let finished: @MainActor @Sendable () -> Void
   let evidence: TransferEvidenceFiles
+
   init(
     evidence: TransferEvidenceFiles,
     completed: @escaping @MainActor @Sendable (TransferCompletion) -> Void,
@@ -246,17 +272,21 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, @unchecked Senda
     self.completed = completed
     self.finished = finished
   }
+
   private func evidenceURL(_ task: URLSessionTask) -> URL? {
     guard let value = task.taskDescription, let descriptor = TransferDescriptor(rawValue: value)
     else { return nil }
     return evidence.url(descriptor, taskId: task.taskIdentifier)
   }
+
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     guard let url = evidenceURL(dataTask) else { return }
     do {
       try FileManager.default.createDirectory(
-        at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true,
+        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+      )
       if !FileManager.default.fileExists(atPath: url.path) {
         FileManager.default.createFile(atPath: url.path, contents: nil)
       }
@@ -268,8 +298,11 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, @unchecked Senda
       // The receipt, rather than this diagnostic response body, determines acceptance.
     }
   }
+
   func urlSession(
-    _ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?
+    _ session: URLSession,
+    task: URLSessionTask,
+    didCompleteWithError error: (any Error)?
   ) {
     guard let value = task.taskDescription, let descriptor = TransferDescriptor(rawValue: value)
     else { return }
@@ -282,19 +315,24 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, @unchecked Senda
         requestId: response?.value(forHTTPHeaderField: "x-request-id"),
         retryAfter: response?.value(forHTTPHeaderField: "Retry-After"),
         transportError: (error as? URLError)?.code.rawValue
-          ?? (error == nil ? nil : URLError.unknown.rawValue))
+          ?? (error == nil ? nil : URLError.unknown.rawValue)
+      )
       do {
         try FileManager.default.createDirectory(
-          at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+          at: url.deletingLastPathComponent(),
+          withIntermediateDirectories: true
+        )
         try APIJSON.encode(record).write(
           to: url.appendingPathExtension("json"),
-          options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+          options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
       } catch {
         // A missing receipt still leaves the operation uncertain in the outbox.
       }
     }
     let result = TransferCompletion(
-      descriptor: descriptor, taskId: task.taskIdentifier,
+      descriptor: descriptor,
+      taskId: task.taskIdentifier,
       response: response.map { response in
         HTTPResponse(
           status: response.statusCode,
@@ -302,10 +340,16 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, @unchecked Senda
             response.allHeaderFields.map {
               (String(describing: $0.key), String(describing: $0.value))
             },
-            uniquingKeysWith: { _, new in new }), body: body)
-      }, transportError: (error as? URLError)?.code ?? (error == nil ? nil : .unknown))
+            uniquingKeysWith: { _, new in new }
+          ),
+          body: body
+        )
+      },
+      transportError: (error as? URLError)?.code ?? (error == nil ? nil : .unknown)
+    )
     DispatchQueue.main.async { self.completed(result) }
   }
+
   func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
     DispatchQueue.main.async { self.finished() }
   }
@@ -314,6 +358,7 @@ final class TransferDelegate: NSObject, URLSessionDataDelegate, @unchecked Senda
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   var bootstrap: AppBootstrap { .shared }
+
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -325,8 +370,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
     return true
   }
+
   func application(
-    _ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+    _ application: UIApplication,
+    handleEventsForBackgroundURLSession identifier: String,
     completionHandler: @escaping () -> Void
   ) {
     Task {
@@ -341,10 +388,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         policy = SyncPolicy()
       }
       SystemTransferDriver.shared.reconnect(
-        identifier, policy: policy, completion: completionHandler)
+        identifier,
+        policy: policy,
+        completion: completionHandler
+      )
       await bootstrap.model?.activate()
     }
   }
+
   nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification
@@ -361,6 +412,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
       // Foreground and URLSession reconciliation remain available when iOS declines scheduling.
     }
   }
+
   private func process(_ task: BGTask) {
     let work = Task {
       await bootstrap.start()

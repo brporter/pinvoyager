@@ -17,16 +17,22 @@ private func storageFixture() async throws -> (CoreDataWorkspaceStore, FileVault
     let path = "downloads/\(photo.id)/display-\(hash).webp"
     try await vault.write(bytes, relativePath: path, accountId: state.account.id)
     try await vault.write(
-      Data(repeating: 65, count: 10), relativePath: photo.source!.relativePath,
-      accountId: state.account.id)
+      Data(repeating: 65, count: 10),
+      relativePath: photo.source!.relativePath,
+      accountId: state.account.id
+    )
     state.photos[index].offlineCopy = OfflinePhotoCopy(
-      revision: "7", variants: ["display": path], byteCount: Int64(bytes.count))
+      revision: "7",
+      variants: ["display": path],
+      byteCount: Int64(bytes.count)
+    )
   }
   try await store.insert(state)
   return (store, vault, state)
 }
 
-@Test func originalCleanupRequiresReadyAcceptedPhotosAndVerifiedOwnerFiles() async throws {
+@Test
+func originalCleanupRequiresReadyAcceptedPhotosAndVerifiedOwnerFiles() async throws {
   let (store, vault, state) = try await storageFixture()
   let root = await vault.root
   defer { try? FileManager.default.removeItem(at: root) }
@@ -37,8 +43,10 @@ private func storageFixture() async throws -> (CoreDataWorkspaceStore, FileVault
     current.photos[current.photos.firstIndex { $0.id == failed }!].variant = .failed
   }
   try await vault.write(
-    Data("damaged".utf8), relativePath: state.photos[2].offlineCopy!.variants["display"]!,
-    accountId: account)
+    Data("damaged".utf8),
+    relativePath: state.photos[2].offlineCopy!.variants["display"]!,
+    accountId: account
+  )
   let storage = StorageManager(store: store, vault: vault)
   let before = try await storage.breakdown(accountId: account)
   #expect(before.keptOriginals == 20)
@@ -53,11 +61,13 @@ private func storageFixture() async throws -> (CoreDataWorkspaceStore, FileVault
     try await vault.read(state.photos[0].source!.relativePath, accountId: account)
   }
   #expect(
-    try await vault.read(state.photos[1].source!.relativePath, accountId: account).count == 10)
+    try await vault.read(state.photos[1].source!.relativePath, accountId: account).count == 10
+  )
   #expect(try await storage.removeUploadedOriginals(accountId: account) == 0)
 }
 
-@Test func cleanupNeverDeletesSharedSourcesNeededByPendingOrUncertainWork() async throws {
+@Test
+func cleanupNeverDeletesSharedSourcesNeededByPendingOrUncertainWork() async throws {
   let (store, vault, state) = try await storageFixture()
   let root = await vault.root
   defer { try? FileManager.default.removeItem(at: root) }
@@ -68,8 +78,11 @@ private func storageFixture() async throws -> (CoreDataWorkspaceStore, FileVault
     pending.source = state.photos[0].source
     current.photos.append(pending)
     var uncertain = OutboxOperation(
-      accountId: account, generation: 0, voyageId: state.voyages[0].id,
-      kind: .upload(photoId: state.photos[1].id, publicConsent: false))
+      accountId: account,
+      generation: 0,
+      voyageId: state.voyages[0].id,
+      kind: .upload(photoId: state.photos[1].id, publicConsent: false)
+    )
     uncertain.state = .uncertain
     current.operations.append(uncertain)
   }
@@ -82,13 +95,16 @@ private func storageFixture() async throws -> (CoreDataWorkspaceStore, FileVault
   }
 }
 
-@Test func voyageExportListsMissingOriginalsAndIncludesOnlyTheSelectedVoyage() async throws {
+@Test
+func voyageExportListsMissingOriginalsAndIncludesOnlyTheSelectedVoyage() async throws {
   let (store, vault, initial) = try await storageFixture()
   let root = await vault.root
   defer { try? FileManager.default.removeItem(at: root) }
   var state = initial
   let other = LocalVoyage(
-    ownerId: state.account.id, fields: VoyageFields(title: "Other", description: "Private"))
+    ownerId: state.account.id,
+    fields: VoyageFields(title: "Other", description: "Private")
+  )
   state.voyages.append(other)
   state.photos.append(LocalPhoto(voyageId: other.id, filename: "Other.jpg"))
   try await vault.remove(state.photos[0].source!.relativePath, accountId: state.account.id)
@@ -98,13 +114,17 @@ private func storageFixture() async throws -> (CoreDataWorkspaceStore, FileVault
   let destination = root.appendingPathComponent("export")
   _ = try await vault.export(state, voyageId: state.voyages[0].id, destination: destination)
   let exported = try JSONDecoder().decode(
-    Workspace.self, from: Data(contentsOf: destination.appendingPathComponent("workspace.json")))
+    Workspace.self,
+    from: Data(contentsOf: destination.appendingPathComponent("workspace.json"))
+  )
   #expect(exported.voyages.count == 1)
   #expect(exported.photos.count == 3)
   #expect(exported.photos.allSatisfy { $0.voyageId == state.voyages[0].id })
   #expect(
     FileManager.default.fileExists(
-      atPath: destination.appendingPathComponent("export-preview.json").path))
+      atPath: destination.appendingPathComponent("export-preview.json").path
+    )
+  )
   _ = store
 }
 
@@ -114,20 +134,31 @@ actor SuspendedUpdateStore: WorkspaceStore {
   var paused = false
   var resume: CheckedContinuation<Void, Never>?
   var observer: CheckedContinuation<Void, Never>?
+
   init(_ base: any WorkspaceStore) { self.base = base }
+
   func accountIds() async throws -> [UUID] { try await base.accountIds() }
+
   func insert(_ workspace: Workspace) async throws { try await base.insert(workspace) }
+
   func read(accountId: UUID) async throws -> Workspace { try await base.read(accountId: accountId) }
+
   func remove(accountId: UUID) async throws { try await base.remove(accountId: accountId) }
+
   func waitUntilPaused() async {
     if paused { return }
     await withCheckedContinuation { observer = $0 }
   }
+
   func continueUpdate() {
     resume?.resume()
     resume = nil
   }
-  func update(accountId: UUID, _ change: @escaping @Sendable (inout Workspace) throws -> Void)
+
+  func update(
+    accountId: UUID,
+    _ change: @escaping @Sendable (inout Workspace) throws -> Void
+  )
     async throws
   {
     if first {
@@ -141,33 +172,40 @@ actor SuspendedUpdateStore: WorkspaceStore {
   }
 }
 
-@Test func sourceReuseCannotCommitAnOldReferenceAfterExplicitOriginalCleanup() async throws {
+@Test
+func sourceReuseCannotCommitAnOldReferenceAfterExplicitOriginalCleanup() async throws {
   let (store, vault, state) = try await storageFixture()
   let root = await vault.root
   defer { try? FileManager.default.removeItem(at: root) }
   let delayed = SuspendedUpdateStore(store)
   let reuse = Task {
     try await LocalRepository(store: delayed).addAgain(
-      accountId: state.account.id, photoId: state.photos[0].id)
+      accountId: state.account.id,
+      photoId: state.photos[0].id
+    )
   }
   await delayed.waitUntilPaused()
   _ = try await StorageManager(store: delayed, vault: vault).removeUploadedOriginals(
-    accountId: state.account.id)
+    accountId: state.account.id
+  )
   await delayed.continueUpdate()
   await #expect(throws: FileVaultError.missingSource) { try await reuse.value }
   let saved = try await store.read(accountId: state.account.id)
   #expect(saved.photos.count == state.photos.count)
 }
 
-@Test func aVoyageExportUsesASystemZipSnapshotThatRemainsReadableAfterCoordinationEnds()
+@Test
+func aVoyageExportUsesASystemZipSnapshotThatRemainsReadableAfterCoordinationEnds()
   async throws
 {
   let (_, vault, state) = try await storageFixture()
   let root = await vault.root
   defer { try? FileManager.default.removeItem(at: root) }
   let archive = try await vault.exportArchive(
-    state, voyageId: state.voyages[0].id,
-    destination: root.appendingPathComponent("archive"))
+    state,
+    voyageId: state.voyages[0].id,
+    destination: root.appendingPathComponent("archive")
+  )
   #expect(archive.pathExtension == "zip")
   let file = try FileHandle(forReadingFrom: archive)
   defer { try? file.close() }
@@ -175,7 +213,8 @@ actor SuspendedUpdateStore: WorkspaceStore {
   #expect(try archive.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 > 0)
 }
 
-@Test func exportingAnArchiveNeverOverwritesAnExistingFileOrRemovesOriginalsAfterAFailure()
+@Test
+func exportingAnArchiveNeverOverwritesAnExistingFileOrRemovesOriginalsAfterAFailure()
   async throws
 {
   let (_, vault, state) = try await storageFixture()
@@ -191,5 +230,6 @@ actor SuspendedUpdateStore: WorkspaceStore {
   #expect(try Data(contentsOf: archive) == previous)
   #expect(
     try await vault.read(state.photos[0].source!.relativePath, accountId: state.account.id).count
-      == 10)
+      == 10
+  )
 }

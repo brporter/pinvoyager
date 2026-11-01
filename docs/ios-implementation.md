@@ -499,3 +499,28 @@ association-generator tests pass. No physical-device, provider-backed, deployed 
 or real background relaunch acceptance is claimed. Ignored `.xcresult` and coverage
 files retain the local results.
 
+On October 30, the Google Swift formatting pass changed 134 of the 135 maintained
+Swift files; `ios/Package.swift` already matched. `ios/.swift-format` and the
+`Check Google Swift formatting` CI step now select explicit formatting settings
+for the package manifest, app, shared libraries, and tests. The six examples in
+`ios/Scripts/test_format.py::SwiftFormatTests` exercise those settings. Three
+examples failed against the previous defaults (argument wrapping, generic
+requirements, and parameterized attributes); all six pass with the committed
+configuration. Declaration spacing and multiline collection layout were applied
+across the sources. The formatter preserves those layouts, but their placement
+still requires review; see [Swift formatting](ios-running.md#swift-formatting)
+for commands and enforcement limits.
+
+The final source audit parsed all 135 files and found identical Swift token
+sequences except for reordered conditional imports in
+`ios/PinVoyager/App/DevelopmentFixtures.swift`. Formatting is idempotent and
+strict lint passes. The fast macOS package suite passes all 160 tests.
+`20261030-203505.xcresult` passes all **255 simulator unit tests and 55 UI
+journeys**; `20261030-203505-ipad.xcresult` passes guest navigation. Their merged
+profiles measure **18,705 / 19,565 production Swift executable lines (95.60%)**,
+with every production file included and no exclusions. The matching report is
+`20261030-203505-coverage-swift.json`. Association-generator tests and
+`git diff --check` also pass. Website and Rust sources were unchanged, so their
+coverage suites were not rerun for this formatting change. The hosted CI job and
+a new Release build were not run locally for this pass.
+

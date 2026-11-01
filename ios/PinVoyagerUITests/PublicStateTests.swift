@@ -1,7 +1,8 @@
 import PinVoyagerData
 import XCTest
 
-@MainActor final class PublicStateTests: XCTestCase {
+@MainActor
+final class PublicStateTests: XCTestCase {
   func testCorruptImageShowsAnErrorAndProcessingAndFailedPhotosRemainDistinct() throws {
     var fixture = try FixtureLaunch()
     var detail = try Self.detail()
@@ -12,9 +13,13 @@ import XCTest
     detail["photos"] = photos
     fixture.reply("/api/voyages", body: try FixtureLaunch.fixture("voyage_list"))
     fixture.reply(
-      "/api/voyages/\(detail["id"]!)", body: try JSONSerialization.data(withJSONObject: detail))
+      "/api/voyages/\(detail["id"]!)",
+      body: try JSONSerialization.data(withJSONObject: detail)
+    )
     fixture.reply(
-      try XCTUnwrap(photos[2]["display_url"] as? String), body: Data("not an image".utf8))
+      try XCTUnwrap(photos[2]["display_url"] as? String),
+      body: Data("not an image".utf8)
+    )
     let app = try fixture.launch()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     app.buttons["Photos"].tap()
@@ -25,7 +30,8 @@ import XCTest
     app.reveal(photo)
     photo.tap()
     XCTAssertTrue(
-      app.staticTexts["This photograph could not be decoded."].waitForExistence(timeout: 5))
+      app.staticTexts["This photograph could not be decoded."].waitForExistence(timeout: 5)
+    )
     app.buttons["Close"].tap()
     app.buttons["More"].tap()
     app.buttons["Report voyage"].tap()
@@ -41,13 +47,17 @@ import XCTest
     for key in ["photo_count", "placed_count", "unplaced_count", "place_count"] { detail[key] = 0 }
     fixture.reply("/api/voyages", body: try FixtureLaunch.fixture("voyage_list"))
     fixture.reply(
-      "/api/voyages/\(detail["id"]!)", body: try JSONSerialization.data(withJSONObject: detail))
+      "/api/voyages/\(detail["id"]!)",
+      body: try JSONSerialization.data(withJSONObject: detail)
+    )
     fixture.reply(
       "/api/profiles/\(fixture.workspace.account.id)",
       body: try JSONSerialization.data(withJSONObject: [
         "user": ["id": fixture.workspace.account.id.uuidString, "display_name": NSNull()],
-        "voyages": [], "next_before": NSNull(),
-      ]))
+        "voyages": [],
+        "next_before": NSNull(),
+      ])
+    )
     let app = try fixture.launch()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     XCTAssertTrue(app.staticTexts["No photos"].waitForExistence(timeout: 5))
@@ -77,6 +87,7 @@ import XCTest
   private static func detail() throws -> [String: Any] {
     try XCTUnwrap(
       try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("voyage_detail"))
-        as? [String: Any])
+        as? [String: Any]
+    )
   }
 }

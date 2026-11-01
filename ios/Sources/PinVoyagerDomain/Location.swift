@@ -4,11 +4,13 @@ public struct Coordinate: Codable, Equatable, Hashable, Sendable {
   public let latitude: Double
   public let longitude: Double
   public let precisionM: Double?
+
   public init(latitude: Double, longitude: Double, precisionM: Double? = nil) {
     self.latitude = latitude
     self.longitude = longitude
     self.precisionM = precisionM
   }
+
   public var isValid: Bool {
     latitude.isFinite && longitude.isFinite && (-90...90).contains(latitude)
       && (-180...180).contains(longitude)
@@ -17,11 +19,15 @@ public struct Coordinate: Codable, Equatable, Hashable, Sendable {
 
 public enum Granularity: String, CaseIterable, Codable, Sendable {
   case exact, km1, km10, km50, unsupported
+
   public static var allCases: [Self] { [.exact, .km1, .km10, .km50] }
+
   public init(from decoder: any Decoder) throws {
     self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unsupported
   }
+
   public var canPublish: Bool { self != .unsupported }
+
   public var label: String {
     switch self {
     case .exact: "Exact"
@@ -31,6 +37,7 @@ public enum Granularity: String, CaseIterable, Codable, Sendable {
     case .unsupported: "Unknown precision — update required"
     }
   }
+
   public var halfCellM: Double? {
     switch self {
     case .exact: nil
@@ -39,6 +46,7 @@ public enum Granularity: String, CaseIterable, Codable, Sendable {
     case .km50, .unsupported: 25_000
     }
   }
+
   /// Mirrors `voyages::granularity::Granularity::apply`, including floor division below zero.
   public func apply(_ coordinate: Coordinate) -> Coordinate {
     guard let halfCellM else { return coordinate }
@@ -88,14 +96,18 @@ public enum MapGeometry {
     let low = valid.map(\.latitude).min()!
     let high = valid.map(\.latitude).max()!
     return MapBounds(
-      latitude: (low + high) / 2, longitude: wrapLongitude(start + span / 2),
-      latitudeSpan: high - low, longitudeSpan: span)
+      latitude: (low + high) / 2,
+      longitude: wrapLongitude(start + span / 2),
+      latitudeSpan: high - low,
+      longitudeSpan: span
+    )
   }
 }
 
 public struct MapPhotoPin: Identifiable, Equatable, Sendable {
   public let id: UUID
   public let coordinate: Coordinate
+
   public init(id: UUID, coordinate: Coordinate) {
     self.id = id
     self.coordinate = coordinate
@@ -110,7 +122,11 @@ public struct PhotoPinCluster: Identifiable, Equatable, Sendable {
 
 extension MapGeometry {
   /// Uses the same seed, 44-point grid, and wrapped distance as `web/src/map/geo.ts::clusterPins`.
-  public static func cluster(_ pins: [MapPhotoPin], zoom: Double, radius: Double = 44)
+  public static func cluster(
+    _ pins: [MapPhotoPin],
+    zoom: Double,
+    radius: Double = 44
+  )
     -> [PhotoPinCluster]
   {
     guard radius > 0, radius.isFinite, zoom.isFinite else { return [] }
@@ -166,7 +182,8 @@ extension MapGeometry {
         ? pins[index].coordinate
         : Coordinate(
           latitude: atan(sinh(.pi - 2 * .pi * sumY / count / size)) * 180 / .pi,
-          longitude: wrapLongitude(sumX / count / size * 360 - 180))
+          longitude: wrapLongitude(sumX / count / size * 360 - 180)
+        )
       clusters.append(PhotoPinCluster(id: pins[index].id, coordinate: coordinate, members: members))
     }
     return clusters

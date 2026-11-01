@@ -1,12 +1,14 @@
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class VoyageSyncTests: XCTestCase {
+@MainActor
+final class VoyageSyncTests: XCTestCase {
   func testVoyageUploadPauseIsIndependentOfTheAccountPolicy() throws {
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Pause this voyage", description: "Keep other work running"))
+      fields: VoyageFields(title: "Pause this voyage", description: "Keep other work running")
+    )
     fixture.workspace.voyages = [voyage]
     let app = try fixture.launch()
     app.buttons["My Voyages"].tap()
@@ -21,7 +23,8 @@ import XCTest
     XCTAssertTrue(
       app.staticTexts[
         "Uploads paused for this voyage. Receipt checks and other changes can still synchronize."
-      ].exists)
+      ].exists
+    )
     app.buttons["Sync and storage settings"].tap()
     XCTAssertEqual(app.switches["Pause synchronization"].value as? String, "0")
     app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -35,16 +38,22 @@ extension VoyageSyncTests {
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Activity voyage", description: "Grouped by current state"))
+      fields: VoyageFields(title: "Activity voyage", description: "Grouped by current state")
+    )
     fixture.workspace.voyages = [voyage]
     for (state, kind) in [
       (OperationState.attention, OperationKind.edit(voyage.fields)),
-      (.uncertain, .upload(photoId: UUID(), publicConsent: false)), (.waiting, .order([])),
-      (.applied, .unpublish), (.applied, .deleteVoyage),
+      (.uncertain, .upload(photoId: UUID(), publicConsent: false)),
+      (.waiting, .order([])),
+      (.applied, .unpublish),
+      (.applied, .deleteVoyage),
     ] {
       var operation = OutboxOperation(
-        accountId: fixture.workspace.account.id, generation: 0,
-        voyageId: voyage.id, kind: kind)
+        accountId: fixture.workspace.account.id,
+        generation: 0,
+        voyageId: voyage.id,
+        kind: kind
+      )
       operation.state = state
       if state == .applied {
         operation.completedAt =

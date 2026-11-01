@@ -4,9 +4,14 @@ import SwiftUI
 
 @main
 struct PinVoyagerApp: App {
-  @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-  @State private var bootstrap = AppBootstrap.shared
-  @Environment(\.scenePhase) private var phase
+  @UIApplicationDelegateAdaptor(AppDelegate.self)
+  private var delegate
+
+  @State
+  private var bootstrap = AppBootstrap.shared
+
+  @Environment(\.scenePhase)
+  private var phase
 
   var body: some Scene {
     WindowGroup {
@@ -16,7 +21,9 @@ struct PinVoyagerApp: App {
         } else if let error = bootstrap.error {
           ContentUnavailableView {
             Label(
-              "Saved work could not be opened", systemImage: "externaldrive.badge.exclamationmark")
+              "Saved work could not be opened",
+              systemImage: "externaldrive.badge.exclamationmark"
+            )
           } description: {
             Text(error)
           } actions: {
@@ -41,7 +48,8 @@ struct PinVoyagerApp: App {
   }
 }
 
-@MainActor @Observable
+@MainActor
+@Observable
 final class AppBootstrap {
   static let shared = AppBootstrap()
   var model: AppModel?
@@ -49,6 +57,7 @@ final class AppBootstrap {
   private let makeStore: @Sendable (URL?) async throws -> any WorkspaceStore
   private var startup: Task<Void, Never>?
   private let environment: AppEnvironment?
+
   init(
     environment: AppEnvironment? = nil,
     makeStore: @escaping @Sendable (URL?) async throws -> any WorkspaceStore = { url in
@@ -58,7 +67,9 @@ final class AppBootstrap {
     self.makeStore = makeStore
     self.environment = environment
   }
+
   private var monitor: NetworkObserver?
+
   nonisolated static var directory: URL {
     URL.applicationSupportDirectory.appendingPathComponent("PinVoyager", isDirectory: true)
   }
@@ -80,7 +91,8 @@ final class AppBootstrap {
       let environment = try environment ?? AppEnvironment.system(testing: Self.isUITesting)
       let testing = environment.testing
       let store = try await makeStore(
-        testing ? nil : environment.directory.appendingPathComponent("workspace.sqlite"))
+        testing ? nil : environment.directory.appendingPathComponent("workspace.sqlite")
+      )
       #if DEBUG
         let apiOrigin = try TrustedOrigin(environment.apiURL, allowsLocalHTTP: true)
       #else
@@ -89,14 +101,21 @@ final class AppBootstrap {
       let credentials = environment.credentials
       let imageCache = try TemporaryImageCache(directory: environment.cacheDirectory)
       let client = APIClient(
-        origin: apiOrigin, transport: environment.transport, credentials: credentials,
-        imageCache: imageCache)
+        origin: apiOrigin,
+        transport: environment.transport,
+        credentials: credentials,
+        imageCache: imageCache
+      )
       let vault = try FileVault(root: environment.directory.appendingPathComponent("files"))
       let model = AppModel(
-        store: store, client: client, credentials: credentials, vault: vault,
+        store: store,
+        client: client,
+        credentials: credentials,
+        vault: vault,
         webOrigin: try TrustedOrigin(environment.webURL),
         deletionRecovery: environment.deletionRecovery,
-        devicePreferences: environment.preferences)
+        devicePreferences: environment.preferences
+      )
       #if DEBUG
         if testing { try await DevelopmentFixtures.seed(model) }
       #endif
@@ -105,7 +124,9 @@ final class AppBootstrap {
         await model.restore(accountId: id)
         if let id {
           try await ImportRecovery(store: store, vault: vault).recover(
-            accountId: id, maxBytes: 25 * 1_024 * 1_024)
+            accountId: id,
+            maxBytes: 25 * 1_024 * 1_024
+          )
           await model.reloadWorkspace()
         }
         monitor = NetworkObserver { [weak model] network in
@@ -113,8 +134,12 @@ final class AppBootstrap {
           if network != .offline { Task { await model?.sync() } }
         }
         try await configureBackground(
-          model: model, vault: vault, credentials: credentials, origin: apiOrigin,
-          driver: environment.transfers)
+          model: model,
+          vault: vault,
+          credentials: credentials,
+          origin: apiOrigin,
+          driver: environment.transfers
+        )
       }
       self.model = model
       self.error = nil
@@ -131,11 +156,17 @@ final class AppBootstrap {
   }
 
   func configureBackground(
-    model: AppModel, vault: FileVault, credentials: any CredentialStore, origin: TrustedOrigin,
+    model: AppModel,
+    vault: FileVault,
+    credentials: any CredentialStore,
+    origin: TrustedOrigin,
     driver: SystemTransferDriver = .shared
   ) async throws {
     let recovery = BackgroundTransferRecovery(
-      store: model.store, credentials: credentials, driver: driver)
+      store: model.store,
+      credentials: credentials,
+      driver: driver
+    )
     driver.onCompletion = { [weak model] descriptor in
       try await recovery.completed(descriptor)
       Task { @MainActor in model?.scheduleSync() }
@@ -148,11 +179,18 @@ final class AppBootstrap {
     let client = model.client
     model.makeCoordinator = { accountId, capabilities in
       let uploads = BackgroundUploadService(
-        store: store, vault: vault, credentials: credentials, driver: driver,
-        origin: origin, maxBytes: capabilities.maxUploadBytes)
+        store: store,
+        vault: vault,
+        credentials: credentials,
+        driver: driver,
+        origin: origin,
+        maxBytes: capabilities.maxUploadBytes
+      )
       return SyncCoordinator(
-        store: store, remote: NativeSyncRemote(client: client, accountId: accountId),
-        uploads: uploads)
+        store: store,
+        remote: NativeSyncRemote(client: client, accountId: accountId),
+        uploads: uploads
+      )
     }
     try await recovery.restore()
     if let account = model.activeAccountId {

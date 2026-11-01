@@ -3,7 +3,8 @@ import Testing
 
 @testable import PinVoyagerData
 
-@Test func temporaryCacheEvictsLeastRecentlyUsedFilesAndPersistsAcrossReopening() async throws {
+@Test
+func temporaryCacheEvictsLeastRecentlyUsedFilesAndPersistsAcrossReopening() async throws {
   let root = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: root) }
   let cache = try TemporaryImageCache(directory: root, capacity: 300)
@@ -23,8 +24,8 @@ import Testing
   #expect(try await cache.byteCount() == 0)
 }
 
-@Test func cachedImageReuseAlwaysRequiresFreshOnlineAuthorizationAndAccountIsolation() async throws
-{
+@Test
+func cachedImageReuseAlwaysRequiresFreshOnlineAuthorizationAndAccountIsolation() async throws {
   let root = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: root) }
   let cache = try TemporaryImageCache(directory: root)
@@ -40,7 +41,11 @@ import Testing
   let account = UUID()
   await credentials.save(SessionCredential(accountId: account, token: "private"))
   let client = APIClient(
-    origin: try testOrigin(), transport: transport, credentials: credentials, imageCache: cache)
+    origin: try testOrigin(),
+    transport: transport,
+    credentials: credentials,
+    imageCache: cache
+  )
   let path = "/api/photos/\(UUID())/thumb"
   #expect(try await client.image(path) == bytes)
   #expect(try await client.image(path) == bytes)
@@ -54,8 +59,11 @@ import Testing
   #expect(requests[3].value(forHTTPHeaderField: "Authorization") == "Bearer private")
   #expect(requests[4].value(forHTTPHeaderField: "If-None-Match") == nil)
   let offline = APIClient(
-    origin: try testOrigin(), transport: FailingTransport(), credentials: credentials,
-    imageCache: cache)
+    origin: try testOrigin(),
+    transport: FailingTransport(),
+    credentials: credentials,
+    imageCache: cache
+  )
   await #expect(throws: URLError.self) { try await offline.image(path) }
 }
 

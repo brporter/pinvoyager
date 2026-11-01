@@ -6,20 +6,25 @@ public struct LocalDiscardService: Sendable {
   private let store: any WorkspaceStore
   private let vault: FileVault
   private let cancelTransfers: @Sendable (UUID) async -> Void
+
   public init(
-    store: any WorkspaceStore, vault: FileVault,
+    store: any WorkspaceStore,
+    vault: FileVault,
     cancelTransfers: @escaping @Sendable (UUID) async -> Void
   ) {
     self.store = store
     self.vault = vault
     self.cancelTransfers = cancelTransfers
   }
+
   public func deleteLocalOnly(accountId: UUID, voyageId: UUID) async throws {
     try await discard(accountId: accountId, voyageId: voyageId, unavailable: false)
   }
+
   public func discardUnavailable(accountId: UUID, voyageId: UUID) async throws {
     try await discard(accountId: accountId, voyageId: voyageId, unavailable: true)
   }
+
   private func discard(accountId: UUID, voyageId: UUID, unavailable: Bool) async throws {
     let initial = try await store.read(accountId: accountId)
     try await store.update(accountId: accountId) { current in
@@ -87,6 +92,7 @@ public struct LocalDiscardService: Sendable {
     }
     try await finishPendingRemovals(accountId: accountId)
   }
+
   public func finishPendingRemovals(accountId: UUID) async throws {
     let initial = try await store.read(accountId: accountId)
     guard initial.account.access != .locked else { throw WorkspaceError.locked }
@@ -102,11 +108,13 @@ public struct LocalDiscardService: Sendable {
       }
     }
   }
+
   private static func files(_ photos: [LocalPhoto]) -> Set<String> {
     Set(
       photos.flatMap { photo in
         [photo.source?.relativePath, photo.previewPath].compactMap { $0 }
           + Array(photo.offlineCopy?.variants.values ?? [:].values)
-      })
+      }
+    )
   }
 }

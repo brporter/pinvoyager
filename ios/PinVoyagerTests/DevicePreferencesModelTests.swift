@@ -4,7 +4,8 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class DevicePreferencesModelTests: XCTestCase {
+@MainActor
+final class DevicePreferencesModelTests: XCTestCase {
   func testSignedOutSettingsPersistAndOnlyInitializeANewAccountWorkspace() async throws {
     let suite = "pinvoyager.model.preferences.\(UUID())"
     defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
@@ -12,16 +13,27 @@ import XCTest
     let store = try CoreDataWorkspaceStore(url: nil)
     let credentials = TestCredentials()
     let client = APIClient(
-      origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials)
+      origin: try testOrigin(),
+      transport: StubHTTP([]),
+      credentials: credentials
+    )
     let first = AppModel(
-      store: store, client: client, credentials: credentials, devicePreferences: preferences)
+      store: store,
+      client: client,
+      credentials: credentials,
+      devicePreferences: preferences
+    )
     await first.restore(accountId: nil)
     var policy = SyncPolicy()
     policy.wifiOnly = false
     policy.allowsConstrained = true
     await first.setSyncPolicy(policy)
     let reopened = AppModel(
-      store: store, client: client, credentials: credentials, devicePreferences: preferences)
+      store: store,
+      client: client,
+      credentials: credentials,
+      devicePreferences: preferences
+    )
     await reopened.restore(accountId: nil)
     XCTAssertEqual(reopened.guestPolicy, policy)
     XCTAssertNil(reopened.workspace)
@@ -31,7 +43,8 @@ import XCTest
       SessionExchange.self,
       from: Data(
         contentsOf: Fixtures.directory("api").appendingPathComponent("native_session_exchange.json")
-      ))
+      )
+    )
     try await reopened.acceptSession(session)
     XCTAssertEqual(reopened.workspace?.policy.wifiOnly, false)
     var accountPolicy = policy
@@ -40,7 +53,11 @@ import XCTest
     let rememberedDevicePolicy = try await preferences.load()
     XCTAssertEqual(rememberedDevicePolicy, policy)
     let another = AppModel(
-      store: store, client: client, credentials: credentials, devicePreferences: preferences)
+      store: store,
+      client: client,
+      credentials: credentials,
+      devicePreferences: preferences
+    )
     await another.restore(accountId: session.user.id)
     XCTAssertEqual(another.workspace?.policy.wifiOnly, true)
     XCTAssertEqual(another.guestPolicy.wifiOnly, false)
@@ -49,6 +66,7 @@ import XCTest
 
 private actor FailedDevicePreferences: DevicePreferences {
   func load() throws -> SyncPolicy { throw CocoaError(.fileReadCorruptFile) }
+
   func save(_ policy: SyncPolicy) throws { throw CocoaError(.fileWriteNoPermission) }
 }
 
@@ -59,8 +77,13 @@ extension DevicePreferencesModelTests {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials, devicePreferences: FailedDevicePreferences())
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials,
+      devicePreferences: FailedDevicePreferences()
+    )
     await model.restore(accountId: nil)
     XCTAssertTrue(model.guestPolicy.wifiOnly)
     XCTAssertNotNil(model.error)
@@ -83,11 +106,18 @@ extension DevicePreferencesModelTests {
       store: store,
       client: APIClient(
         origin: try testOrigin(),
-        transport: StubHTTP([]), credentials: credentials), credentials: credentials)
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: account)
     let ids = try await model.repository.beginImports(
       accountId: account,
-      voyageId: state.voyages[0].id, filenames: ["Cellular.jpg"], cellularException: true)
+      voyageId: state.voyages[0].id,
+      filenames: ["Cellular.jpg"],
+      cellularException: true
+    )
     await model.reloadWorkspace()
     let batch = try XCTUnwrap(model.workspace?.photos.first { ids.contains($0.id) }?.importBatchId)
     var canceled: [UUID] = []
@@ -111,7 +141,11 @@ extension DevicePreferencesModelTests {
       store: store,
       client: APIClient(
         origin: try testOrigin(),
-        transport: StubHTTP([]), credentials: credentials), credentials: credentials)
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: account)
     model.changeNetwork(.offline)
     var canceled: [UUID] = []
@@ -135,8 +169,12 @@ extension DevicePreferencesModelTests {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: first.account.id)
     model.changeNetwork(.offline)
     await model.setPreference(.keepOriginals, value: false, accountId: first.account.id)

@@ -41,7 +41,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | --- | --- |
 | [Production deployment](deployment.md) | GHCR publication, VM containers, Caddy routing, credentials, verification, persistence, and rollback. |
 | [Running locally](running.md) | Native dependencies, PostgreSQL, configuration, startup, development login, SQL metadata, and persistent container storage. |
-| [Running iOS](ios-running.md) | Xcode project, trusted origins, simulator signing, unit/UI tests, native coverage, storage/background configuration, and required device checks. |
+| [Running iOS](ios-running.md) | Xcode project, trusted origins, Google Swift formatting and its enforcement limits, simulator signing, unit/UI tests, native coverage, storage/background configuration, and required device checks. |
 | [Testing](testing.md) | Backend/frontend commands, coverage scope, focused suites, native fixtures, and browser-test boundaries. |
 | [Backend coverage gaps](todo/coverage-gaps.md) | Dated coverage shortfall, untested failure paths, instrumentation uncertainty, and reproduction commands. |
 | [Tracing](tracing.md) | Collector/Jaeger setup, trace context, span meanings, configuration, and diagnostic commands. |
@@ -70,6 +70,7 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | [`Cargo.toml`](../Cargo.toml), [`crates/api/Cargo.toml`](../crates/api/Cargo.toml), [`web/package.json`](../web/package.json) | Build profiles, dependency requirements, and executable commands. |
 | [`.github/workflows/checks.yml`](../.github/workflows/checks.yml) | Automated frontend/backend checks and coverage thresholds. |
 | [`web/.prettierrc.json`](../web/.prettierrc.json), [`web/.prettierignore`](../web/.prettierignore) | Frontend formatting rules and generated-file exclusions. |
+| [`ios/.swift-format`](../ios/.swift-format), [`ios/Scripts/test_format.py`](../ios/Scripts/test_format.py) | Google-compatible Swift formatter settings and executable formatting examples. |
 | [`.cargo/config.toml`](../.cargo/config.toml), [`web/vitest.config.ts`](../web/vitest.config.ts) | Coverage commands, inclusion rules, and thresholds. |
 | [`web/vite.config.ts`](../web/vite.config.ts) | Frontend aliases, development proxy, and map bundling configuration. |
 | [`crates/api/migrations/`](../crates/api/migrations), [`.sqlx/`](../.sqlx) | Ordered schema changes and offline checked-query metadata. |

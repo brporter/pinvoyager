@@ -1,12 +1,14 @@
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class PhotoManagementTests: XCTestCase {
+@MainActor
+final class PhotoManagementTests: XCTestCase {
   func testStagedOrderCanBeCanceledAndSavedBeforeBulkRemoval() throws {
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Arrange photographs", description: "Keep the selected order"))
+      fields: VoyageFields(title: "Arrange photographs", description: "Keep the selected order")
+    )
     fixture.workspace.voyages = [voyage]
     fixture.workspace.photos = ["First", "Second", "Third"].enumerated().map { index, name in
       var photo = LocalPhoto(voyageId: voyage.id, filename: name)
@@ -58,7 +60,10 @@ extension PhotoManagementTests {
     let voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
       fields: VoyageFields(
-        title: "Undo selected removals", description: "Keep unsubmitted work reversible"))
+        title: "Undo selected removals",
+        description: "Keep unsubmitted work reversible"
+      )
+    )
     fixture.workspace.voyages = [voyage]
     fixture.workspace.photos = ["One", "Two"].enumerated().map { index, name in
       var photo = LocalPhoto(voyageId: voyage.id, filename: name)

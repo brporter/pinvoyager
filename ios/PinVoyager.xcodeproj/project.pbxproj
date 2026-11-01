@@ -1,62 +1,596 @@
 // !$*UTF8*$!
-{ archiveVersion = 1; classes = {}; objectVersion = 77; objects = {
-11BCABC12345678900000001 = { isa = PBXBuildFile; productRef = 11BCABC12345678900000003; };
-11BCABC12345678900000002 = { isa = PBXBuildFile; productRef = 11BCABC12345678900000004; };
-11BCABC12345678900000003 = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = PinVoyagerDomain; };
-11BCABC12345678900000004 = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = PinVoyagerData; };
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 71;
+	objects = {
 
-9BB89F6CAD0471532B3F6C32 = { isa = PBXFileReference; lastKnownFileType = folder; path = "../web/src/api/__fixtures__"; sourceTree = "<group>"; };
-D7146F635459E22AC33ECFF3 = { isa = PBXBuildFile; fileRef = 9BB89F6CAD0471532B3F6C32; };
-DA381089A6E79C174E3E8182 = { isa = PBXFileReference; lastKnownFileType = folder; path = "../crates/api/tests/fixtures"; sourceTree = "<group>"; };
-A347B4B4A35AB50835831FD0 = { isa = PBXBuildFile; fileRef = DA381089A6E79C174E3E8182; };
+/* Begin PBXBuildFile section */
+		11BCABC12345678900000001 /* PinVoyagerDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 11BCABC12345678900000003 /* PinVoyagerDomain */; };
+		11BCABC12345678900000002 /* PinVoyagerData in Frameworks */ = {isa = PBXBuildFile; productRef = 11BCABC12345678900000004 /* PinVoyagerData */; };
+		6EF5117FD9AEB5F27346AA89 /* PinVoyagerData in Frameworks */ = {isa = PBXBuildFile; productRef = 64AF2F8D7ECAF77D866B1948 /* PinVoyagerData */; };
+		A347B4B4A35AB50835831FD0 /* ../crates/api/tests/fixtures in Resources */ = {isa = PBXBuildFile; fileRef = DA381089A6E79C174E3E8182 /* ../crates/api/tests/fixtures */; };
+		ABC0BF1605D8ECEBB830BB92 /* PinVoyagerDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 814D9DD4859C24F0C0359E6E /* PinVoyagerDomain */; };
+		CED354D5895997AE7B178B09 /* PinVoyagerData in Frameworks */ = {isa = PBXBuildFile; productRef = 1DD64DC368AB18F87D312ED7 /* PinVoyagerData */; };
+		D7146F635459E22AC33ECFF3 /* ../web/src/api/__fixtures__ in Resources */ = {isa = PBXBuildFile; fileRef = 9BB89F6CAD0471532B3F6C32 /* ../web/src/api/__fixtures__ */; };
+		EFAA1E96EA1A2E8D57AE0A75 /* PinVoyagerDomain in Frameworks */ = {isa = PBXBuildFile; productRef = A0EC59F2B8E3B9A6AABB4FED /* PinVoyagerDomain */; };
+/* End PBXBuildFile section */
 
-A00000000000000000000001 = { isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = (Info.plist, PinVoyager.entitlements); target = 45720C13E916B19EE248B654; };
-69F8D45498D7E20DA99BB780 = { isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A00000000000000000000001); path = "PinVoyager"; sourceTree = "<group>"; };
-68DE481A39400A49757EB7B7 = { isa = PBXFileSystemSynchronizedRootGroup; path = "PinVoyagerTests"; sourceTree = "<group>"; };
-119C44536C59FD2DC605EB12 = { isa = PBXFileSystemSynchronizedRootGroup; path = "PinVoyagerUITests"; sourceTree = "<group>"; };
-E95BE9476625C5A18365C36F = { isa = PBXFileSystemSynchronizedRootGroup; path = "Tests/PinVoyagerDomainTests"; sourceTree = "<group>"; };
-7144A73E43D7ABC4EDF7A2E6 = { isa = PBXFileSystemSynchronizedRootGroup; path = "Tests/PinVoyagerDataTests"; sourceTree = "<group>"; };
-582681C2EAE02B3F3D399C0C = { isa = XCLocalSwiftPackageReference; relativePath = "."; };
-EE7154CA0E53D4BE889EB6F5 = { isa = PBXFileReference; explicitFileType = "wrapper.app"; path = "PinVoyager.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-AB721D01584FC20E993FEF8A = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-A0EC59F2B8E3B9A6AABB4FED = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = PinVoyagerDomain; };
-EFAA1E96EA1A2E8D57AE0A75 = { isa = PBXBuildFile; productRef = A0EC59F2B8E3B9A6AABB4FED; };
-1DD64DC368AB18F87D312ED7 = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = PinVoyagerData; };
-CED354D5895997AE7B178B09 = { isa = PBXBuildFile; productRef = 1DD64DC368AB18F87D312ED7; };
-61042B4BE252513D62167EDF = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (EFAA1E96EA1A2E8D57AE0A75,CED354D5895997AE7B178B09); runOnlyForDeploymentPostprocessing = 0; };
-3FC32520C82FBF45CA3F77BD = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-17A4C390C6D6E2F692486DE0 = { isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = "com.pinvoyager.app"; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = "6.0"; IPHONEOS_DEPLOYMENT_TARGET = "18.0"; TARGETED_DEVICE_FAMILY = "1,2"; GENERATE_INFOPLIST_FILE = "YES"; CODE_SIGN_STYLE = "Automatic"; SWIFT_STRICT_CONCURRENCY = "complete"; SWIFT_EMIT_LOC_STRINGS = "YES"; INFOPLIST_FILE = "PinVoyager/Info.plist"; CODE_SIGN_ENTITLEMENTS = "PinVoyager/PinVoyager.entitlements"; ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon"; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor"; INFOPLIST_KEY_UILaunchScreen_Generation = "YES"; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = "YES"; MARKETING_VERSION = "0.1.0"; CURRENT_PROJECT_VERSION = "1"; PINVOYAGER_API_ORIGIN = "https://pinvoyager.com"; PINVOYAGER_WEB_ORIGIN = "https://pinvoyager.com"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ONLY_ACTIVE_ARCH = YES; ENABLE_TESTABILITY = "YES";}; };
-BD9B4D8868AEF7B9E1BC1D7E = { isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = "com.pinvoyager.app"; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = "6.0"; IPHONEOS_DEPLOYMENT_TARGET = "18.0"; TARGETED_DEVICE_FAMILY = "1,2"; GENERATE_INFOPLIST_FILE = "YES"; CODE_SIGN_STYLE = "Automatic"; SWIFT_STRICT_CONCURRENCY = "complete"; SWIFT_EMIT_LOC_STRINGS = "YES"; INFOPLIST_FILE = "PinVoyager/Info.plist"; CODE_SIGN_ENTITLEMENTS = "PinVoyager/PinVoyager.entitlements"; ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon"; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor"; INFOPLIST_KEY_UILaunchScreen_Generation = "YES"; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = "YES"; MARKETING_VERSION = "0.1.0"; CURRENT_PROJECT_VERSION = "1"; PINVOYAGER_API_ORIGIN = "https://pinvoyager.com"; PINVOYAGER_WEB_ORIGIN = "https://pinvoyager.com"; SWIFT_OPTIMIZATION_LEVEL = "-O";}; };
-C0A5D7179CB002491BB27114 = { isa = XCConfigurationList; buildConfigurations = (17A4C390C6D6E2F692486DE0,BD9B4D8868AEF7B9E1BC1D7E); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-45720C13E916B19EE248B654 = { isa = PBXNativeTarget; buildConfigurationList = C0A5D7179CB002491BB27114; buildPhases = (AB721D01584FC20E993FEF8A,61042B4BE252513D62167EDF,3FC32520C82FBF45CA3F77BD); buildRules = (); dependencies = (); fileSystemSynchronizedGroups = (69F8D45498D7E20DA99BB780); name = PinVoyager; packageProductDependencies = (A0EC59F2B8E3B9A6AABB4FED,1DD64DC368AB18F87D312ED7); productName = PinVoyager; productReference = EE7154CA0E53D4BE889EB6F5; productType = "com.apple.product-type.application"; };
-9CD44A932EF1774E68267A58 = { isa = PBXFileReference; explicitFileType = "wrapper.xctest"; path = "PinVoyagerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-343B8EF9D7B963A225AD87BB = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-814D9DD4859C24F0C0359E6E = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = PinVoyagerDomain; };
-ABC0BF1605D8ECEBB830BB92 = { isa = PBXBuildFile; productRef = 814D9DD4859C24F0C0359E6E; };
-64AF2F8D7ECAF77D866B1948 = { isa = XCSwiftPackageProductDependency; package = 582681C2EAE02B3F3D399C0C; productName = PinVoyagerData; };
-6EF5117FD9AEB5F27346AA89 = { isa = PBXBuildFile; productRef = 64AF2F8D7ECAF77D866B1948; };
-7FB5B55BD4F5861CD5791E44 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (ABC0BF1605D8ECEBB830BB92,6EF5117FD9AEB5F27346AA89); runOnlyForDeploymentPostprocessing = 0; };
-B31BAFEF6008E62981FA6F13 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (D7146F635459E22AC33ECFF3,A347B4B4A35AB50835831FD0); runOnlyForDeploymentPostprocessing = 0; };
-EE11A53C35BF29851D1032D0 = { isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = "com.pinvoyager.PinVoyagerTests"; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = "6.0"; IPHONEOS_DEPLOYMENT_TARGET = "18.0"; TARGETED_DEVICE_FAMILY = "1,2"; GENERATE_INFOPLIST_FILE = "YES"; CODE_SIGN_STYLE = "Automatic"; SWIFT_STRICT_CONCURRENCY = "complete"; SWIFT_EMIT_LOC_STRINGS = "YES"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PinVoyager.app/PinVoyager"; BUNDLE_LOADER = "$(TEST_HOST)"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ONLY_ACTIVE_ARCH = YES; ENABLE_TESTABILITY = "YES";}; };
-16FB96CFE90D6B223C89F1E8 = { isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = "com.pinvoyager.PinVoyagerTests"; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = "6.0"; IPHONEOS_DEPLOYMENT_TARGET = "18.0"; TARGETED_DEVICE_FAMILY = "1,2"; GENERATE_INFOPLIST_FILE = "YES"; CODE_SIGN_STYLE = "Automatic"; SWIFT_STRICT_CONCURRENCY = "complete"; SWIFT_EMIT_LOC_STRINGS = "YES"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PinVoyager.app/PinVoyager"; BUNDLE_LOADER = "$(TEST_HOST)"; SWIFT_OPTIMIZATION_LEVEL = "-O";}; };
-ED371CA21F70A3F41E259612 = { isa = XCConfigurationList; buildConfigurations = (EE11A53C35BF29851D1032D0,16FB96CFE90D6B223C89F1E8); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-ED598342B58CDD86B8CF41EB = { isa = PBXContainerItemProxy; containerPortal = 98F54143AB4E86B28C3AFEE0; proxyType = 1; remoteGlobalIDString = 45720C13E916B19EE248B654; remoteInfo = PinVoyager; };
-D86CA2B892C624F01AEC3564 = { isa = PBXTargetDependency; target = 45720C13E916B19EE248B654; targetProxy = ED598342B58CDD86B8CF41EB; };
-3DC66ECB9B8BF859D6697FBD = { isa = PBXNativeTarget; buildConfigurationList = ED371CA21F70A3F41E259612; buildPhases = (343B8EF9D7B963A225AD87BB,7FB5B55BD4F5861CD5791E44,B31BAFEF6008E62981FA6F13); buildRules = (); dependencies = (D86CA2B892C624F01AEC3564); fileSystemSynchronizedGroups = (68DE481A39400A49757EB7B7,E95BE9476625C5A18365C36F,7144A73E43D7ABC4EDF7A2E6); name = PinVoyagerTests; packageProductDependencies = (814D9DD4859C24F0C0359E6E,64AF2F8D7ECAF77D866B1948); productName = PinVoyagerTests; productReference = 9CD44A932EF1774E68267A58; productType = "com.apple.product-type.bundle.unit-test"; };
-E3151F81E2A3E2E5C8052EBA = { isa = PBXFileReference; explicitFileType = "wrapper.xctest"; path = "PinVoyagerUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-0BFD80A38BF3ACE09FFFE591 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-6E9EC17BFD3BC1EF9429AC13 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (11BCABC12345678900000001,11BCABC12345678900000002); runOnlyForDeploymentPostprocessing = 0; };
-EEBF74021D63BDBF2435322B = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-367A462B2F2132058963E113 = { isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = "com.pinvoyager.PinVoyagerUITests"; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = "6.0"; IPHONEOS_DEPLOYMENT_TARGET = "18.0"; TARGETED_DEVICE_FAMILY = "1,2"; GENERATE_INFOPLIST_FILE = "YES"; CODE_SIGN_STYLE = "Automatic"; SWIFT_STRICT_CONCURRENCY = "complete"; SWIFT_EMIT_LOC_STRINGS = "YES"; TEST_TARGET_NAME = "PinVoyager"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ONLY_ACTIVE_ARCH = YES; ENABLE_TESTABILITY = "YES";}; };
-BD889611D1C1C0F507889A58 = { isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = "com.pinvoyager.PinVoyagerUITests"; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = "6.0"; IPHONEOS_DEPLOYMENT_TARGET = "18.0"; TARGETED_DEVICE_FAMILY = "1,2"; GENERATE_INFOPLIST_FILE = "YES"; CODE_SIGN_STYLE = "Automatic"; SWIFT_STRICT_CONCURRENCY = "complete"; SWIFT_EMIT_LOC_STRINGS = "YES"; TEST_TARGET_NAME = "PinVoyager"; SWIFT_OPTIMIZATION_LEVEL = "-O";}; };
-8E2ED7336DE59E5A1F1C6131 = { isa = XCConfigurationList; buildConfigurations = (367A462B2F2132058963E113,BD889611D1C1C0F507889A58); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-74F354EB86125769CC2B599E = { isa = PBXContainerItemProxy; containerPortal = 98F54143AB4E86B28C3AFEE0; proxyType = 1; remoteGlobalIDString = 45720C13E916B19EE248B654; remoteInfo = PinVoyager; };
-F36D694C88BC75925B29CAF2 = { isa = PBXTargetDependency; target = 45720C13E916B19EE248B654; targetProxy = 74F354EB86125769CC2B599E; };
-02C39D37CED37712CBDD9283 = { isa = PBXNativeTarget; buildConfigurationList = 8E2ED7336DE59E5A1F1C6131; buildPhases = (0BFD80A38BF3ACE09FFFE591,6E9EC17BFD3BC1EF9429AC13,EEBF74021D63BDBF2435322B); buildRules = (); dependencies = (F36D694C88BC75925B29CAF2); fileSystemSynchronizedGroups = (119C44536C59FD2DC605EB12); name = PinVoyagerUITests; packageProductDependencies = (11BCABC12345678900000003,11BCABC12345678900000004); productName = PinVoyagerUITests; productReference = E3151F81E2A3E2E5C8052EBA; productType = "com.apple.product-type.bundle.ui-testing"; };
-328EC33DF3954DC9B83FA285 = { isa = PBXGroup; children = (EE7154CA0E53D4BE889EB6F5,9CD44A932EF1774E68267A58,E3151F81E2A3E2E5C8052EBA); name = Products; sourceTree = "<group>"; };
-E50290A24C49A459B43487C5 = { isa = PBXGroup; children = (9BB89F6CAD0471532B3F6C32,DA381089A6E79C174E3E8182,69F8D45498D7E20DA99BB780,68DE481A39400A49757EB7B7,119C44536C59FD2DC605EB12,E95BE9476625C5A18365C36F,7144A73E43D7ABC4EDF7A2E6,328EC33DF3954DC9B83FA285); sourceTree = "<group>"; };
-89E1FD6268CC0F221A2BE178 = { isa = XCBuildConfiguration; name = Debug; buildSettings = {SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; ENABLE_USER_SCRIPT_SANDBOXING = YES; GCC_C_LANGUAGE_STANDARD = gnu17; DEBUG_INFORMATION_FORMAT = dwarf;}; };
-E6DE6C99132752C914FEF632 = { isa = XCBuildConfiguration; name = Release; buildSettings = {SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; ENABLE_USER_SCRIPT_SANDBOXING = YES; GCC_C_LANGUAGE_STANDARD = gnu17; DEBUG_INFORMATION_FORMAT = dwarf;}; };
-49EA05A46B1A86EA7E413B43 = { isa = XCConfigurationList; buildConfigurations = (89E1FD6268CC0F221A2BE178,E6DE6C99132752C914FEF632); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-98F54143AB4E86B28C3AFEE0 = { isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2700;}; buildConfigurationList = 49EA05A46B1A86EA7E413B43; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = E50290A24C49A459B43487C5; minimizedProjectReferenceProxies = 1; packageReferences = (582681C2EAE02B3F3D399C0C); preferredProjectObjectVersion = 77; productRefGroup = 328EC33DF3954DC9B83FA285; projectDirPath = ""; projectRoot = ""; targets = (45720C13E916B19EE248B654,3DC66ECB9B8BF859D6697FBD,02C39D37CED37712CBDD9283); };
-}; rootObject = 98F54143AB4E86B28C3AFEE0; }
+/* Begin PBXContainerItemProxy section */
+		74F354EB86125769CC2B599E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 45720C13E916B19EE248B654;
+			remoteInfo = PinVoyager;
+		};
+		ED598342B58CDD86B8CF41EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 45720C13E916B19EE248B654;
+			remoteInfo = PinVoyager;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		9BB89F6CAD0471532B3F6C32 /* ../web/src/api/__fixtures__ */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ../web/src/api/__fixtures__; sourceTree = "<group>"; };
+		9CD44A932EF1774E68267A58 /* PinVoyagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = PinVoyagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA381089A6E79C174E3E8182 /* ../crates/api/tests/fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ../crates/api/tests/fixtures; sourceTree = "<group>"; };
+		E3151F81E2A3E2E5C8052EBA /* PinVoyagerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = PinVoyagerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE7154CA0E53D4BE889EB6F5 /* PinVoyager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = PinVoyager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A00000000000000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 45720C13E916B19EE248B654 /* PinVoyager */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		119C44536C59FD2DC605EB12 /* PinVoyagerUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = PinVoyagerUITests; sourceTree = "<group>"; };
+		68DE481A39400A49757EB7B7 /* PinVoyagerTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = PinVoyagerTests; sourceTree = "<group>"; };
+		69F8D45498D7E20DA99BB780 /* PinVoyager */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A00000000000000000000001 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = PinVoyager; sourceTree = "<group>"; };
+		7144A73E43D7ABC4EDF7A2E6 /* Tests/PinVoyagerDataTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Tests/PinVoyagerDataTests; sourceTree = "<group>"; };
+		E95BE9476625C5A18365C36F /* Tests/PinVoyagerDomainTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Tests/PinVoyagerDomainTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		61042B4BE252513D62167EDF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EFAA1E96EA1A2E8D57AE0A75 /* PinVoyagerDomain in Frameworks */,
+				CED354D5895997AE7B178B09 /* PinVoyagerData in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6E9EC17BFD3BC1EF9429AC13 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				11BCABC12345678900000001 /* PinVoyagerDomain in Frameworks */,
+				11BCABC12345678900000002 /* PinVoyagerData in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7FB5B55BD4F5861CD5791E44 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABC0BF1605D8ECEBB830BB92 /* PinVoyagerDomain in Frameworks */,
+				6EF5117FD9AEB5F27346AA89 /* PinVoyagerData in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		328EC33DF3954DC9B83FA285 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EE7154CA0E53D4BE889EB6F5 /* PinVoyager.app */,
+				9CD44A932EF1774E68267A58 /* PinVoyagerTests.xctest */,
+				E3151F81E2A3E2E5C8052EBA /* PinVoyagerUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E50290A24C49A459B43487C5 = {
+			isa = PBXGroup;
+			children = (
+				9BB89F6CAD0471532B3F6C32 /* ../web/src/api/__fixtures__ */,
+				DA381089A6E79C174E3E8182 /* ../crates/api/tests/fixtures */,
+				69F8D45498D7E20DA99BB780 /* PinVoyager */,
+				68DE481A39400A49757EB7B7 /* PinVoyagerTests */,
+				119C44536C59FD2DC605EB12 /* PinVoyagerUITests */,
+				E95BE9476625C5A18365C36F /* Tests/PinVoyagerDomainTests */,
+				7144A73E43D7ABC4EDF7A2E6 /* Tests/PinVoyagerDataTests */,
+				328EC33DF3954DC9B83FA285 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		02C39D37CED37712CBDD9283 /* PinVoyagerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E2ED7336DE59E5A1F1C6131 /* Build configuration list for PBXNativeTarget "PinVoyagerUITests" */;
+			buildPhases = (
+				0BFD80A38BF3ACE09FFFE591 /* Sources */,
+				6E9EC17BFD3BC1EF9429AC13 /* Frameworks */,
+				EEBF74021D63BDBF2435322B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F36D694C88BC75925B29CAF2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				119C44536C59FD2DC605EB12 /* PinVoyagerUITests */,
+			);
+			name = PinVoyagerUITests;
+			packageProductDependencies = (
+				11BCABC12345678900000003 /* PinVoyagerDomain */,
+				11BCABC12345678900000004 /* PinVoyagerData */,
+			);
+			productName = PinVoyagerUITests;
+			productReference = E3151F81E2A3E2E5C8052EBA /* PinVoyagerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		3DC66ECB9B8BF859D6697FBD /* PinVoyagerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED371CA21F70A3F41E259612 /* Build configuration list for PBXNativeTarget "PinVoyagerTests" */;
+			buildPhases = (
+				343B8EF9D7B963A225AD87BB /* Sources */,
+				7FB5B55BD4F5861CD5791E44 /* Frameworks */,
+				B31BAFEF6008E62981FA6F13 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D86CA2B892C624F01AEC3564 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				68DE481A39400A49757EB7B7 /* PinVoyagerTests */,
+				7144A73E43D7ABC4EDF7A2E6 /* Tests/PinVoyagerDataTests */,
+				E95BE9476625C5A18365C36F /* Tests/PinVoyagerDomainTests */,
+			);
+			name = PinVoyagerTests;
+			packageProductDependencies = (
+				814D9DD4859C24F0C0359E6E /* PinVoyagerDomain */,
+				64AF2F8D7ECAF77D866B1948 /* PinVoyagerData */,
+			);
+			productName = PinVoyagerTests;
+			productReference = 9CD44A932EF1774E68267A58 /* PinVoyagerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		45720C13E916B19EE248B654 /* PinVoyager */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0A5D7179CB002491BB27114 /* Build configuration list for PBXNativeTarget "PinVoyager" */;
+			buildPhases = (
+				AB721D01584FC20E993FEF8A /* Sources */,
+				61042B4BE252513D62167EDF /* Frameworks */,
+				3FC32520C82FBF45CA3F77BD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				69F8D45498D7E20DA99BB780 /* PinVoyager */,
+			);
+			name = PinVoyager;
+			packageProductDependencies = (
+				A0EC59F2B8E3B9A6AABB4FED /* PinVoyagerDomain */,
+				1DD64DC368AB18F87D312ED7 /* PinVoyagerData */,
+			);
+			productName = PinVoyager;
+			productReference = EE7154CA0E53D4BE889EB6F5 /* PinVoyager.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2710;
+			};
+			buildConfigurationList = 49EA05A46B1A86EA7E413B43 /* Build configuration list for PBXProject "PinVoyager" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E50290A24C49A459B43487C5;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */,
+			);
+			productRefGroup = 328EC33DF3954DC9B83FA285 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				45720C13E916B19EE248B654 /* PinVoyager */,
+				3DC66ECB9B8BF859D6697FBD /* PinVoyagerTests */,
+				02C39D37CED37712CBDD9283 /* PinVoyagerUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3FC32520C82FBF45CA3F77BD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B31BAFEF6008E62981FA6F13 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D7146F635459E22AC33ECFF3 /* ../web/src/api/__fixtures__ in Resources */,
+				A347B4B4A35AB50835831FD0 /* ../crates/api/tests/fixtures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EEBF74021D63BDBF2435322B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0BFD80A38BF3ACE09FFFE591 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		343B8EF9D7B963A225AD87BB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB721D01584FC20E993FEF8A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D86CA2B892C624F01AEC3564 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 45720C13E916B19EE248B654 /* PinVoyager */;
+			targetProxy = ED598342B58CDD86B8CF41EB /* PBXContainerItemProxy */;
+		};
+		F36D694C88BC75925B29CAF2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 45720C13E916B19EE248B654 /* PinVoyager */;
+			targetProxy = 74F354EB86125769CC2B599E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		16FB96CFE90D6B223C89F1E8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pinvoyager.PinVoyagerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PinVoyager.app/PinVoyager";
+			};
+			name = Release;
+		};
+		17A4C390C6D6E2F692486DE0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = PinVoyager/PinVoyager.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PinVoyager/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PinVoyager;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take still photographs to save in your voyage.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optionally include your current location in photographs you take in PinVoyager.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PINVOYAGER_API_ORIGIN = "https://pinvoyager.com";
+				PINVOYAGER_WEB_ORIGIN = "https://pinvoyager.com";
+				PRODUCT_BUNDLE_IDENTIFIER = com.pinvoyager.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		367A462B2F2132058963E113 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pinvoyager.PinVoyagerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PinVoyager;
+			};
+			name = Debug;
+		};
+		89E1FD6268CC0F221A2BE178 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+			};
+			name = Debug;
+		};
+		BD889611D1C1C0F507889A58 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pinvoyager.PinVoyagerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PinVoyager;
+			};
+			name = Release;
+		};
+		BD9B4D8868AEF7B9E1BC1D7E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = PinVoyager/PinVoyager.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PinVoyager/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PinVoyager;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take still photographs to save in your voyage.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optionally include your current location in photographs you take in PinVoyager.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 0.1.0;
+				PINVOYAGER_API_ORIGIN = "https://pinvoyager.com";
+				PINVOYAGER_WEB_ORIGIN = "https://pinvoyager.com";
+				PRODUCT_BUNDLE_IDENTIFIER = com.pinvoyager.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E6DE6C99132752C914FEF632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		EE11A53C35BF29851D1032D0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_TESTABILITY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pinvoyager.PinVoyagerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PinVoyager.app/PinVoyager";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		49EA05A46B1A86EA7E413B43 /* Build configuration list for PBXProject "PinVoyager" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89E1FD6268CC0F221A2BE178 /* Debug */,
+				E6DE6C99132752C914FEF632 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8E2ED7336DE59E5A1F1C6131 /* Build configuration list for PBXNativeTarget "PinVoyagerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				367A462B2F2132058963E113 /* Debug */,
+				BD889611D1C1C0F507889A58 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0A5D7179CB002491BB27114 /* Build configuration list for PBXNativeTarget "PinVoyager" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				17A4C390C6D6E2F692486DE0 /* Debug */,
+				BD9B4D8868AEF7B9E1BC1D7E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED371CA21F70A3F41E259612 /* Build configuration list for PBXNativeTarget "PinVoyagerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE11A53C35BF29851D1032D0 /* Debug */,
+				16FB96CFE90D6B223C89F1E8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		11BCABC12345678900000003 /* PinVoyagerDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */;
+			productName = PinVoyagerDomain;
+		};
+		11BCABC12345678900000004 /* PinVoyagerData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */;
+			productName = PinVoyagerData;
+		};
+		1DD64DC368AB18F87D312ED7 /* PinVoyagerData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */;
+			productName = PinVoyagerData;
+		};
+		64AF2F8D7ECAF77D866B1948 /* PinVoyagerData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */;
+			productName = PinVoyagerData;
+		};
+		814D9DD4859C24F0C0359E6E /* PinVoyagerDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */;
+			productName = PinVoyagerDomain;
+		};
+		A0EC59F2B8E3B9A6AABB4FED /* PinVoyagerDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 582681C2EAE02B3F3D399C0C /* XCLocalSwiftPackageReference "." */;
+			productName = PinVoyagerDomain;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

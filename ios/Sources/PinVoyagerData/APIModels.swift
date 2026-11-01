@@ -15,6 +15,7 @@ public enum APIJSON {
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     return decoder
   }
+
   public static func encode<T: Encodable>(_ value: T) throws -> Data {
     let encoder = JSONEncoder()
     encoder.keyEncodingStrategy = .convertToSnakeCase
@@ -64,12 +65,14 @@ public struct OwnerPhoto: Decodable, Sendable {
   public let latitude: Double?
   public let longitude: Double?
   public let variantStatus: VariantState
+
   public var coordinate: Coordinate? {
     guard let latitude, let longitude else { return nil }
     let coordinate = Coordinate(latitude: latitude, longitude: longitude)
     return coordinate.isValid ? coordinate : nil
   }
 }
+
 public struct OwnerPhotoPage: Decodable, Sendable {
   public let photos: [OwnerPhoto]
   public let nextBefore: String?
@@ -89,6 +92,7 @@ public struct RemoteVoyage: Codable, Identifiable, Sendable {
   public let unplacedCount: Int
   public let photos: [RemotePhoto]
   public let revision: String?
+
   public var fields: VoyageFields {
     VoyageFields(title: title, description: description, granularity: granularity)
   }
@@ -96,14 +100,17 @@ public struct RemoteVoyage: Codable, Identifiable, Sendable {
 
 public struct LinkedIdentity: Codable, Identifiable, Sendable {
   public var id: String { provider }
+
   public let provider: String
   public let linkedAt: String
   public let lastSeenAt: String
 }
+
 public struct AccountResponse: Codable, Sendable {
   public let user: UserProfile
   public let identities: [LinkedIdentity]
 }
+
 public struct PublicProfile: Codable, Sendable {
   public let user: UserProfile
   public let voyages: [VoyageSummary]
@@ -114,8 +121,10 @@ public struct ClusterVoyage: Codable, Identifiable, Sendable {
   public let id: UUID
   public let title: String
 }
+
 public struct DiscoveryCluster: Codable, Identifiable, Sendable {
   public var id: UUID { photoId }
+
   public let photoId: UUID
   public let voyageId: UUID
   public let coordinate: Coordinate
@@ -123,6 +132,7 @@ public struct DiscoveryCluster: Codable, Identifiable, Sendable {
   public let thumbnailUrl: String
   public let voyages: [ClusterVoyage]
 }
+
 public struct DiscoveryResponse: Codable, Sendable {
   public let clusters: [DiscoveryCluster]
   public let truncated: Bool
@@ -137,6 +147,8 @@ public struct ClientCapabilities: Codable, Sendable {
   public let maxOrderEntries: Int
   public let maxManifestEntries: Int
   public let ownerOfflineDownloads: Bool
+
   public var supportsNativeSync: Bool { nativeProtocolVersions.contains(1) }
+
   public var supportsNativeAuthentication: Bool { nativeAuthentication ?? supportsNativeSync }
 }

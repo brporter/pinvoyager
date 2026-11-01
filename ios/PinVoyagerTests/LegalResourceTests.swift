@@ -2,7 +2,8 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class LegalResourceTests: XCTestCase {
+@MainActor
+final class LegalResourceTests: XCTestCase {
   func testBundledPoliciesHaveTheirDraftRevisionAttributionAndOfflineText() async throws {
     let documents = try await BundledLegal.documents()
     XCTAssertEqual(Set(documents.map(\.id)), ["privacy", "terms"])

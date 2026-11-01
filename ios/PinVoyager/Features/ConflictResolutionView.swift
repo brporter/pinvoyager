@@ -3,37 +3,73 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct ConflictResolutionView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   let operation: OutboxOperation
+
   private enum PhotoReview: String, CaseIterable {
     case append = "Use website order and append my new photos"
     case arrange = "Arrange combined photos"
     case website = "Keep website version"
   }
-  @State private var review: ConflictReview?
-  @State private var finished = false
-  @State private var saving = false
-  @State private var savedLocally = false
-  @State private var photoReview: PhotoReview?
-  @State private var combined: [PhotoConflictItem] = []
-  @State private var readded: Set<UUID> = []
-  @State private var publicConsent = false
+
+  @State
+  private var review: ConflictReview?
+
+  @State
+  private var finished = false
+
+  @State
+  private var saving = false
+
+  @State
+  private var savedLocally = false
+
+  @State
+  private var photoReview: PhotoReview?
+
+  @State
+  private var combined: [PhotoConflictItem] = []
+
+  @State
+  private var readded: Set<UUID> = []
+
+  @State
+  private var publicConsent = false
+
   private var requiresPhotoReview: Bool {
     switch operation.kind {
     case .order, .removePhoto: true
     default: false
     }
   }
-  @State private var makePrivate: Bool?
-  @State private var persistenceTask: Task<Void, Never>?
+
+  @State
+  private var makePrivate: Bool?
+
+  @State
+  private var persistenceTask: Task<Void, Never>?
+
   private var requiresVisibilityReview: Bool {
     if case .unpublish = operation.kind { true } else { false }
   }
-  @State private var choices: [String: FieldResolution] = [:]
-  @State private var discardConfirmation = false
-  @State private var unavailable = false
-  @State private var error: String?
+
+  @State
+  private var choices: [String: FieldResolution] = [:]
+
+  @State
+  private var discardConfirmation = false
+
+  @State
+  private var unavailable = false
+
+  @State
+  private var error: String?
+
   private var voyage: LocalVoyage? {
     model.workspace?.voyages.first { $0.id == operation.voyageId }
   }
@@ -61,20 +97,31 @@ struct ConflictResolutionView: View {
           }
         } else {
           field(
-            "title", label: "Voyage name", mine: review.mine.title, theirs: review.website.title)
+            "title",
+            label: "Voyage name",
+            mine: review.mine.title,
+            theirs: review.website.title
+          )
           field(
-            "description", label: "Description", mine: review.mine.description ?? "",
-            theirs: review.website.description ?? "")
+            "description",
+            label: "Description",
+            mine: review.mine.description ?? "",
+            theirs: review.website.description ?? ""
+          )
           field(
-            "granularity", label: "Public location precision", mine: review.mine.granularity.label,
-            theirs: review.website.granularity.label)
+            "granularity",
+            label: "Public location precision",
+            mine: review.mine.granularity.label,
+            theirs: review.website.granularity.label
+          )
         }
         if !requiresVisibilityReview {
           Section("Public location preview") {
             PrecisionPreview(
               granularity: workingReview?.resolvedFields.granularity ?? review.website.granularity,
               coordinate: model.workspace?.photos(for: review.voyageId).compactMap(\.coordinate)
-                .first)
+                .first
+            )
           }
         }
         if requiresPhotoReview { photoComparison(review) }
@@ -89,7 +136,8 @@ struct ConflictResolutionView: View {
         if savedLocally { Label("Resolution saved on this iPhone", systemImage: "iphone") }
         if model.offline {
           Text(
-            "Your choices can be saved locally. Connect to submit a revision-checked resolution.")
+            "Your choices can be saved locally. Connect to submit a revision-checked resolution."
+          )
         }
         if let error { ErrorNotice(message: error) }
       } else if unavailable {
@@ -102,7 +150,9 @@ struct ConflictResolutionView: View {
               Task {
                 do {
                   _ = try await DraftRecoveryService(store: model.store, vault: vault).recover(
-                    accountId: account, voyageId: id)
+                    accountId: account,
+                    voyageId: id
+                  )
                   await model.reloadWorkspace()
                   model.scheduleSync()
                   dismiss()
@@ -124,7 +174,8 @@ struct ConflictResolutionView: View {
       }
     }.navigationTitle("Resolve changes").task { await load() }
       .confirmationDialog(
-        "Discard this voyage's local files and edits?", isPresented: $discardConfirmation,
+        "Discard this voyage's local files and edits?",
+        isPresented: $discardConfirmation,
         titleVisibility: .visible
       ) {
         Button("Discard files and edits", role: .destructive) {
@@ -158,14 +209,21 @@ struct ConflictResolutionView: View {
       }
   }
 
-  @ViewBuilder private func field(_ key: String, label: String, mine: String, theirs: String)
+  @ViewBuilder
+  private func field(
+    _ key: String,
+    label: String,
+    mine: String,
+    theirs: String
+  )
     -> some View
   {
     Section(label) {
       LabeledContent("Your saved version", value: mine)
       LabeledContent("Website version", value: theirs)
       Picker(
-        label, selection: Binding(get: { choices[key] ?? .needsChoice }, set: { choices[key] = $0 })
+        label,
+        selection: Binding(get: { choices[key] ?? .needsChoice }, set: { choices[key] = $0 })
       ) {
         Text("Choose a version").tag(FieldResolution.needsChoice)
         Text("Use mine").tag(FieldResolution.local)
@@ -173,7 +231,9 @@ struct ConflictResolutionView: View {
       }
     }
   }
-  @ViewBuilder private func photoComparison(_ review: ConflictReview) -> some View {
+
+  @ViewBuilder
+  private func photoComparison(_ review: ConflictReview) -> some View {
     let photos = model.workspace?.photos(for: voyage?.id ?? operation.id) ?? []
     let websiteIDs = Set(review.websitePhotos)
     Section("Your saved photo order") {
@@ -225,7 +285,10 @@ struct ConflictResolutionView: View {
               Task {
                 do {
                   let id = try await model.repository.addAgain(
-                    accountId: account, photoId: photo.id, publicConsent: publicConsent)
+                    accountId: account,
+                    photoId: photo.id,
+                    publicConsent: publicConsent
+                  )
                   combined.append(.local(id))
                   readded.insert(photo.id)
                   await model.reloadWorkspace()
@@ -237,6 +300,7 @@ struct ConflictResolutionView: View {
       }
     }
   }
+
   private func photoName(_ item: PhotoConflictItem) -> String {
     let photo = model.workspace?.photos.first { photo in
       switch item {
@@ -252,9 +316,11 @@ struct ConflictResolutionView: View {
     }
     return "Saved photograph"
   }
+
   private var service: ConflictReviewService {
     ConflictReviewService(store: model.store, remote: model.client)
   }
+
   private var workingReview: ConflictReview? {
     guard var review else { return nil }
     review.choices = choices
@@ -268,6 +334,7 @@ struct ConflictResolutionView: View {
     }
     return review
   }
+
   private func display(_ value: ConflictReview) {
     review = value
     makePrivate = value.makePrivate
@@ -289,6 +356,7 @@ struct ConflictResolutionView: View {
         }
     }
   }
+
   private func load() async {
     guard voyage?.serverId != nil, let account = model.activeAccountId else {
       error = "No remote voyage is mapped. Export local work or keep it as a new private voyage."
@@ -297,7 +365,10 @@ struct ConflictResolutionView: View {
     let access = model.publicAccess
     do {
       let value = try await service.load(
-        accountId: account, operationId: operation.id, online: !model.offline)
+        accountId: account,
+        operationId: operation.id,
+        online: !model.offline
+      )
       guard access == model.publicAccess, !Task.isCancelled else { return }
       display(value)
     } catch {
@@ -309,6 +380,7 @@ struct ConflictResolutionView: View {
       }
     }
   }
+
   private func save() {
     guard let value = workingReview, let account = model.activeAccountId else { return }
     saving = true
@@ -318,7 +390,11 @@ struct ConflictResolutionView: View {
       do {
         await persistenceTask?.value
         switch try await service.apply(
-          value, accountId: account, operationId: operation.id, online: !model.offline)
+          value,
+          accountId: account,
+          operationId: operation.id,
+          online: !model.offline
+        )
         {
         case .savedLocally:
           savedLocally = true

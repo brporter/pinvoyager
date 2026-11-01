@@ -1,6 +1,7 @@
 import XCTest
 
-@MainActor final class ReportingFlowTests: XCTestCase {
+@MainActor
+final class ReportingFlowTests: XCTestCase {
   func testReportReceiptAndBlockingHidePreviouslyLoadedTravelerContent() throws {
     var fixture = try FixtureLaunch()
     let peer = UUID()
@@ -14,23 +15,32 @@ import XCTest
     fixture.reply("/api/voyages", body: try JSONSerialization.data(withJSONObject: page))
     var voyage = try XCTUnwrap(
       try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("voyage_detail"))
-        as? [String: Any])
+        as? [String: Any]
+    )
     voyage["owner_id"] = peer.uuidString
     fixture.reply(
       "/api/voyages/" + (try XCTUnwrap(voyage["id"] as? String)),
-      body: try JSONSerialization.data(withJSONObject: voyage))
+      body: try JSONSerialization.data(withJSONObject: voyage)
+    )
     fixture.reply(
-      "/api/client-capabilities", body: try FixtureLaunch.fixture("native_capabilities"))
+      "/api/client-capabilities",
+      body: try FixtureLaunch.fixture("native_capabilities")
+    )
     let receipt = UUID()
     fixture.reply(
       "/api/reports",
       body: try JSONSerialization.data(withJSONObject: ["id": receipt.uuidString, "status": "open"]
-      ), status: 201)
+      ),
+      status: 201
+    )
     fixture.reply(
       "/api/sync/operations/*",
       body: try JSONSerialization.data(withJSONObject: [
-        "status": "applied", "target_id": receipt.uuidString, "revision": "0",
-      ]))
+        "status": "applied",
+        "target_id": receipt.uuidString,
+        "revision": "0",
+      ])
+    )
     let app = try fixture.launch()
     XCTAssertNotEqual(owner, peer)
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
@@ -48,6 +58,7 @@ import XCTest
     XCTAssertTrue(app.staticTexts["Three weeks in Hokkaido"].waitForNonExistence(timeout: 5))
     app.buttons["Map"].tap()
     XCTAssertTrue(
-      app.staticTexts["Map waiting for blocked-account changes"].waitForExistence(timeout: 5))
+      app.staticTexts["Map waiting for blocked-account changes"].waitForExistence(timeout: 5)
+    )
   }
 }

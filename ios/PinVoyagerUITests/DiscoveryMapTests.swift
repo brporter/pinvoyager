@@ -1,11 +1,13 @@
 import XCTest
 
-@MainActor final class DiscoveryMapTests: XCTestCase {
+@MainActor
+final class DiscoveryMapTests: XCTestCase {
   func testSwitchingBetweenRecentAndMapPreservesTheRecentScrollPosition() throws {
     var fixture = try FixtureLaunch()
     let page = try XCTUnwrap(
       try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("voyage_list"))
-        as? [String: Any])
+        as? [String: Any]
+    )
     let template = try XCTUnwrap((page["voyages"] as? [[String: Any]])?.first)
     let voyages = (0..<12).map { index -> [String: Any] in
       var voyage = template
@@ -16,8 +18,10 @@ import XCTest
     fixture.reply(
       "/api/voyages",
       body: try JSONSerialization.data(withJSONObject: [
-        "voyages": voyages, "next_before": NSNull(),
-      ]))
+        "voyages": voyages,
+        "next_before": NSNull(),
+      ])
+    )
     let app = try fixture.launch()
     let target = app.staticTexts["Discovery voyage 6"]
     app.reveal(target, maximumSwipes: 20)
@@ -25,14 +29,17 @@ import XCTest
     app.buttons["Map"].tap()
     app.buttons["Recent"].tap()
     XCTAssertTrue(
-      target.isHittable, "Discover must retain the position reached before switching modes.")
+      target.isHittable,
+      "Discover must retain the position reached before switching modes."
+    )
   }
 
   func testDiscoveryClustersZoomThenOfferVoyagesAtTheMaximumZoom() throws {
     var fixture = try FixtureLaunch()
     var map = try XCTUnwrap(
       try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("discover_map"))
-        as? [String: Any])
+        as? [String: Any]
+    )
     var clusters = try XCTUnwrap(map["clusters"] as? [[String: Any]])
     clusters[0]["coordinate"] = ["latitude": 25.0, "longitude": 0.0, "precision_m": 5000]
     map["clusters"] = clusters

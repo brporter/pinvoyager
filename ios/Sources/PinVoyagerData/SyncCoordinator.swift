@@ -7,17 +7,27 @@ public enum OperationReceipt: Equatable, Sendable {
   case deleted
   case removed(revision: String, previousRevision: String? = nil)
   case rejected(String, status: Int? = nil)
+
   case publication(
-    intentId: UUID, status: PublicationStatus, revision: String, confirmedPublished: Bool = false,
-    previousRevision: String? = nil)
+    intentId: UUID,
+    status: PublicationStatus,
+    revision: String,
+    confirmedPublished: Bool = false,
+    previousRevision: String? = nil
+  )
 }
 
 public protocol SyncRemote: Sendable {
   func supportsNativeSync() async throws -> Bool
+
   func receipt(operationId: UUID) async throws -> OperationReceipt
+
   func uploadReceipt(voyageId: UUID, key: UUID) async throws -> OperationReceipt
+
   func publicationStatus(voyageId: UUID, intentId: UUID) async throws -> OperationReceipt
+
   func isPublished(voyageId: UUID) async throws -> Bool
+
   func submit(_ request: MutationRequest, operationId: UUID) async throws -> OperationReceipt
 }
 
@@ -25,24 +35,34 @@ extension SyncRemote {
   public func isPublished(voyageId: UUID) async throws -> Bool {
     throw WorkspaceError.unsupportedProtocol
   }
+
   public func uploadReceipt(voyageId: UUID, key: UUID) async throws -> OperationReceipt {
     try await receipt(operationId: key)
   }
+
   public func publicationStatus(voyageId: UUID, intentId: UUID) async throws -> OperationReceipt {
     .inProgress
   }
 }
 
 public protocol UploadSubmitting: Sendable {
-  func submit(operation: OutboxOperation, request: MutationRequest, workspace: Workspace)
+  func submit(
+    operation: OutboxOperation,
+    request: MutationRequest,
+    workspace: Workspace
+  )
     async throws
+
   func cancel(operation: OutboxOperation) async
+
   func cancel(accountId: UUID) async
+
   func cancel(accountId: UUID, generation: Int) async
 }
 
 extension UploadSubmitting {
   public func cancel(operation: OutboxOperation) async {}
+
   public func cancel(accountId: UUID, generation: Int) async { await cancel(accountId: accountId) }
 }
 
@@ -55,7 +75,9 @@ public actor SyncCoordinator {
   private var running: Set<UUID> = []
 
   public init(
-    store: any WorkspaceStore, remote: any SyncRemote, uploads: (any UploadSubmitting)? = nil,
+    store: any WorkspaceStore,
+    remote: any SyncRemote,
+    uploads: (any UploadSubmitting)? = nil,
     randomUnit: @escaping @Sendable () -> Double = { Double.random(in: 0...1) }
   ) {
     self.store = store
@@ -95,14 +117,20 @@ public actor SyncCoordinator {
       else { continue }
       do {
         let receipt = try await remote.publicationStatus(
-          voyageId: serverVoyage, intentId: serverIntent)
+          voyageId: serverVoyage,
+          intentId: serverIntent
+        )
         if case .publication = receipt {
           try await apply(receipt, operation: operation, generation: initial.account.generation)
         }
       } catch {
         try await recordFailure(
-          error, operation: operation, generation: initial.account.generation, now: now,
-          allowApplied: true)
+          error,
+          operation: operation,
+          generation: initial.account.generation,
+          now: now,
+          allowApplied: true
+        )
       }
     }
     var visited: Set<UUID> = []
@@ -136,8 +164,11 @@ public actor SyncCoordinator {
       } catch {
         visited.insert(operation.id)
         try await recordFailure(
-          error, operation: operation,
-          generation: initial.account.generation, now: now)
+          error,
+          operation: operation,
+          generation: initial.account.generation,
+          now: now
+        )
       }
     }
     var lastVoyage: UUID?
@@ -179,7 +210,9 @@ public actor SyncCoordinator {
           if operation.request != nil { return true }
           return workspace.account.profile.displayName != nil && uploads != nil
             && workspace.uploadPolicy(for: photoId).waitReason(
-              network: network, authenticated: true) == nil
+              network: network,
+              authenticated: true
+            ) == nil
         }
         return true
       }.sorted {
@@ -202,7 +235,9 @@ public actor SyncCoordinator {
         if case .upload(let photoId, _) = operation.kind,
           uploads == nil || workspace.account.profile.displayName == nil
             || workspace.uploadPolicy(for: photoId).waitReason(
-              network: network, authenticated: true) != nil
+              network: network,
+              authenticated: true
+            ) != nil
         {
           continue
         }
@@ -232,7 +267,10 @@ public actor SyncCoordinator {
         }
         if case .upload = operation.kind {
           try await uploads?.submit(
-            operation: operation, request: operation.request!, workspace: workspace)
+            operation: operation,
+            request: operation.request!,
+            workspace: workspace
+          )
         } else {
           let receipt = try await remote.submit(operation.request!, operationId: operation.id)
           guard receipt != .notSeen else { throw WorkspaceError.malformedReceipt }
@@ -240,7 +278,11 @@ public actor SyncCoordinator {
         }
       } catch {
         try await recordFailure(
-          error, operation: operation, generation: initial.account.generation, now: now)
+          error,
+          operation: operation,
+          generation: initial.account.generation,
+          now: now
+        )
       }
     }
   }
@@ -258,7 +300,11 @@ public actor SyncCoordinator {
     }
   }
 
-  private func apply(_ receipt: OperationReceipt, operation: OutboxOperation, generation: Int)
+  private func apply(
+    _ receipt: OperationReceipt,
+    operation: OutboxOperation,
+    generation: Int
+  )
     async throws
   {
     if case .applied = receipt {
@@ -351,13 +397,17 @@ public actor SyncCoordinator {
             }
           default: break
           }
-
         }
         if case .block(let userId, let blocked) = operation.kind, !blocked {
           state.blockedAccounts.remove(userId)
         }
       case .publication(
-        let intentId, let status, let revision, let confirmedPublished, let previous):
+        let intentId,
+        let status,
+        let revision,
+        let confirmedPublished,
+        let previous
+      ):
         state.operations[index].state = .applied
         let localIntentId: UUID
         switch operation.kind {
@@ -388,7 +438,10 @@ public actor SyncCoordinator {
   /// Only a connected chain of acknowledged writes can advance the loaded snapshot.
   /// Disconnected edges remain durable until earlier receipts arrive or the owner refreshes.
   private static func advanceRevision(
-    _ revision: String, previous: String?, operation: OutboxOperation, state: inout Workspace
+    _ revision: String,
+    previous: String?,
+    operation: OutboxOperation,
+    state: inout Workspace
   ) {
     guard let voyage = state.voyages.firstIndex(where: { $0.id == operation.voyageId }),
       let receipt = state.operations.firstIndex(where: { $0.id == operation.id })
@@ -424,15 +477,23 @@ public actor SyncCoordinator {
   }
 
   private func recordFailure(
-    _ error: any Error, operation: OutboxOperation, generation: Int, now: Date,
+    _ error: any Error,
+    operation: OutboxOperation,
+    generation: Int,
+    now: Date,
     allowApplied: Bool = false
   ) async throws {
     let failure = SynchronizationFailure(error)
     let jitter = randomUnit()
     try await store.update(accountId: operation.accountId) { state in
       failure.apply(
-        to: &state, operationId: operation.id, generation: generation, now: now, randomUnit: jitter,
-        allowApplied: allowApplied)
+        to: &state,
+        operationId: operation.id,
+        generation: generation,
+        now: now,
+        randomUnit: jitter,
+        allowApplied: allowApplied
+      )
     }
     if failure.disposition == .signIn {
       await uploads?.cancel(accountId: operation.accountId, generation: generation)

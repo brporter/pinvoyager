@@ -41,6 +41,60 @@ the provider/server callback allowlist, and associated domains together. The
 production host still needs an `apple-app-site-association` deployment. The
 entitlement alone does not establish working universal links.
 
+The account header and sign-in sheet in `ios/PinVoyager/Features/AccountView.swift`
+use the `BrandIcon` image set in `ios/PinVoyager/DesignSystem/Assets.xcassets`.
+It contains copies of the default and dark `AppIcon` artwork, selected by the
+current appearance. Keep these copies aligned when replacing the app icon;
+the `AppIcon` app-icon set is separate from images loaded inside the app.
+`ios/PinVoyagerTests/BrandAssetTests.swift::testAccountBrandIconLoadsDistinctLightAndDarkArtwork`
+checks that both appearances load distinct artwork from the built app bundle.
+
+## Swift formatting
+
+The app, local package, and tests follow the formatting conventions in the
+[Google Swift style guide](https://google.github.io/swift/).
+`ios/.swift-format` configures the bundled formatter for two-space indentation,
+100-character lines, one argument or generic requirement per line when a list
+wraps, separate parameterized attributes, grouped and sorted imports (including
+conditional imports), and trailing commas in multiline collections. Existing
+line breaks and single blank lines are preserved; repeated blank lines collapse
+to one. Multiline string contents are not reflowed.
+
+From the repository root, format all maintained Swift files:
+
+```sh
+swift format --in-place --configuration ios/.swift-format --recursive \
+  ios/Package.swift ios/Sources ios/Tests ios/PinVoyager \
+  ios/PinVoyagerTests ios/PinVoyagerUITests
+```
+
+Run the same checks as `.github/workflows/checks.yml`:
+
+```sh
+python3 -m unittest discover -s ios/Scripts -p 'test_format.py'
+swift format lint --strict --configuration ios/.swift-format --recursive \
+  ios/Package.swift ios/Sources ios/Tests ios/PinVoyager \
+  ios/PinVoyagerTests ios/PinVoyagerUITests
+```
+
+`ios/Scripts/test_format.py::SwiftFormatTests` checks wrapping, attributes,
+import grouping, retained member spacing, indentation, and collection commas.
+CI runs these examples and rejects formatting differences using the explicit
+configuration, including in `Package.swift`.
+
+Some Google conventions still require review. Put one blank line between
+methods, initializers, computed properties, nested types, and other members;
+adjacent single-line stored properties or enum cases may stay together. Use
+blank lines within a function to separate logical steps. The formatter retains
+these separators but cannot insert or require them. Keep each element on its
+own line in a multiline array, dictionary, or inheritance list; the formatter
+preserves this layout but can otherwise pack several elements onto a line.
+It also cannot fully enforce Google's continuation alignment, attribute ordering,
+declaration organization, or naming and API-design guidance. Existing SwiftUI multiple-trailing-closure
+syntax remains in use; changing call structure is outside this formatting pass.
+Review these items when editing code instead of treating a successful lint as
+proof that every recommendation in the guide has been satisfied.
+
 ## Tests and coverage
 
 Fast domain/data checks run on macOS without a simulator:

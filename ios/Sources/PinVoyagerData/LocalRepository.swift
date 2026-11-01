@@ -3,6 +3,7 @@ import PinVoyagerDomain
 
 public actor LocalRepository {
   public let store: any WorkspaceStore
+
   public init(store: any WorkspaceStore) { self.store = store }
 
   private static func requireAccess(_ state: Workspace, voyageId: UUID? = nil) throws {
@@ -20,7 +21,11 @@ public actor LocalRepository {
   }
 
   @discardableResult
-  public func createVoyage(accountId: UUID, fields: VoyageFields, at: Date = Date()) async throws
+  public func createVoyage(
+    accountId: UUID,
+    fields: VoyageFields,
+    at: Date = Date()
+  ) async throws
     -> UUID
   {
     let fields = try fields.validated(isNew: true)
@@ -61,7 +66,12 @@ public actor LocalRepository {
     }
   }
 
-  public func editVoyage(accountId: UUID, voyageId: UUID, fields: VoyageFields, at: Date = Date())
+  public func editVoyage(
+    accountId: UUID,
+    voyageId: UUID,
+    fields: VoyageFields,
+    at: Date = Date()
+  )
     async throws
   {
     let fields = try fields.validated(isNew: false)
@@ -87,22 +97,32 @@ public actor LocalRepository {
   }
 
   public func addPhoto(
-    accountId: UUID, photo: LocalPhoto, publicConsent: Bool = false, expectedGeneration: Int? = nil
+    accountId: UUID,
+    photo: LocalPhoto,
+    publicConsent: Bool = false,
+    expectedGeneration: Int? = nil
   ) async throws {
     try await store.update(accountId: accountId) { state in
       try Self.addPhoto(
-        &state, photo: photo, publicConsent: publicConsent,
-        expectedGeneration: expectedGeneration)
+        &state,
+        photo: photo,
+        publicConsent: publicConsent,
+        expectedGeneration: expectedGeneration
+      )
     }
   }
 
   private static func addPhoto(
-    _ state: inout Workspace, photo: LocalPhoto,
-    publicConsent: Bool, expectedGeneration: Int? = nil
+    _ state: inout Workspace,
+    photo: LocalPhoto,
+    publicConsent: Bool,
+    expectedGeneration: Int? = nil
   ) throws {
     guard photo.source != nil else {
       throw ValidationError(
-        field: "photo", message: "Save the file before adding it to the upload queue.")
+        field: "photo",
+        message: "Save the file before adding it to the upload queue."
+      )
     }
     try Self.requireAccess(state, voyageId: photo.voyageId)
     guard expectedGeneration == nil || state.account.generation == expectedGeneration else {
@@ -112,7 +132,8 @@ public actor LocalRepository {
     guard !voyage.confirmedPublished || publicConsent else {
       throw ValidationError(
         field: "visibility",
-        message: "Confirm that these photos will become public as they upload.")
+        message: "Confirm that these photos will become public as they upload."
+      )
     }
     let replaces = state.photos.first(where: { $0.id == photo.id })?.replacesPhotoId
     if let originalId = replaces {
@@ -141,18 +162,24 @@ public actor LocalRepository {
     Self.invalidateLocalConsent(&state, voyageId: photo.voyageId)
     Self.refreshUnsubmittedOrder(&state, voyageId: photo.voyageId)
     Self.enqueue(
-      &state, voyageId: photo.voyageId,
-      kind: .upload(photoId: photo.id, publicConsent: publicConsent))
+      &state,
+      voyageId: photo.voyageId,
+      kind: .upload(photoId: photo.id, publicConsent: publicConsent)
+    )
     if replaces != nil {
       Self.enqueue(
-        &state, voyageId: photo.voyageId,
-        kind: .order(state.photos(for: photo.voyageId).map(\.id)))
+        &state,
+        voyageId: photo.voyageId,
+        kind: .order(state.photos(for: photo.voyageId).map(\.id))
+      )
     }
-
   }
 
   public func beginReplacement(
-    accountId: UUID, photoId: UUID, filename: String, publicConsent: Bool = false,
+    accountId: UUID,
+    photoId: UUID,
+    filename: String,
+    publicConsent: Bool = false,
     expectedGeneration: Int? = nil
   ) async throws -> UUID {
     let id = UUID()
@@ -174,7 +201,8 @@ public actor LocalRepository {
       else {
         throw ValidationError(
           field: "visibility",
-          message: "Confirm that the replacement will become public as it uploads.")
+          message: "Confirm that the replacement will become public as it uploads."
+        )
       }
       if originalId != old.id {
         state.photos[selected].deleted = true
@@ -192,16 +220,28 @@ public actor LocalRepository {
   }
 
   public func beginImport(
-    accountId: UUID, voyageId: UUID, filename: String, publicConsent: Bool = false
+    accountId: UUID,
+    voyageId: UUID,
+    filename: String,
+    publicConsent: Bool = false
   ) async throws -> UUID {
     try await beginImports(
-      accountId: accountId, voyageId: voyageId, filenames: [filename], publicConsent: publicConsent)[
-        0]
+      accountId: accountId,
+      voyageId: voyageId,
+      filenames: [filename],
+      publicConsent: publicConsent
+    )[
+      0
+    ]
   }
 
   public func beginImports(
-    accountId: UUID, voyageId: UUID, filenames: [String], publicConsent: Bool = false,
-    expectedGeneration: Int? = nil, cellularException: Bool = false
+    accountId: UUID,
+    voyageId: UUID,
+    filenames: [String],
+    publicConsent: Bool = false,
+    expectedGeneration: Int? = nil,
+    cellularException: Bool = false
   ) async throws -> [UUID] {
     guard filenames.count <= 100 else {
       throw ValidationError(field: "photos", message: "Choose at most 100 photographs at once.")
@@ -219,7 +259,8 @@ public actor LocalRepository {
       else {
         throw ValidationError(
           field: "visibility",
-          message: "Confirm that these photos will become public as they upload.")
+          message: "Confirm that these photos will become public as they upload."
+        )
       }
       let firstOrder = (state.photos(for: voyageId).map(\.order).max() ?? -1) + 1
       for (index, pending) in photos.enumerated() {
@@ -286,6 +327,7 @@ public actor LocalRepository {
       try Self.removePhoto(&state, photoId: photoId)
     }
   }
+
   public func removePhotos(accountId: UUID, voyageId: UUID, photoIds: Set<UUID>) async throws {
     try await store.update(accountId: accountId) { state in
       try Self.requireAccess(state, voyageId: voyageId)
@@ -297,6 +339,7 @@ public actor LocalRepository {
       }
     }
   }
+
   private static func removePhoto(_ state: inout Workspace, photoId: UUID) throws {
     guard let index = state.photos.firstIndex(where: { $0.id == photoId }) else { return }
     let photo = state.photos[index]
@@ -314,8 +357,10 @@ public actor LocalRepository {
     Self.invalidateLocalConsent(&state, voyageId: photo.voyageId)
     Self.refreshUnsubmittedOrder(&state, voyageId: photo.voyageId)
     Self.enqueue(
-      &state, voyageId: photo.voyageId,
-      kind: .removePhoto(photoId: photoId, uploadKey: photo.uploadKey))
+      &state,
+      voyageId: photo.voyageId,
+      kind: .removePhoto(photoId: photoId, uploadKey: photo.uploadKey)
+    )
   }
 
   public func undoPhotoRemoval(accountId: UUID, photoId: UUID) async throws {
@@ -323,6 +368,7 @@ public actor LocalRepository {
       try Self.undoPhotoRemoval(&state, photoId: photoId)
     }
   }
+
   public func undoPhotoRemovals(accountId: UUID, voyageId: UUID, photoIds: Set<UUID>) async throws {
     try await store.update(accountId: accountId) { state in
       try Self.requireAccess(state, voyageId: voyageId)
@@ -331,6 +377,7 @@ public actor LocalRepository {
       for id in photoIds { try Self.undoPhotoRemoval(&state, photoId: id) }
     }
   }
+
   private static func undoPhotoRemoval(_ state: inout Workspace, photoId: UUID) throws {
     guard let photo = state.photos.firstIndex(where: { $0.id == photoId && $0.deleted }) else {
       return
@@ -373,7 +420,9 @@ public actor LocalRepository {
           uniqueKeysWithValues: state.operations.filter {
             $0.voyageId == voyageId && $0.request == nil
               && ![.applied, .canceled].contains($0.state)
-          }.map { ($0.id, $0.state) }))
+          }.map { ($0.id, $0.state) }
+        )
+      )
       state.voyages[index].deleted = true
       for photo in state.photos.indices where state.photos[photo].voyageId == voyageId {
         state.photos[photo].deleted = true
@@ -423,7 +472,11 @@ public actor LocalRepository {
   }
 
   @discardableResult
-  public func queuePublication(accountId: UUID, voyageId: UUID, at: Date = Date()) async throws
+  public func queuePublication(
+    accountId: UUID,
+    voyageId: UUID,
+    at: Date = Date()
+  ) async throws
     -> UUID
   {
     let id = UUID()
@@ -431,11 +484,16 @@ public actor LocalRepository {
       try Self.requireAccess(state, voyageId: voyageId)
       guard state.account.profile.displayName != nil else {
         throw ValidationError(
-          field: "display_name", message: "Choose a display name before publication.")
+          field: "display_name",
+          message: "Choose a display name before publication."
+        )
       }
       let voyage = state.voyages.first { $0.id == voyageId }!
       let intent = try PublicationIntent.review(
-        voyage: voyage, photos: state.photos(for: voyageId), at: at)
+        voyage: voyage,
+        photos: state.photos(for: voyageId),
+        at: at
+      )
       Self.invalidateLocalConsent(&state, voyageId: voyageId)
       Self.cancelUnsubmittedOrders(&state, voyageId: voyageId)
       let rejected = Set(
@@ -444,7 +502,8 @@ public actor LocalRepository {
             case .publish(let id) = operation.kind
           else { return nil }
           return id
-        })
+        }
+      )
       Self.cancelLocalPublicationOperations(&state, intentIds: rejected)
       state.publicationIntents.append(intent)
       Self.enqueue(&state, id: id, voyageId: voyageId, kind: .publish(intentId: intent.id))
@@ -480,8 +539,10 @@ public actor LocalRepository {
           }
         }
         Self.enqueue(
-          &state, voyageId: state.publicationIntents[index].voyageId,
-          kind: .cancelPublication(intentId: intentId))
+          &state,
+          voyageId: state.publicationIntents[index].voyageId,
+          kind: .cancelPublication(intentId: intentId)
+        )
       }
     }
   }
@@ -572,8 +633,12 @@ public actor LocalRepository {
     }
   }
 
-  @discardableResult public func report(
-    accountId: UUID, target: String, reason: String, details: String
+  @discardableResult
+  public func report(
+    accountId: UUID,
+    target: String,
+    reason: String,
+    details: String
   ) async throws -> UUID {
     guard details.unicodeScalars.count <= 2_000 else {
       throw ValidationError(field: "details", message: "Use at most 2,000 characters.")
@@ -582,15 +647,22 @@ public actor LocalRepository {
     try await store.update(accountId: accountId) { state in
       try Self.requireAccess(state)
       Self.enqueue(
-        &state, id: id, voyageId: nil,
-        kind: .report(target: target, reason: reason, details: details))
+        &state,
+        id: id,
+        voyageId: nil,
+        kind: .report(target: target, reason: reason, details: details)
+      )
     }
     return id
   }
 
   public func resolveMetadataConflict(
-    accountId: UUID, operationId: UUID, fields: VoyageFields, websiteFields: VoyageFields,
-    revision: String, expectedGeneration: Int? = nil
+    accountId: UUID,
+    operationId: UUID,
+    fields: VoyageFields,
+    websiteFields: VoyageFields,
+    revision: String,
+    expectedGeneration: Int? = nil
   ) async throws {
     let fields = try fields.validated(isNew: false)
     guard revision.range(of: "^[0-9]+$", options: .regularExpression) != nil else {
@@ -620,8 +692,11 @@ public actor LocalRepository {
   }
 
   public func resolveVisibilityConflict(
-    accountId: UUID, operationId: UUID,
-    snapshot: OwnerVoyageSnapshot, makePrivate: Bool, expectedGeneration: Int
+    accountId: UUID,
+    operationId: UUID,
+    snapshot: OwnerVoyageSnapshot,
+    makePrivate: Bool,
+    expectedGeneration: Int
   ) async throws {
     let remote = snapshot.voyage
     guard remote.ownerId == accountId, let revision = remote.revision,
@@ -650,8 +725,11 @@ public actor LocalRepository {
     }
   }
 
-  @discardableResult public func addAgain(
-    accountId: UUID, photoId: UUID, publicConsent: Bool = false
+  @discardableResult
+  public func addAgain(
+    accountId: UUID,
+    photoId: UUID,
+    publicConsent: Bool = false
   ) async throws -> UUID {
     let id = UUID()
     try await store.update(accountId: accountId) { state in
@@ -671,8 +749,12 @@ public actor LocalRepository {
   }
 
   public func resolvePhotoConflict(
-    accountId: UUID, operationId: UUID, fields: VoyageFields,
-    snapshot: OwnerVoyageSnapshot, choice: PhotoConflictChoice, expectedGeneration: Int? = nil
+    accountId: UUID,
+    operationId: UUID,
+    fields: VoyageFields,
+    snapshot: OwnerVoyageSnapshot,
+    choice: PhotoConflictChoice,
+    expectedGeneration: Int? = nil
   ) async throws {
     let fields = try fields.validated(isNew: false)
     let remote = snapshot.voyage
@@ -712,7 +794,8 @@ public actor LocalRepository {
       else {
         throw ValidationError(
           field: "conflict",
-          message: "Check the other submitted changes before resolving this photo list.")
+          message: "Check the other submitted changes before resolving this photo list."
+        )
       }
       let local = state.photos(for: voyageId).filter { $0.serverId == nil }
       let website = remote.photos.sorted {
@@ -732,7 +815,9 @@ public actor LocalRepository {
       }
       let included = Set(items)
       let metadata = Dictionary(
-        snapshot.photos.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        snapshot.photos.map { ($0.id, $0) },
+        uniquingKeysWith: { _, last in last }
+      )
       for index in state.operations.indices
       where state.operations[index].voyageId == voyageId
         && ![.applied, .canceled].contains(state.operations[index].state)
@@ -796,7 +881,10 @@ public actor LocalRepository {
 
   @discardableResult
   func recoverAsNewDraft(
-    accountId: UUID, voyageId: UUID, sources: [RecoveredPhotoSource], expectedGeneration: Int
+    accountId: UUID,
+    voyageId: UUID,
+    sources: [RecoveredPhotoSource],
+    expectedGeneration: Int
   ) async throws -> UUID {
     let newId = UUID()
     try await store.update(accountId: accountId) { state in
@@ -817,7 +905,8 @@ public actor LocalRepository {
         let originalPhoto = retained.original
         var photo = LocalPhoto(
           voyageId: newId,
-          filename: retained.isOriginal ? originalPhoto.filename : "Recovered processed copy")
+          filename: retained.isOriginal ? originalPhoto.filename : "Recovered processed copy"
+        )
         photo.source = retained.source
         photo.previewPath = originalPhoto.previewPath
         photo.coordinate = retained.isOriginal ? originalPhoto.coordinate : nil
@@ -828,14 +917,18 @@ public actor LocalRepository {
         photo.transfer = .saved
         state.photos.append(photo)
         Self.enqueue(
-          &state, voyageId: newId, kind: .upload(photoId: photo.id, publicConsent: false))
+          &state,
+          voyageId: newId,
+          kind: .upload(photoId: photo.id, publicConsent: false)
+        )
       }
     }
     return newId
   }
 
   static func cancelLocalPublicationOperations(
-    _ state: inout Workspace, intentIds: Set<UUID>
+    _ state: inout Workspace,
+    intentIds: Set<UUID>
   ) {
     for index in state.operations.indices {
       switch state.operations[index].kind {
@@ -882,11 +975,19 @@ public actor LocalRepository {
   }
 
   private static func enqueue(
-    _ state: inout Workspace, id: UUID = UUID(), voyageId: UUID?, kind: OperationKind
+    _ state: inout Workspace,
+    id: UUID = UUID(),
+    voyageId: UUID?,
+    kind: OperationKind
   ) {
     var successor = OutboxOperation(
-      id: id, accountId: state.account.id, generation: state.account.generation, voyageId: voyageId,
-      kind: kind, expectedRevision: state.voyages.first { $0.id == voyageId }?.revision)
+      id: id,
+      accountId: state.account.id,
+      generation: state.account.generation,
+      voyageId: voyageId,
+      kind: kind,
+      expectedRevision: state.voyages.first { $0.id == voyageId }?.revision
+    )
     let predecessors = state.operations.filter {
       $0.scope == successor.scope && ![.applied, .canceled].contains($0.state)
     }
@@ -904,7 +1005,8 @@ public actor LocalRepository {
           return nil
         }
         return operation.id
-      })
+      }
+    )
     successor.dependencies = dependencies
     state.operations.append(successor)
   }

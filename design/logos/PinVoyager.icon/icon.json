@@ -1,0 +1,147 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "hidden" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "lens 4.svg"
+            },
+            {
+              "appearance" : "light",
+              "value" : "lens 4.svg"
+            }
+          ],
+          "name" : "Lens"
+        },
+        {
+          "hidden" : false,
+          "image-name" : "push-pin 3.svg",
+          "name" : "Pin"
+        }
+      ],
+      "name" : "Lens",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    },
+    {
+      "layers" : [
+        {
+          "hidden" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "foreground-mountain 3.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "foreground-mountain.svg"
+            }
+          ],
+          "name" : "Front Range"
+        },
+        {
+          "hidden" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "background-mountain 3.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "background-mountain.svg"
+            }
+          ],
+          "name" : "Back Range"
+        }
+      ],
+      "name" : "Mountains",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    },
+    {
+      "layers" : [
+        {
+          "hidden" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "sun 2.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "moon.svg"
+            }
+          ],
+          "name" : "Watcher"
+        },
+        {
+          "hidden-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "light",
+              "value" : true
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
+          "image-name-specializations" : [
+            {
+              "value" : "stars 2.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "stars 2.svg"
+            }
+          ],
+          "name" : "Stars"
+        },
+        {
+          "hidden" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "sky 3.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "sky.svg"
+            }
+          ],
+          "name" : "Sky"
+        }
+      ],
+      "name" : "Sky",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

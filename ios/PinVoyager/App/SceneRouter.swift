@@ -7,8 +7,10 @@ enum SceneDestination: Codable, Hashable {
   case profile(String)
   case localVoyage(UUID)
   case voyageSync(UUID)
+
   case preferences, help, ownProfile, displayName, signInMethods, blocked, deletion,
     deletionRecovery, downloads, export
+
   case exportVoyage(UUID)
   case conflict(UUID)
   case legal(String)
@@ -19,7 +21,8 @@ enum OwnerAction: Equatable {
   case addPhotos(UUID)
 }
 
-@MainActor @Observable
+@MainActor
+@Observable
 final class SceneRouter {
   var selectedTab: AppTab = .discover
   var discoverPath: [SceneDestination] = []
@@ -54,9 +57,17 @@ final class SceneRouter {
     return
       (try? encoder.encode(
         Saved(
-          version: 1, accountId: accountId, tab: selectedTab,
-          discover: discoverPath, voyages: voyagePath, sync: syncPath,
-          account: accountPath, pending: pendingRoute, deferred: deferredRoute))) ?? Data()
+          version: 1,
+          accountId: accountId,
+          tab: selectedTab,
+          discover: discoverPath,
+          voyages: voyagePath,
+          sync: syncPath,
+          account: accountPath,
+          pending: pendingRoute,
+          deferred: deferredRoute
+        )
+      )) ?? Data()
   }
 
   func restore(_ data: Data, workspace: Workspace?) {

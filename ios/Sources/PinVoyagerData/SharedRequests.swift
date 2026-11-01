@@ -6,8 +6,13 @@ actor SharedRequests<Key: Hashable & Sendable, Value: Sendable> {
     let id: UUID
     let task: Task<Value, any Error>
   }
+
   private var flights: [Key: Flight] = [:]
-  func value(for key: Key, operation: @escaping @Sendable () async throws -> Value) async throws
+
+  func value(
+    for key: Key,
+    operation: @escaping @Sendable () async throws -> Value
+  ) async throws
     -> Value
   {
     let flight: Flight

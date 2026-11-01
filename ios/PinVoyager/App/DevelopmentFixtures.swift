@@ -1,9 +1,9 @@
 #if DEBUG
-  import Foundation
   import CoreLocation
-  import UIKit
+  import Foundation
   import PinVoyagerData
   import PinVoyagerDomain
+  import UIKit
 
   struct DevelopmentTransport: HTTPTransport {
     func send(_ request: URLRequest) async throws -> HTTPResponse {
@@ -22,7 +22,9 @@
           reply.compactMap { name, value -> (String, String)? in
             guard name.hasPrefix("header.") else { return nil }
             return (String(name.dropFirst(7)), value)
-          }, uniquingKeysWith: { _, last in last })
+          },
+          uniquingKeysWith: { _, last in last }
+        )
         return HTTPResponse(status: status, headers: headers, body: body)
       }
       if request.url?.path == "/api/client-capabilities" {
@@ -46,8 +48,10 @@
       {
         model.makeCamera = {
           CameraController(
-            engine: FixedPhotoCapture(bytes: bytes), location: FixedCameraLocation(),
-            permission: { true })
+            engine: FixedPhotoCapture(bytes: bytes),
+            location: FixedCameraLocation(),
+            permission: { true }
+          )
         }
       }
       model.capabilityChecked = true
@@ -60,7 +64,8 @@
         let state = try JSONDecoder().decode(Workspace.self, from: data)
         try await model.store.insert(state)
         try await model.credentials.save(
-          SessionCredential(accountId: state.account.id, token: "synthetic-ui-test-session"))
+          SessionCredential(accountId: state.account.id, token: "synthetic-ui-test-session")
+        )
         await model.restore(accountId: state.account.id)
         if let encoded = ProcessInfo.processInfo.environment["PINVOYAGER_TEST_IDENTITIES"],
           let data = encoded.data(using: .utf8)
@@ -84,7 +89,8 @@
       await model.restore(accountId: account.id)
       guard args.contains("--populated-fixture"), let vault = model.vault else { return }
       let id = try await model.create(
-        VoyageFields(title: "Winter in Hokkaido", description: "A quiet walk through fresh snow."))
+        VoyageFields(title: "Winter in Hokkaido", description: "A quiet walk through fresh snow.")
+      )
       let dimension = args.contains("--large-photo-fixture") ? 2048.0 : 80.0
       let data = UIGraphicsImageRenderer(size: CGSize(width: dimension, height: dimension))
         .jpegData(
@@ -97,24 +103,39 @@
       try data.write(to: source)
       defer { try? FileManager.default.removeItem(at: source) }
       let photo = try await PhotoPreparer(vault: vault).prepare(
-        source, accountId: account.id, voyageId: id, maxBytes: 25 * 1_024 * 1_024)
+        source,
+        accountId: account.id,
+        voyageId: id,
+        maxBytes: 25 * 1_024 * 1_024
+      )
       try await model.repository.addPhoto(accountId: account.id, photo: photo)
       await model.reloadWorkspace()
     }
   }
+
   private actor FixedPhotoCapture: PhotoCapturing {
     nonisolated let box = CaptureSessionBox()
     let bytes: Data
+
     init(bytes: Data) { self.bytes = bytes }
+
     func configure() {}
+
     func start() {}
+
     func stop() {}
+
     func flip() {}
+
     func capture(flash: Bool) -> Data { bytes }
   }
-  @MainActor private final class FixedCameraLocation: CameraLocationProviding {
+
+  @MainActor
+  private final class FixedCameraLocation: CameraLocationProviding {
     var current: CLLocation? { nil }
+
     func start() {}
+
     func stop() {}
   }
 #endif

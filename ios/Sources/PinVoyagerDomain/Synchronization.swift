@@ -5,12 +5,14 @@ public enum NetworkState: Equatable, Sendable {
   case wifi(constrained: Bool)
   case cellular(constrained: Bool)
 }
+
 public enum WaitReason: String, Codable, Sendable {
   case offline, wifi, constrained, signIn, paused, dependency, retryDelay, system
 }
 
 public enum SyncPreference: CaseIterable, Sendable {
   case wifiOnly, allowsConstrained, backgroundPreparation, paused, keepOriginals, uploadsPaused
+
   public var keyPath: WritableKeyPath<SyncPolicy, Bool> {
     switch self {
     case .wifiOnly: \.wifiOnly
@@ -31,17 +33,21 @@ public struct SyncPolicy: Codable, Equatable, Sendable {
   public var notifyOnPublication: Bool?
   public var paused = false
   public var uploadsPaused: Bool?
+
   public var areUploadsPaused: Bool {
     get { uploadsPaused == true }
     set { uploadsPaused = newValue }
   }
+
   public init() {}
+
   public func forUpload(cellularException: Bool) -> Self {
     var policy = self
     if cellularException { policy.wifiOnly = false }
     policy.paused = paused || areUploadsPaused
     return policy
   }
+
   public func waitReason(network: NetworkState, authenticated: Bool) -> WaitReason? {
     if paused { return .paused }
     if !authenticated { return .signIn }
@@ -56,6 +62,7 @@ public struct SyncPolicy: Codable, Equatable, Sendable {
 
 public enum ResponseDisposition: Equatable, Sendable {
   case success, signIn, conflict, reconcile, destinationMissing, attention
+
   public static func classify(status: Int) -> Self {
     switch status {
     case 200..<300: .success
@@ -69,7 +76,11 @@ public enum ResponseDisposition: Equatable, Sendable {
 }
 
 public enum RetrySchedule {
-  public static func delay(attempt: Int, randomUnit: Double, retryAfter: TimeInterval = 0)
+  public static func delay(
+    attempt: Int,
+    randomUnit: Double,
+    retryAfter: TimeInterval = 0
+  )
     -> TimeInterval
   {
     max(retryAfter, min(900, pow(2, Double(min(30, max(1, attempt))))) * min(1, max(0, randomUnit)))
@@ -91,6 +102,7 @@ public enum OperationKind: Codable, Equatable, Sendable {
   case cancelPublication(intentId: UUID)
   case block(userId: UUID, blocked: Bool)
   case report(target: String, reason: String, details: String)
+
   public var priority: Int {
     switch self {
     case .cancelPublication, .unpublish, .deleteVoyage, .removePhoto: 0
@@ -108,8 +120,12 @@ public struct MutationRequest: Codable, Equatable, Sendable {
   public let body: Data?
   public let revision: String?
   public var headers: [String: String]
+
   public init(
-    method: String, path: String, body: Data? = nil, revision: String? = nil,
+    method: String,
+    path: String,
+    body: Data? = nil,
+    revision: String? = nil,
     headers: [String: String] = [:]
   ) {
     self.method = method
@@ -126,11 +142,13 @@ public struct OutboxOperation: Codable, Equatable, Identifiable, Sendable {
     case block(UUID)
     case operation(UUID)
   }
+
   public var scope: Scope {
     if let voyageId { return .voyage(voyageId) }
     if case .block(let userId, _) = kind { return .block(userId) }
     return .operation(id)
   }
+
   public let id: UUID
   public let accountId: UUID
   public let generation: Int
@@ -148,9 +166,15 @@ public struct OutboxOperation: Codable, Equatable, Identifiable, Sendable {
   public var receiptRejected: Bool?
   public var completedAt: Date?
   public var requestId: String?
+
   public init(
-    id: UUID = UUID(), accountId: UUID, generation: Int, voyageId: UUID?, kind: OperationKind,
-    expectedRevision: String? = nil, dependencies: Set<UUID> = []
+    id: UUID = UUID(),
+    accountId: UUID,
+    generation: Int,
+    voyageId: UUID?,
+    kind: OperationKind,
+    expectedRevision: String? = nil,
+    dependencies: Set<UUID> = []
   ) {
     self.id = id
     self.accountId = accountId
@@ -164,6 +188,7 @@ public struct OutboxOperation: Codable, Equatable, Identifiable, Sendable {
 
 public struct BackgroundTransfer: Codable, Equatable, Identifiable, Sendable {
   public var id: UUID { operationId }
+
   public let operationId: UUID
   public let generation: Int
   public let sessionIdentifier: String
@@ -171,8 +196,12 @@ public struct BackgroundTransfer: Codable, Equatable, Identifiable, Sendable {
   public let bodyPath: String
   public let byteCount: Int64
   public var completed = false
+
   public init(
-    operationId: UUID, generation: Int, sessionIdentifier: String, bodyPath: String,
+    operationId: UUID,
+    generation: Int,
+    sessionIdentifier: String,
+    bodyPath: String,
     byteCount: Int64
   ) {
     self.operationId = operationId

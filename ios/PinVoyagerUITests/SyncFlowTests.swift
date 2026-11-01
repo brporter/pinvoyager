@@ -2,40 +2,57 @@ import PinVoyagerData
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class SyncFlowTests: XCTestCase {
+@MainActor
+final class SyncFlowTests: XCTestCase {
   func testSyncSettingsAndExplicitMetadataConflictChoices() throws {
     var fixture = try FixtureLaunch()
     let account = fixture.workspace.account.id
     let fields = VoyageFields(
-      title: "My retained title", description: "My description", granularity: .exact)
+      title: "My retained title",
+      description: "My description",
+      granularity: .exact
+    )
     var voyage = LocalVoyage(ownerId: account, fields: fields)
     var remote = try XCTUnwrap(
       try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("voyage_updated"))
-        as? [String: Any])
+        as? [String: Any]
+    )
     remote["owner_id"] = account.uuidString
     voyage.serverId = UUID(uuidString: try XCTUnwrap(remote["id"] as? String))
     voyage.serverFields = VoyageFields(
-      title: "Original", description: "Original", granularity: .km1)
+      title: "Original",
+      description: "Original",
+      granularity: .km1
+    )
     voyage.revision = "1"
     fixture.workspace.voyages = [voyage]
     var edit = OutboxOperation(
-      accountId: account, generation: 0, voyageId: voyage.id, kind: .edit(fields),
-      expectedRevision: "1")
+      accountId: account,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .edit(fields),
+      expectedRevision: "1"
+    )
     edit.state = .conflict
     edit.lastError = "Review the website changes."
     edit.requestId = "conflict-reference"
     fixture.workspace.operations = [edit]
     fixture.reply(
-      "/api/voyages/\(voyage.serverId!)", body: try JSONSerialization.data(withJSONObject: remote))
+      "/api/voyages/\(voyage.serverId!)",
+      body: try JSONSerialization.data(withJSONObject: remote)
+    )
     let photos = (remote["photos"] as? [[String: Any]] ?? []).map { photo in
       [
-        "id": photo["id"]!, "width": photo["width"]!, "height": photo["height"]!,
+        "id": photo["id"]!,
+        "width": photo["width"]!,
+        "height": photo["height"]!,
         "variant_status": photo["variant_status"]!,
       ]
     }
     fixture.reply(
       "/api/voyages/\(voyage.serverId!)/photos",
-      body: try JSONSerialization.data(withJSONObject: ["photos": photos, "next_before": NSNull()]))
+      body: try JSONSerialization.data(withJSONObject: ["photos": photos, "next_before": NSNull()])
+    )
     let app = try fixture.launch()
     app.buttons["Sync"].tap()
     XCTAssertTrue(app.staticTexts["Reference: conflict-reference"].waitForExistence(timeout: 5))
@@ -63,13 +80,17 @@ import XCTest
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Recovered destination", description: "Kept locally"))
+      fields: VoyageFields(title: "Recovered destination", description: "Kept locally")
+    )
     voyage.serverId = UUID()
     voyage.revision = "1"
     fixture.workspace.voyages = [voyage]
     var edit = OutboxOperation(
-      accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-      kind: .edit(voyage.fields))
+      accountId: fixture.workspace.account.id,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .edit(voyage.fields)
+    )
     edit.state = .conflict
     fixture.workspace.operations = [edit]
     let app = try fixture.launch()
@@ -90,12 +111,14 @@ extension SyncFlowTests {
     let voyage = UUID()
     let fields = VoyageFields(title: "Pending voyage", description: "Retained on device")
     let kinds: [(String, OperationKind)] = [
-      ("Create draft", .create(fields)), ("Save voyage details", .edit(fields)),
+      ("Create draft", .create(fields)),
+      ("Save voyage details", .edit(fields)),
       ("Upload photograph", .upload(photoId: UUID(), publicConsent: false)),
       ("Save photo order", .order([])),
       ("Remove photograph", .removePhoto(photoId: UUID(), uploadKey: UUID())),
       ("Delete voyage", .deleteVoyage),
-      ("Make voyage private", .unpublish), ("Request publication", .publish(intentId: UUID())),
+      ("Make voyage private", .unpublish),
+      ("Request publication", .publish(intentId: UUID())),
       ("Cancel publication", .cancelPublication(intentId: UUID())),
       ("Update blocked traveler", .block(userId: UUID(), blocked: true)),
       ("Send report", .report(target: "voyage:\(UUID())", reason: "spam", details: "Review this")),
@@ -104,9 +127,15 @@ extension SyncFlowTests {
       // Keep Create draft just below the first viewport, including its prefetched Retry button.
       let ordinal = index == 0 ? 3 : index < 3 ? index : index + 1
       let id = try XCTUnwrap(
-        UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", ordinal)))
+        UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", ordinal))
+      )
       var operation = OutboxOperation(
-        id: id, accountId: account, generation: 0, voyageId: voyage, kind: entry.1)
+        id: id,
+        accountId: account,
+        generation: 0,
+        voyageId: voyage,
+        kind: entry.1
+      )
       operation.state = .attention
       operation.lastError = "Kept locally. Review this operation before retrying."
       fixture.workspace.operations.append(operation)
@@ -143,7 +172,8 @@ extension SyncFlowTests {
     var fixture = try FixtureLaunch()
     var detail = try XCTUnwrap(
       try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("voyage_updated"))
-        as? [String: Any])
+        as? [String: Any]
+    )
     detail["owner_id"] = fixture.workspace.account.id.uuidString
     detail["published"] = false
     let bytes = try JSONSerialization.data(withJSONObject: detail)
@@ -164,8 +194,11 @@ extension SyncFlowTests {
     var removed = LocalPhoto(voyageId: voyage.id, filename: "Deleted while offline.jpg")
     removed.serverId = UUID()
     removed.source = SourceFile(
-      relativePath: "retained.jpg", contentHash: String(repeating: "a", count: 64), byteCount: 10,
-      mediaType: "image/jpeg")
+      relativePath: "retained.jpg",
+      contentHash: String(repeating: "a", count: 64),
+      byteCount: 10,
+      mediaType: "image/jpeg"
+    )
     removed.order = 2
     fixture.workspace.photos.append(removed)
     var added = LocalPhoto(voyageId: voyage.id, filename: "Added on my iPhone.jpg")
@@ -174,14 +207,21 @@ extension SyncFlowTests {
     added.transfer = .saved
     fixture.workspace.photos.append(added)
     var conflict = OutboxOperation(
-      accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-      kind: .order(fixture.workspace.photos.map(\.id)), expectedRevision: "1")
+      accountId: fixture.workspace.account.id,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .order(fixture.workspace.photos.map(\.id)),
+      expectedRevision: "1"
+    )
     conflict.state = .conflict
     fixture.workspace.operations = [
       conflict,
       OutboxOperation(
-        accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-        kind: .upload(photoId: added.id, publicConsent: false)),
+        accountId: fixture.workspace.account.id,
+        generation: 0,
+        voyageId: voyage.id,
+        kind: .upload(photoId: added.id, publicConsent: false)
+      ),
     ]
     fixture.reply("/api/voyages/\(remote.id)", body: bytes)
     let metadata = remote.photos.map {
@@ -191,8 +231,10 @@ extension SyncFlowTests {
     fixture.reply(
       "/api/voyages/\(remote.id)/photos",
       body: try JSONSerialization.data(withJSONObject: [
-        "photos": metadata, "next_before": NSNull(),
-      ]))
+        "photos": metadata,
+        "next_before": NSNull(),
+      ])
+    )
     let app = try fixture.launch()
     app.buttons["Sync"].tap()
     app.buttons["Resolve changes"].tap()
@@ -238,8 +280,11 @@ extension SyncFlowTests {
     voyage.revision = "1"
     fixture.workspace.voyages = [voyage]
     var operation = OutboxOperation(
-      accountId: fixture.workspace.account.id, generation: 0,
-      voyageId: voyage.id, kind: .edit(voyage.fields))
+      accountId: fixture.workspace.account.id,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .edit(voyage.fields)
+    )
     operation.state = .conflict
     fixture.workspace.operations = [operation]
     let app = try fixture.launch()
@@ -259,7 +304,8 @@ extension SyncFlowTests {
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Delete only this local voyage", description: "Not submitted"))
+      fields: VoyageFields(title: "Delete only this local voyage", description: "Not submitted")
+    )
     fixture.workspace.voyages = [voyage]
     fixture.workspace.photos = [LocalPhoto(voyageId: voyage.id, filename: "Not uploaded")]
     let app = try fixture.launch()
@@ -272,7 +318,8 @@ extension SyncFlowTests {
     XCTAssertTrue(
       app.staticTexts[
         "This removes 1 unsynced photos and their local files after stopping queued uploads."
-      ].exists)
+      ].exists
+    )
     delete.tap()
     XCTAssertTrue(app.staticTexts[voyage.fields.title].waitForNonExistence(timeout: 5))
   }
@@ -282,7 +329,10 @@ extension SyncFlowTests {
   func testOfflineConflictRestoresItsArrangedWorkingCopyAndSavesNewChoicesLocally() throws {
     var fixture = try FixtureLaunch()
     let fields = VoyageFields(
-      title: "Offline conflict choices", description: "Local edits", granularity: .km10)
+      title: "Offline conflict choices",
+      description: "Local edits",
+      granularity: .km10
+    )
     var voyage = LocalVoyage(ownerId: fixture.workspace.account.id, fields: fields)
     voyage.serverId = UUID()
     voyage.revision = "1"
@@ -290,23 +340,37 @@ extension SyncFlowTests {
     var removed = LocalPhoto(voyageId: voyage.id, filename: "Removed on website")
     removed.serverId = UUID()
     removed.source = SourceFile(
-      relativePath: "originals/retained", contentHash: String(repeating: "a", count: 64),
-      byteCount: 12, mediaType: "image/jpeg")
+      relativePath: "originals/retained",
+      contentHash: String(repeating: "a", count: 64),
+      byteCount: 12,
+      mediaType: "image/jpeg"
+    )
     var local = LocalPhoto(voyageId: voyage.id, filename: "Local arrival")
     local.source = removed.source
     local.order = 1
     fixture.workspace.photos = [removed, local]
     var operation = OutboxOperation(
-      accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-      kind: .order([removed.id, local.id]))
+      accountId: fixture.workspace.account.id,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .order([removed.id, local.id])
+    )
     operation.state = .conflict
     fixture.workspace.operations = [operation]
     let website = UUID()
     var review = ConflictReview(
-      voyageId: voyage.id, generation: 0, mine: fields,
+      voyageId: voyage.id,
+      generation: 0,
+      mine: fields,
       website: VoyageFields(
-        title: "Website fields", description: "Previously fetched", granularity: .km1),
-      revision: "7", published: true, websitePhotos: [website])
+        title: "Website fields",
+        description: "Previously fetched",
+        granularity: .km1
+      ),
+      revision: "7",
+      published: true,
+      websitePhotos: [website]
+    )
     review.choices = ["title": .local, "description": .remote, "granularity": .local]
     review.photoChoice = .arranged([.local(local.id), .website(website)])
     review.readded = [removed.id]
@@ -341,7 +405,8 @@ extension SyncFlowTests {
       var fixture = try FixtureLaunch()
       var detail = try XCTUnwrap(
         try JSONSerialization.jsonObject(with: FixtureLaunch.fixture("voyage_updated"))
-          as? [String: Any])
+          as? [String: Any]
+      )
       detail["owner_id"] = fixture.workspace.account.id.uuidString
       detail["published"] = true
       let bytes = try JSONSerialization.data(withJSONObject: detail)
@@ -352,8 +417,11 @@ extension SyncFlowTests {
       voyage.confirmedPublished = true
       fixture.workspace.voyages = [voyage]
       var operation = OutboxOperation(
-        accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-        kind: .unpublish)
+        accountId: fixture.workspace.account.id,
+        generation: 0,
+        voyageId: voyage.id,
+        kind: .unpublish
+      )
       operation.state = .conflict
       fixture.workspace.operations = [operation]
       fixture.reply("/api/voyages/\(remote.id)", body: bytes)
@@ -364,8 +432,10 @@ extension SyncFlowTests {
       fixture.reply(
         "/api/voyages/\(remote.id)/photos",
         body: try JSONSerialization.data(withJSONObject: [
-          "photos": metadata, "next_before": NSNull(),
-        ]))
+          "photos": metadata,
+          "next_before": NSNull(),
+        ])
+      )
       let app = try fixture.launch()
       app.buttons["Sync"].tap()
       app.buttons["Resolve changes"].tap()

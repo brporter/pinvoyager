@@ -5,10 +5,13 @@ public struct HTTPResponse: Sendable {
   public let status: Int
   public let headers: [String: String]
   public let body: Data
+
   public init(status: Int, headers: [String: String] = [:], body: Data) {
     self.status = status
     self.headers = Dictionary(
-      headers.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { _, new in new })
+      headers.map { ($0.key.lowercased(), $0.value) },
+      uniquingKeysWith: { _, new in new }
+    )
     self.body = body
   }
 }
@@ -19,8 +22,10 @@ public protocol HTTPTransport: Sendable {
 
 final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
   func urlSession(
-    _ session: URLSession, task: URLSessionTask,
-    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+    _ session: URLSession,
+    task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest,
     completionHandler: @escaping @Sendable (URLRequest?) -> Void
   ) {
     completionHandler(nil)
@@ -29,6 +34,7 @@ final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
 
 public final class URLSessionTransport: HTTPTransport, Sendable {
   private let session: URLSession
+
   public init(configuration: URLSessionConfiguration = .ephemeral) {
     configuration.httpCookieStorage = nil
     configuration.httpShouldSetCookies = false
@@ -36,8 +42,12 @@ public final class URLSessionTransport: HTTPTransport, Sendable {
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     configuration.timeoutIntervalForRequest = 30
     session = URLSession(
-      configuration: configuration, delegate: RefuseRedirects(), delegateQueue: nil)
+      configuration: configuration,
+      delegate: RefuseRedirects(),
+      delegateQueue: nil
+    )
   }
+
   public func send(_ request: URLRequest) async throws -> HTTPResponse {
     let (data, response) = try await session.data(for: request)
     guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
@@ -45,7 +55,10 @@ public final class URLSessionTransport: HTTPTransport, Sendable {
       status: response.statusCode,
       headers: Dictionary(
         response.allHeaderFields.map { (String(describing: $0.key), String(describing: $0.value)) },
-        uniquingKeysWith: { _, new in new }), body: data)
+        uniquingKeysWith: { _, new in new }
+      ),
+      body: data
+    )
   }
 }
 
@@ -55,6 +68,7 @@ public struct APIError: Error, LocalizedError, Sendable {
   public let message: String
   public let requestId: String?
   public let retryAfter: TimeInterval?
+
   public var errorDescription: String? { message }
 
   public init(response: HTTPResponse, now: Date = Date()) {
@@ -89,18 +103,23 @@ public actor APIClient {
   private let transport: any HTTPTransport
   private let credentials: any CredentialStore
   public nonisolated let imageCache: (any ImageCaching)?
+
   private struct AuthorizedRead: Hashable {
     let path: String
     let accountId: UUID?
     let token: String?
   }
+
   private let images = SharedRequests<AuthorizedRead, Data>()
   private let profiles = SharedRequests<AuthorizedRead, PublicProfile>()
   private var profileAliases: [String: UUID] = [:]
   private var activeImages = 0
   private var waitingImages: [CheckedContinuation<Void, Never>] = []
+
   public init(
-    origin: TrustedOrigin, transport: any HTTPTransport, credentials: any CredentialStore,
+    origin: TrustedOrigin,
+    transport: any HTTPTransport,
+    credentials: any CredentialStore,
     imageCache: (any ImageCaching)? = nil
   ) {
     self.origin = origin
@@ -110,24 +129,42 @@ public actor APIClient {
   }
 
   public func get<T: Decodable & Sendable>(
-    path: String, query: [URLQueryItem] = [], accountId: UUID? = nil
+    path: String,
+    query: [URLQueryItem] = [],
+    accountId: UUID? = nil
   ) async throws -> T {
     try await send(method: "GET", path: path, query: query, accountId: accountId)
   }
 
   public func send<T: Decodable & Sendable>(
-    method: String, path: String, query: [URLQueryItem] = [], body: Data? = nil,
-    accountId: UUID? = nil, token: String? = nil, headers: [String: String] = [:]
+    method: String,
+    path: String,
+    query: [URLQueryItem] = [],
+    body: Data? = nil,
+    accountId: UUID? = nil,
+    token: String? = nil,
+    headers: [String: String] = [:]
   ) async throws -> T {
     let response = try await raw(
-      method: method, path: path, query: query, body: body, accountId: accountId, token: token,
-      headers: headers)
+      method: method,
+      path: path,
+      query: query,
+      body: body,
+      accountId: accountId,
+      token: token,
+      headers: headers
+    )
     return try APIJSON.decoder().decode(T.self, from: response.body)
   }
 
   public func raw(
-    method: String, path: String, query: [URLQueryItem] = [], body: Data? = nil,
-    accountId: UUID? = nil, token: String? = nil, headers: [String: String] = [:],
+    method: String,
+    path: String,
+    query: [URLQueryItem] = [],
+    body: Data? = nil,
+    accountId: UUID? = nil,
+    token: String? = nil,
+    headers: [String: String] = [:],
     acceptingNotModified: Bool = false
   ) async throws -> HTTPResponse {
     let url = try origin.resolve(path)
@@ -160,7 +197,11 @@ public actor APIClient {
     { return nil }
   }
 
-  public func voyages(before: String? = nil, owner: UUID? = nil, viewer: UUID? = nil) async throws
+  public func voyages(
+    before: String? = nil,
+    owner: UUID? = nil,
+    viewer: UUID? = nil
+  ) async throws
     -> VoyagePage
   {
     var query = [URLQueryItem]()
@@ -168,13 +209,20 @@ public actor APIClient {
     if owner != nil { query.append(URLQueryItem(name: "mine", value: "true")) }
     return try await get(path: "/api/voyages", query: query, accountId: owner ?? viewer)
   }
+
   public func voyage(_ id: UUID, accountId: UUID? = nil) async throws -> RemoteVoyage {
     try await get(path: "/api/voyages/\(id)", accountId: accountId)
   }
+
   public func me(_ accountId: UUID) async throws -> AccountResponse {
     try await get(path: "/api/me", accountId: accountId)
   }
-  public func profile(_ identifier: String, before: String? = nil, accountId: UUID? = nil)
+
+  public func profile(
+    _ identifier: String,
+    before: String? = nil,
+    accountId: UUID? = nil
+  )
     async throws -> PublicProfile
   {
     let name: String
@@ -209,6 +257,7 @@ public actor APIClient {
     if let current = profile.user.displayName { profileAliases[current] = profile.user.id }
     return profile
   }
+
   public func image(_ path: String, accountId: UUID? = nil) async throws -> Data {
     let url = try origin.resolve(path)
     let parts = url.path.split(separator: "/")
@@ -245,14 +294,22 @@ public actor APIClient {
     let cached = try? await imageCache?.lookup(key, now: Date())
     do {
       let response = try await raw(
-        method: "GET", path: request.path, token: request.token,
-        headers: cached.map { ["If-None-Match": $0.etag] } ?? [:], acceptingNotModified: true)
+        method: "GET",
+        path: request.path,
+        token: request.token,
+        headers: cached.map { ["If-None-Match": $0.etag] } ?? [:],
+        acceptingNotModified: true
+      )
       if response.status == 304 {
         guard let cached else { throw URLError(.badServerResponse) }
         return cached.data
       }
       try? await imageCache?.store(
-        response.body, etag: response.headers["etag"], key: key, now: Date())
+        response.body,
+        etag: response.headers["etag"],
+        key: key,
+        now: Date()
+      )
       return response.body
     } catch {
       // A denied or unavailable request never falls back to an ordinary cached image.

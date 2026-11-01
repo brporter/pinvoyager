@@ -3,25 +3,62 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct LocalVoyageView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @Environment(\.scenePhase) private var phase
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @Environment(\.scenePhase)
+  private var phase
+
   let id: UUID
-  @State private var managing = false
-  @State private var editing = false
-  @State private var importing = false
-  @State private var publication = false
-  @State private var privateLocations = false
-  @State private var unpublishConfirmation = false
-  @State private var galleryPhoto: LocalPhoto?
-  @State private var galleryMembers: Set<UUID>?
-  @State private var galleryAnchor: UUID?
-  @State private var selectedMapPhoto: UUID?
-  @AccessibilityFocusState private var focusedPhoto: UUID?
-  @State private var recovering: LocalPhoto?
-  @State private var removing: LocalPhoto?
-  @State private var removeDownload = false
-  @State private var lastRemovedPhoto: UUID?
+
+  @State
+  private var managing = false
+
+  @State
+  private var editing = false
+
+  @State
+  private var importing = false
+
+  @State
+  private var publication = false
+
+  @State
+  private var privateLocations = false
+
+  @State
+  private var unpublishConfirmation = false
+
+  @State
+  private var galleryPhoto: LocalPhoto?
+
+  @State
+  private var galleryMembers: Set<UUID>?
+
+  @State
+  private var galleryAnchor: UUID?
+
+  @State
+  private var selectedMapPhoto: UUID?
+
+  @AccessibilityFocusState
+  private var focusedPhoto: UUID?
+
+  @State
+  private var recovering: LocalPhoto?
+
+  @State
+  private var removing: LocalPhoto?
+
+  @State
+  private var removeDownload = false
+
+  @State
+  private var lastRemovedPhoto: UUID?
+
   private var publicationArmed: Bool {
     guard let state = model.workspace else { return false }
     return state.publicationIntents.contains {
@@ -53,9 +90,11 @@ struct LocalVoyageView: View {
               photo.coordinate.map {
                 MapPhotoPin(
                   id: photo.id,
-                  coordinate: privateLocations ? $0 : voyage.fields.granularity.apply($0))
+                  coordinate: privateLocations ? $0 : voyage.fields.granularity.apply($0)
+                )
               }
-            }, selectedPhotoId: selectedMapPhoto
+            },
+            selectedPhotoId: selectedMapPhoto
           ) { members in
             galleryMembers = Set(members)
             galleryPhoto = photos.first { members.contains($0.id) }
@@ -116,7 +155,9 @@ struct LocalVoyageView: View {
           if let remote = voyage.serverId {
             if voyage.confirmedPublished {
               ShareLink(
-                "Share voyage", item: model.webOrigin.url(path: ["voyages", remote.uuidString]))
+                "Share voyage",
+                item: model.webOrigin.url(path: ["voyages", remote.uuidString])
+              )
             }
             NavigationLink("View website version", value: SceneDestination.voyage(remote))
           }
@@ -132,7 +173,8 @@ struct LocalVoyageView: View {
               Task { await model.downloadOwnerCopy(id) }
             }.disabled(
               model.offline || !model.signedIn || model.downloadingVoyages.contains(id)
-                || model.capabilities?.ownerOfflineDownloads != true)
+                || model.capabilities?.ownerOfflineDownloads != true
+            )
             Text(
               "Downloads contain processed photos, never originals. Offline maps still need a connection."
             ).font(.footnote)
@@ -153,7 +195,9 @@ struct LocalVoyageView: View {
               Task {
                 await model.perform {
                   try await model.repository.undoPhotoRemoval(
-                    accountId: accountId, photoId: photoId)
+                    accountId: accountId,
+                    photoId: photoId
+                  )
                 }
                 lastRemovedPhoto = nil
               }
@@ -163,7 +207,8 @@ struct LocalVoyageView: View {
       }
       .toolbar {
         Button("Edit details") { editing = true }.disabled(
-          voyage.serverId != nil && voyage.revision == nil)
+          voyage.serverId != nil && voyage.revision == nil
+        )
       }
       .task(
         id: LocalRefreshRequest(voyageId: id, access: model.publicAccess, active: phase == .active)
@@ -204,7 +249,9 @@ struct LocalVoyageView: View {
         }
       }
       .confirmationDialog(
-        "Remove downloaded copy?", isPresented: $removeDownload, titleVisibility: .visible
+        "Remove downloaded copy?",
+        isPresented: $removeDownload,
+        titleVisibility: .visible
       ) {
         Button("Remove download", role: .destructive) { Task { await model.removeOwnerCopy(id) } }
       } message: {
@@ -232,7 +279,9 @@ struct LocalVoyageView: View {
         )
       }
       .confirmationDialog(
-        "Make voyage private?", isPresented: $unpublishConfirmation, titleVisibility: .visible
+        "Make voyage private?",
+        isPresented: $unpublishConfirmation,
+        titleVisibility: .visible
       ) {
         Button("Make voyage private") {
           if let accountId = model.activeAccountId {
@@ -251,16 +300,25 @@ struct LocalVoyageView: View {
       ContentUnavailableView("This voyage is unavailable", systemImage: "suitcase")
     }
   }
-  private var photos: [LocalPhoto] { model.workspace?.photos(for: id) ?? [] }
 
+  private var photos: [LocalPhoto] { model.workspace?.photos(for: id) ?? [] }
 }
 
 struct PublicationReview: View {
-  @Environment(AppModel.self) private var model
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   let voyageId: UUID
-  @State private var accepted = false
-  @State private var queued = false
+
+  @State
+  private var accepted = false
+
+  @State
+  private var queued = false
+
   var body: some View {
     NavigationStack {
       Form {
@@ -300,16 +358,21 @@ struct PublicationReview: View {
       }.navigationTitle("Publication review").toolbar { Button("Close") { dismiss() } }
     }
   }
+
   private var validationMessage: String? {
     guard let state = model.workspace,
       let voyage = state.voyages.first(where: { $0.id == voyageId })
     else { return "Open a saved voyage to review publication." }
     do {
       _ = try PublicationIntent.review(
-        voyage: voyage, photos: state.photos(for: voyageId), at: Date())
+        voyage: voyage,
+        photos: state.photos(for: voyageId),
+        at: Date()
+      )
       return nil
     } catch { return error.localizedDescription }
   }
+
   private func queue() {
     guard let accountId = model.activeAccountId else { return }
     Task {

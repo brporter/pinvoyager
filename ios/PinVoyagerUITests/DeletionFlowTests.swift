@@ -1,7 +1,8 @@
 import PinVoyagerData
 import XCTest
 
-@MainActor final class DeletionFlowTests: XCTestCase {
+@MainActor
+final class DeletionFlowTests: XCTestCase {
   func testPreparedDeletionRequiresConfirmationAndItsStatusSurvivesSignOut() throws {
     var fixture = try FixtureLaunch()
     let record = try fixture.deletion(status: .prepared)
@@ -9,17 +10,23 @@ import XCTest
     fixture.reply(
       "/api/me/deletion-requests/\(record.id)/confirm",
       body: try JSONSerialization.data(withJSONObject: [
-        "id": record.id.uuidString, "status": "complete",
-      ]), status: 202)
+        "id": record.id.uuidString,
+        "status": "complete",
+      ]),
+      status: 202
+    )
     fixture.reply(
-      "/api/account-deletions/\(record.id)", body: Data("{\"status\":\"complete\"}".utf8))
+      "/api/account-deletions/\(record.id)",
+      body: Data("{\"status\":\"complete\"}".utf8)
+    )
     fixture.reply("/auth/native/logout", body: Data(), status: 204)
     let app = try fixture.launch()
     app.buttons["Account"].tap()
     app.buttons["Delete account"].tap()
     XCTAssertTrue(
       app.staticTexts["Your account is ready for deletion. It has not been deleted yet."]
-        .waitForExistence(timeout: 5))
+        .waitForExistence(timeout: 5)
+    )
     app.buttons["Confirm account deletion"].tap()
     app.buttons["Delete my account"].tap()
     XCTAssertTrue(app.staticTexts["Sign in to your account"].waitForExistence(timeout: 5))
@@ -38,11 +45,16 @@ import XCTest
       fixture.reply(
         "/api/me/deletion-requests",
         body: try JSONSerialization.data(withJSONObject: [
-          "id": record.id.uuidString, "status": "prepared",
+          "id": record.id.uuidString,
+          "status": "prepared",
           "expires_at": ISO8601DateFormatter().string(from: record.expiresAt),
-        ]), status: 201)
+        ]),
+        status: 201
+      )
       fixture.reply(
-        "/api/account-deletions/\(record.id)", body: Data("{\"status\":\"prepared\"}".utf8))
+        "/api/account-deletions/\(record.id)",
+        body: Data("{\"status\":\"prepared\"}".utf8)
+      )
       let app = try fixture.launch()
       app.buttons["Account"].tap()
       app.buttons["Delete account"].tap()

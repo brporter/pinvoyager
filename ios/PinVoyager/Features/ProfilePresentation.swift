@@ -3,7 +3,9 @@ import Observation
 import PinVoyagerData
 import PinVoyagerDomain
 
-@MainActor @Observable final class ProfilePresentation {
+@MainActor
+@Observable
+final class ProfilePresentation {
   private let identifier: String
   private let client: APIClient
   private var requestId = UUID()
@@ -14,10 +16,12 @@ import PinVoyagerDomain
   private(set) var error: String?
   private(set) var loading = false
   private(set) var retryingMore = false
+
   init(identifier: String, client: APIClient) {
     self.identifier = identifier
     self.client = client
   }
+
   func invalidate() {
     requestId = UUID()
     profile = nil
@@ -27,6 +31,7 @@ import PinVoyagerDomain
     loadedAccess = nil
     loading = false
   }
+
   func load(refresh: Bool, access: PublicAccess, isCurrent: @MainActor (PublicAccess) -> Bool) async
   {
     guard !access.offline else {
@@ -42,7 +47,10 @@ import PinVoyagerDomain
     defer { if requestId == id { loading = false } }
     do {
       let page = try await client.profile(
-        identifier, before: refresh ? nil : cursor, accountId: access.accountId)
+        identifier,
+        before: refresh ? nil : cursor,
+        accountId: access.accountId
+      )
       guard requestId == id, isCurrent(access), !Task.isCancelled else { return }
       loadedAccess = access
       var seen: Set<UUID> = []
@@ -60,6 +68,7 @@ import PinVoyagerDomain
       self.error = error.localizedDescription
     }
   }
+
   func retry(access: PublicAccess, isCurrent: @MainActor (PublicAccess) -> Bool) async {
     await load(refresh: !retryingMore, access: access, isCurrent: isCurrent)
   }

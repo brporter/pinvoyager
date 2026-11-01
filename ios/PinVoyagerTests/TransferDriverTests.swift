@@ -6,7 +6,8 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class TransferDriverTests: XCTestCase {
+@MainActor
+final class TransferDriverTests: XCTestCase {
   func testWakeCompletionCanRegisterAfterItsEventsHaveAlreadyFinished() async throws {
     let driver = SystemTransferDriver()
     let descriptor = TransferDescriptor(accountId: UUID(), generation: 1, operationId: UUID())
@@ -22,7 +23,9 @@ import XCTest
     await fulfillment(of: [finished], timeout: 1)
   }
 }
-@MainActor private final class CheckpointMarker { var checkpointed = false }
+
+@MainActor
+private final class CheckpointMarker { var checkpointed = false }
 
 extension TransferDriverTests {
   func testSystemResponseEvidenceSurvivesANewDriverUntilTheCheckpointIsAcknowledged() async throws {
@@ -40,22 +43,27 @@ extension TransferDriverTests {
       completed: { result in
         XCTAssertEqual(result.transportError, .timedOut)
         received.fulfill()
-      }, finished: {})
+      },
+      finished: {}
+    )
     delegate.urlSession(session, dataTask: task, didReceive: Data("persisted response".utf8))
     delegate.urlSession(session, task: task, didCompleteWithError: URLError(.timedOut))
     await fulfillment(of: [received], timeout: 2)
     let driver = SystemTransferDriver(evidenceRoot: root)
     let pending = try await driver.pendingCompletions(
-      sessionIdentifier: descriptor.sessionIdentifier)
+      sessionIdentifier: descriptor.sessionIdentifier
+    )
     XCTAssertEqual(pending.count, 1)
     XCTAssertEqual(pending.first?.descriptor, descriptor)
     XCTAssertEqual(pending.first?.transportError, .timedOut)
     XCTAssertEqual(
       try Data(contentsOf: files.url(descriptor, taskId: task.taskIdentifier)),
-      Data("persisted response".utf8))
+      Data("persisted response".utf8)
+    )
     await driver.discardCompletion(try XCTUnwrap(pending.first))
     let acknowledged = try await driver.pendingCompletions(
-      sessionIdentifier: descriptor.sessionIdentifier)
+      sessionIdentifier: descriptor.sessionIdentifier
+    )
     XCTAssertTrue(acknowledged.isEmpty)
   }
 }
@@ -77,16 +85,22 @@ extension TransferDriverTests {
     XCTAssertEqual(try Data(contentsOf: path).count, 1_048_576)
     try APIJSON.encode(
       TransferEvidenceRecord(
-        status: 429, requestId: "request-reference", retryAfter: "120", transportError: nil)
+        status: 429,
+        requestId: "request-reference",
+        retryAfter: "120",
+        transportError: nil
+      )
     ).write(to: path.appendingPathExtension("json"))
     let completion = try XCTUnwrap(
-      try files.completions(sessionIdentifier: descriptor.sessionIdentifier).first)
+      try files.completions(sessionIdentifier: descriptor.sessionIdentifier).first
+    )
     XCTAssertEqual(completion.response?.status, 429)
     XCTAssertEqual(completion.response?.headers["retry-after"], "120")
     XCTAssertEqual(completion.response?.headers["x-request-id"], "request-reference")
     XCTAssertEqual(completion.response?.body.count, 1_048_576)
     try Data("damaged".utf8).write(
-      to: path.deletingLastPathComponent().appendingPathComponent("2.json"))
+      to: path.deletingLastPathComponent().appendingPathComponent("2.json")
+    )
     XCTAssertEqual(try files.completions(sessionIdentifier: descriptor.sessionIdentifier).count, 1)
     XCTAssertTrue(try files.completions(sessionIdentifier: "unknown-session").isEmpty)
   }
@@ -108,11 +122,19 @@ extension TransferDriverTests {
     var request = URLRequest(url: URL(string: "https://127.0.0.1:9/test")!)
     request.httpMethod = "POST"
     let one = try await driver.createSuspended(
-      sessionIdentifier: first.sessionIdentifier, request: request, body: body, descriptor: first,
-      policy: policy)
+      sessionIdentifier: first.sessionIdentifier,
+      request: request,
+      body: body,
+      descriptor: first,
+      policy: policy
+    )
     let two = try await driver.createSuspended(
-      sessionIdentifier: first.sessionIdentifier, request: request, body: body, descriptor: second,
-      policy: policy)
+      sessionIdentifier: first.sessionIdentifier,
+      request: request,
+      body: body,
+      descriptor: second,
+      policy: policy
+    )
     let before = await driver.tasks(sessionIdentifier: first.sessionIdentifier)
     XCTAssertEqual(Set(before.map(\.id)), Set([one.id, two.id]))
     await driver.cancel(one, sessionIdentifier: first.sessionIdentifier)
@@ -125,18 +147,25 @@ private final class TransferResponseProtocol: URLProtocol, @unchecked Sendable {
   override class func canInit(with request: URLRequest) -> Bool {
     request.url?.host == "transfer.invalid"
   }
+
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
   override func startLoading() {
     let response = HTTPURLResponse(
-      url: request.url!, statusCode: 503, httpVersion: "HTTP/1.1",
+      url: request.url!,
+      statusCode: 503,
+      httpVersion: "HTTP/1.1",
       headerFields: [
-        "Content-Type": "application/json", "Retry-After": "120",
+        "Content-Type": "application/json",
+        "Retry-After": "120",
         "x-request-id": "transfer-reference",
-      ])!
+      ]
+    )!
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data("{\"message\":\"Try later\"}".utf8))
     client?.urlProtocolDidFinishLoading(self)
   }
+
   override func stopLoading() {}
 }
 
@@ -160,7 +189,9 @@ extension TransferDriverTests {
         let saved = try? evidence.completions(sessionIdentifier: descriptor.sessionIdentifier)
         XCTAssertEqual(saved?.first?.response?.status, 503)
         completed.fulfill()
-      }, finished: {})
+      },
+      finished: {}
+    )
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [TransferResponseProtocol.self]
     let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
@@ -182,20 +213,28 @@ extension TransferDriverTests {
     let operation = UUID()
     let ordinary = TransferDescriptor(accountId: account, generation: 2, operationId: operation)
     let cellular = TransferDescriptor(
-      accountId: account, generation: 2, operationId: operation, cellularException: true)
+      accountId: account,
+      generation: 2,
+      operationId: operation,
+      cellularException: true
+    )
     for (descriptor, status) in [(ordinary, 429), (cellular, 201)] {
       let path = files.url(descriptor, taskId: 1)
       try FileManager.default.createDirectory(
-        at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+        at: path.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+      )
       try APIJSON.encode(
         TransferEvidenceRecord(status: status, requestId: nil, retryAfter: nil, transportError: nil)
       )
       .write(to: path.appendingPathExtension("json"))
     }
     let first = try XCTUnwrap(
-      files.completions(sessionIdentifier: ordinary.sessionIdentifier).first)
+      files.completions(sessionIdentifier: ordinary.sessionIdentifier).first
+    )
     let second = try XCTUnwrap(
-      files.completions(sessionIdentifier: cellular.sessionIdentifier).first)
+      files.completions(sessionIdentifier: cellular.sessionIdentifier).first
+    )
     XCTAssertEqual(first.response?.status, 429)
     XCTAssertEqual(second.response?.status, 201)
     XCTAssertEqual(second.descriptor, cellular)
@@ -215,7 +254,8 @@ extension TransferDriverTests {
     try await model.store.insert(state)
     let previousAccount = model.activeAccountId
     for identifier in [
-      "unknown-system-session", TransferSession(accountId: UUID(), generation: 0).identifier,
+      "unknown-system-session",
+      TransferSession(accountId: UUID(), generation: 0).identifier,
       TransferSession(accountId: state.account.id, generation: 0, cellularException: true)
         .identifier,
     ] {
@@ -224,7 +264,8 @@ extension TransferDriverTests {
         await SystemTransferDriver.shared.finishEvents(identifier)
       }
       AppDelegate().application(
-        UIApplication.shared, handleEventsForBackgroundURLSession: identifier
+        UIApplication.shared,
+        handleEventsForBackgroundURLSession: identifier
       ) { completed.fulfill() }
       await fulfillment(of: [completed], timeout: 3)
       XCTAssertEqual(model.activeAccountId, previousAccount)
@@ -252,11 +293,14 @@ extension TransferDriverTests {
         XCTAssertEqual(result.transportError, .unknown)
         XCTAssertNil(result.response)
         completed.fulfill()
-      }, finished: {})
+      },
+      finished: {}
+    )
     delegate.urlSession(session, dataTask: task, didReceive: Data("diagnostic bytes".utf8))
     delegate.urlSession(session, task: task, didCompleteWithError: CocoaError(.fileReadCorruptFile))
     await fulfillment(of: [completed], timeout: 2)
   }
+
   func testNetworkObserverDeliversAnInitialPathOnTheMainActor() async {
     let changed = expectation(description: "Initial system network path")
     var first = true

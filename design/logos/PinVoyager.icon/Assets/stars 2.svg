@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="stars-title stars-desc">
+  <title id="stars-title">PinVoyager experiment — stars layer — dark</title>
+  <desc id="stars-desc">Five small pale four-point stars across a transparent nighttime sky, spaced clear of the crescent moon.</desc>
+  <g id="stars" fill="#eee9fa">
+    <path d="m180 210 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m440 275 3 6 6 3-6 3-3 6-3-6-6-3 6-3Z"/>
+    <path d="m512 230 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>
+    <path d="m738 362 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/>
+    <path d="m856 226 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z"/>
+  </g>
+</svg>

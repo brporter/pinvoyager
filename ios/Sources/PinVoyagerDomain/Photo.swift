@@ -5,6 +5,7 @@ public struct SourceFile: Codable, Equatable, Sendable {
   public let contentHash: String
   public let byteCount: Int64
   public let mediaType: String
+
   public init(relativePath: String, contentHash: String, byteCount: Int64, mediaType: String) {
     self.relativePath = relativePath
     self.contentHash = contentHash
@@ -20,6 +21,7 @@ public enum TransferState: String, Codable, Sendable {
 
 public enum VariantState: String, Codable, Sendable {
   case pending, ready, failed, unsupported
+
   public init(from decoder: any Decoder) throws {
     self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unsupported
   }
@@ -30,8 +32,12 @@ public struct OfflinePhotoCopy: Codable, Equatable, Sendable {
   public let variants: [String: String]
   public let byteCount: Int64
   public let savedAt: Date
+
   public init(
-    revision: String, variants: [String: String], byteCount: Int64, savedAt: Date = Date()
+    revision: String,
+    variants: [String: String],
+    byteCount: Int64,
+    savedAt: Date = Date()
   ) {
     self.revision = revision
     self.variants = variants
@@ -62,8 +68,11 @@ public struct LocalPhoto: Codable, Equatable, Identifiable, Sendable {
   public var variant: VariantState = .pending
   public var deleted = false
   public var error: String?
+
   public var canRetryUpload: Bool { transfer == .needsAttention && variant != .failed && !deleted }
+
   public var isDurable: Bool { source != nil || serverId != nil }
+
   public init(id: UUID = UUID(), voyageId: UUID, uploadKey: UUID = UUID(), filename: String) {
     self.id = id
     self.voyageId = voyageId

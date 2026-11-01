@@ -9,11 +9,16 @@ public enum ConflictReviewResult: Equatable, Sendable {
 public struct ConflictReviewService: Sendable {
   private let store: any WorkspaceStore
   private let remote: any OwnerSnapshotLoading
+
   public init(store: any WorkspaceStore, remote: any OwnerSnapshotLoading) {
     self.store = store
     self.remote = remote
   }
-  private func context(accountId: UUID, operationId: UUID) async throws -> (
+
+  private func context(
+    accountId: UUID,
+    operationId: UUID
+  ) async throws -> (
     Workspace, OutboxOperation, LocalVoyage
   ) {
     let state = try await store.read(accountId: accountId)
@@ -27,6 +32,7 @@ public struct ConflictReviewService: Sendable {
     else { throw WorkspaceError.missingVoyage }
     return (state, operation, voyage)
   }
+
   public func load(accountId: UUID, operationId: UUID, online: Bool) async throws -> ConflictReview
   {
     let (state, _, voyage) = try await context(accountId: accountId, operationId: operationId)
@@ -41,8 +47,12 @@ public struct ConflictReviewService: Sendable {
     try await save(review, accountId: accountId, operationId: operationId)
     return review
   }
+
   private func refreshed(
-    _ saved: ConflictReview?, snapshot: OwnerVoyageSnapshot, state: Workspace, voyage: LocalVoyage
+    _ saved: ConflictReview?,
+    snapshot: OwnerVoyageSnapshot,
+    state: Workspace,
+    voyage: LocalVoyage
   ) throws -> ConflictReview {
     let remote = snapshot.voyage
     guard remote.ownerId == state.account.id, remote.id == voyage.serverId else {
@@ -55,18 +65,27 @@ public struct ConflictReviewService: Sendable {
     var review =
       saved
       ?? ConflictReview(
-        voyageId: voyage.id, generation: state.account.generation,
-        mine: voyage.fields, website: remote.fields, revision: revision,
-        published: remote.published, websitePhotos: ids)
+        voyageId: voyage.id,
+        generation: state.account.generation,
+        mine: voyage.fields,
+        website: remote.fields,
+        revision: revision,
+        published: remote.published,
+        websitePhotos: ids
+      )
     if saved == nil, let base = voyage.serverFields {
       review.choices = [
         "title": FieldComparison(base: base.title, local: voyage.fields.title, remote: remote.title)
           .resolution,
         "description": FieldComparison(
-          base: base.description, local: voyage.fields.description, remote: remote.description
+          base: base.description,
+          local: voyage.fields.description,
+          remote: remote.description
         ).resolution,
         "granularity": FieldComparison(
-          base: base.granularity, local: voyage.fields.granularity, remote: remote.granularity
+          base: base.granularity,
+          local: voyage.fields.granularity,
+          remote: remote.granularity
         ).resolution,
       ]
     }
@@ -75,7 +94,8 @@ public struct ConflictReviewService: Sendable {
         ids.map(PhotoConflictItem.website)
         + state.photos(for: voyage.id).filter { $0.serverId == nil }.map { .local($0.id) }
       review.photoChoice = .arranged(
-        previous.filter { items.contains($0) } + items.filter { !previous.contains($0) })
+        previous.filter { items.contains($0) } + items.filter { !previous.contains($0) }
+      )
     }
     review.generation = state.account.generation
     review.website = remote.fields
@@ -84,6 +104,7 @@ public struct ConflictReviewService: Sendable {
     review.websitePhotos = ids
     return review
   }
+
   public func save(_ review: ConflictReview, accountId: UUID, operationId: UUID) async throws {
     try await store.update(accountId: accountId) { state in
       guard state.account.access != .locked, state.account.generation == review.generation else {
@@ -100,11 +121,19 @@ public struct ConflictReviewService: Sendable {
       state.conflictReviews = reviews
     }
   }
-  public func apply(_ review: ConflictReview, accountId: UUID, operationId: UUID, online: Bool)
+
+  public func apply(
+    _ review: ConflictReview,
+    accountId: UUID,
+    operationId: UUID,
+    online: Bool
+  )
     async throws -> ConflictReviewResult
   {
     let (state, operation, voyage) = try await context(
-      accountId: accountId, operationId: operationId)
+      accountId: accountId,
+      operationId: operationId
+    )
     guard voyage.id == review.voyageId, state.account.generation == review.generation else {
       throw WorkspaceError.locked
     }
@@ -123,29 +152,44 @@ public struct ConflictReviewService: Sendable {
       guard let makePrivate = review.makePrivate else {
         throw ValidationError(
           field: "visibility",
-          message: "Choose whether to keep website visibility or make this voyage private.")
+          message: "Choose whether to keep website visibility or make this voyage private."
+        )
       }
       try await repository.resolveVisibilityConflict(
-        accountId: accountId, operationId: operationId,
-        snapshot: snapshot, makePrivate: makePrivate, expectedGeneration: review.generation)
+        accountId: accountId,
+        operationId: operationId,
+        snapshot: snapshot,
+        makePrivate: makePrivate,
+        expectedGeneration: review.generation
+      )
       return .resolved
     }
     guard review.fieldsChosen else {
       throw ValidationError(
-        field: "conflict", message: "Choose which version of each field to keep.")
+        field: "conflict",
+        message: "Choose which version of each field to keep."
+      )
     }
     switch operation.kind {
     case .order, .removePhoto:
       guard let choice = review.photoChoice else { throw WorkspaceError.invalidOrder }
       try await repository.resolvePhotoConflict(
-        accountId: accountId, operationId: operationId,
-        fields: review.resolvedFields, snapshot: snapshot, choice: choice,
-        expectedGeneration: review.generation)
+        accountId: accountId,
+        operationId: operationId,
+        fields: review.resolvedFields,
+        snapshot: snapshot,
+        choice: choice,
+        expectedGeneration: review.generation
+      )
     default:
       try await repository.resolveMetadataConflict(
-        accountId: accountId, operationId: operationId,
-        fields: review.resolvedFields, websiteFields: review.website, revision: review.revision,
-        expectedGeneration: review.generation)
+        accountId: accountId,
+        operationId: operationId,
+        fields: review.resolvedFields,
+        websiteFields: review.website,
+        revision: review.revision,
+        expectedGeneration: review.generation
+      )
     }
     return .resolved
   }

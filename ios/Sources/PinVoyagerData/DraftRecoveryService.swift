@@ -11,10 +11,12 @@ struct RecoveredPhotoSource: Sendable {
 public struct DraftRecoveryService: Sendable {
   private let store: any WorkspaceStore
   private let vault: FileVault
+
   public init(store: any WorkspaceStore, vault: FileVault) {
     self.store = store
     self.vault = vault
   }
+
   public func recover(accountId: UUID, voyageId: UUID) async throws -> UUID {
     let initial = try await store.read(accountId: accountId)
     guard initial.account.access != .locked else { throw WorkspaceError.locked }
@@ -27,8 +29,11 @@ public struct DraftRecoveryService: Sendable {
         try Task.checkCancellation()
         if let source = photo.source,
           let copy = try await verifiedCopy(
-            source.relativePath, hash: source.contentHash,
-            byteCount: source.byteCount, accountId: accountId)
+            source.relativePath,
+            hash: source.contentHash,
+            byteCount: source.byteCount,
+            accountId: accountId
+          )
         {
           recovered.append(RecoveredPhotoSource(original: photo, source: copy, isOriginal: true))
           continue
@@ -45,7 +50,10 @@ public struct DraftRecoveryService: Sendable {
       }
       return try await LocalRepository(store: store).recoverAsNewDraft(
         accountId: accountId,
-        voyageId: voyageId, sources: recovered, expectedGeneration: initial.account.generation)
+        voyageId: voyageId,
+        sources: recovered,
+        expectedGeneration: initial.account.generation
+      )
     } catch {
       for photo in recovered {
         try? await vault.remove(photo.source.relativePath, accountId: accountId)
@@ -53,7 +61,13 @@ public struct DraftRecoveryService: Sendable {
       throw error
     }
   }
-  private func verifiedCopy(_ path: String, hash: String, byteCount: Int64? = nil, accountId: UUID)
+
+  private func verifiedCopy(
+    _ path: String,
+    hash: String,
+    byteCount: Int64? = nil,
+    accountId: UUID
+  )
     async throws -> SourceFile?
   {
     let url = try await vault.url(path, accountId: accountId)
@@ -61,7 +75,11 @@ public struct DraftRecoveryService: Sendable {
     let copy: SourceFile
     do {
       copy = try await vault.importFile(
-        url, accountId: accountId, photoId: UUID(), maxBytes: 25 * 1_024 * 1_024)
+        url,
+        accountId: accountId,
+        photoId: UUID(),
+        maxBytes: 25 * 1_024 * 1_024
+      )
     } catch FileVaultError.unsupportedFormat { return nil } catch FileVaultError.missingSource {
       return nil
     }

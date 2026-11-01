@@ -9,10 +9,12 @@ private actor WorkspaceOpenBarrier {
   let store: any WorkspaceStore
   var pending: CheckedContinuation<Void, Never>?
   var opens = 0
+
   init(started: XCTestExpectation, store: any WorkspaceStore) {
     self.started = started
     self.store = store
   }
+
   func open() async -> any WorkspaceStore {
     opens += 1
     await withCheckedContinuation { continuation in
@@ -21,18 +23,24 @@ private actor WorkspaceOpenBarrier {
     }
     return store
   }
+
   func release() {
     pending?.resume()
     pending = nil
   }
 }
-@MainActor private final class StartupMarker { var returned = false }
 
-@MainActor final class BootstrapTests: XCTestCase {
+@MainActor
+private final class StartupMarker { var returned = false }
+
+@MainActor
+final class BootstrapTests: XCTestCase {
   func testConcurrentStartupCallersWaitForTheSameStoreBeforeProceeding() async throws {
     let started = expectation(description: "Workspace opening is in progress")
     let barrier = WorkspaceOpenBarrier(
-      started: started, store: try CoreDataWorkspaceStore(url: nil))
+      started: started,
+      store: try CoreDataWorkspaceStore(url: nil)
+    )
     let bootstrap = AppBootstrap(makeStore: { _ in await barrier.open() })
     let first = Task { await bootstrap.start() }
     await fulfillment(of: [started], timeout: 2)
@@ -59,13 +67,16 @@ private actor WorkspaceOpenBarrier {
 private actor RetryingWorkspaceOpen {
   let store: any WorkspaceStore
   var opens = 0
+
   init(store: any WorkspaceStore) { self.store = store }
+
   func open() throws -> any WorkspaceStore {
     opens += 1
     if opens == 1 { throw CocoaError(.fileReadCorruptFile) }
     return store
   }
 }
+
 extension BootstrapTests {
   func testFailedOpeningCanBeRetriedAndAnOpenedWorkspaceIsNotOpenedAgain() async throws {
     let plan = RetryingWorkspaceOpen(store: try CoreDataWorkspaceStore(url: nil))
@@ -91,7 +102,8 @@ extension BootstrapTests {
     try await store.insert(state)
     let credentials = TestCredentials()
     await credentials.save(
-      SessionCredential(accountId: state.account.id, token: "synthetic-session"))
+      SessionCredential(accountId: state.account.id, token: "synthetic-session")
+    )
     let origin = try testOrigin()
     let client = APIClient(origin: origin, transport: StubHTTP([]), credentials: credentials)
     let root = try temporaryDirectory()
@@ -103,39 +115,62 @@ extension BootstrapTests {
     let previous = driver.onCompletion
     defer { driver.onCompletion = previous }
     try await AppBootstrap().configureBackground(
-      model: model, vault: vault, credentials: credentials, origin: origin)
+      model: model,
+      vault: vault,
+      credentials: credentials,
+      origin: origin
+    )
     let capabilities = try APIJSON.decoder().decode(
       ClientCapabilities.self,
       from: Data(
-        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")))
+        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")
+      )
+    )
     XCTAssertNotNil(model.makeCoordinator?(state.account.id, capabilities))
     let operation = OutboxOperation(
-      accountId: state.account.id, generation: state.account.generation,
+      accountId: state.account.id,
+      generation: state.account.generation,
       voyageId: state.voyages[0].id,
-      kind: .upload(photoId: state.photos[0].id, publicConsent: false))
+      kind: .upload(photoId: state.photos[0].id, publicConsent: false)
+    )
     let descriptor = TransferDescriptor(
-      accountId: state.account.id, generation: state.account.generation, operationId: operation.id)
+      accountId: state.account.id,
+      generation: state.account.generation,
+      operationId: operation.id
+    )
     try await store.update(accountId: state.account.id) { current in
       var operation = operation
       operation.state = .submitted
       operation.request = MutationRequest(method: "POST", path: "/synthetic-upload")
       current.operations.append(operation)
       var transfer = BackgroundTransfer(
-        operationId: operation.id, generation: descriptor.generation,
-        sessionIdentifier: descriptor.sessionIdentifier, bodyPath: "synthetic-body", byteCount: 1)
+        operationId: operation.id,
+        generation: descriptor.generation,
+        sessionIdentifier: descriptor.sessionIdentifier,
+        bodyPath: "synthetic-body",
+        byteCount: 1
+      )
       transfer.taskId = 123
       current.transfers.append(transfer)
     }
     let callback = try XCTUnwrap(driver.onCompletion)
     try await callback(
       TransferCompletion(
-        descriptor: descriptor, taskId: 123,
+        descriptor: descriptor,
+        taskId: 123,
         response: HTTPResponse(
-          status: 415, headers: ["x-request-id": "background-reference"], body: Data())))
+          status: 415,
+          headers: ["x-request-id": "background-reference"],
+          body: Data()
+        )
+      )
+    )
     let saved = try await store.read(accountId: state.account.id)
     XCTAssertEqual(saved.operations.first { $0.id == operation.id }?.state, .attention)
     XCTAssertEqual(
-      saved.operations.first { $0.id == operation.id }?.requestId, "background-reference")
+      saved.operations.first { $0.id == operation.id }?.requestId,
+      "background-reference"
+    )
     XCTAssertEqual(saved.photos.first { $0.id == state.photos[0].id }?.transfer, .needsAttention)
     XCTAssertNotNil(model.cancelPersistedTransfers)
   }
@@ -144,7 +179,9 @@ extension BootstrapTests {
 private actor ObservedStoreOpen {
   let store: any WorkspaceStore
   var urls: [URL?] = []
+
   init(store: any WorkspaceStore) { self.store = store }
+
   func open(_ url: URL?) -> any WorkspaceStore {
     urls.append(url)
     return store
@@ -165,7 +202,8 @@ extension BootstrapTests {
     environment.credentials = TestCredentials()
     environment.deletionRecovery = MemoryDeletionRecovery()
     environment.preferences = UserDefaultsDevicePreferences(
-      suiteName: "pinvoyager.startup.\(UUID())")
+      suiteName: "pinvoyager.startup.\(UUID())"
+    )
     environment.transport = StubHTTP([])
     environment.activeAccountId = state.account.id
     environment.transfers = SystemTransferDriver(evidenceRoot: root.appendingPathComponent("files"))
@@ -181,11 +219,14 @@ extension BootstrapTests {
     XCTAssertEqual(count, 1)
     XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("files").path))
   }
+
   func testInvalidConfiguredOriginProducesARecoverableStartupError() async throws {
     var environment = try AppEnvironment.system(testing: true)
     environment.apiURL = URL(fileURLWithPath: "/not-a-web-origin")
     let bootstrap = AppBootstrap(
-      environment: environment, makeStore: { _ in try CoreDataWorkspaceStore(url: nil) })
+      environment: environment,
+      makeStore: { _ in try CoreDataWorkspaceStore(url: nil) }
+    )
     await bootstrap.start()
     XCTAssertNil(bootstrap.model)
     XCTAssertNotNil(bootstrap.error)

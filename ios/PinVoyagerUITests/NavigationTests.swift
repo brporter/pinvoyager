@@ -84,7 +84,10 @@ final class NavigationTests: XCTestCase {
   func testPublicationRemainsLocalAndCanBeCanceled() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
     ]
     app.launch()
     app.buttons["My Voyages"].tap()
@@ -105,7 +108,8 @@ final class NavigationTests: XCTestCase {
     app.buttons["Close"].tap()
     app.buttons["Sync"].tap()
     XCTAssertTrue(
-      app.staticTexts["Queued on this iPhone — not published"].waitForExistence(timeout: 5))
+      app.staticTexts["Queued on this iPhone — not published"].waitForExistence(timeout: 5)
+    )
     app.buttons["Cancel publication"].tap()
     XCTAssertTrue(app.staticTexts["Canceled"].waitForExistence(timeout: 5))
   }
@@ -113,7 +117,10 @@ final class NavigationTests: XCTestCase {
   func testSignOutLocksSavedOwnerContent() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
     ]
     app.launch()
     app.buttons["Account"].tap()
@@ -131,7 +138,10 @@ extension NavigationTests {
   func testRetainedPhotoRemovalUndoAndCameraFallback() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
     ]
     app.launch()
     app.buttons["My Voyages"].tap()
@@ -165,7 +175,10 @@ extension NavigationTests {
   func testAnExplicitSmallerCopyReplacesThePhotoAfterSaving() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
       "--large-photo-fixture",
     ]
     app.launch()
@@ -191,7 +204,10 @@ extension NavigationTests {
   func testCapturedPhotographsCanBeRetakenAndSavedThroughTheImportService() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
     ]
     let image = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 80)).jpegData(
       withCompressionQuality: 0.8
@@ -218,7 +234,8 @@ extension NavigationTests {
     app.buttons["Use photo"].tap()
     XCTAssertTrue(
       app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Capture-")).firstMatch
-        .waitForExistence(timeout: 5))
+        .waitForExistence(timeout: 5)
+    )
     app.buttons["Close"].tap()
     XCTAssertTrue(app.staticTexts["2 photos · 2 without location"].waitForExistence(timeout: 5))
   }
@@ -233,16 +250,19 @@ extension NavigationTests {
     app.buttons["Create a voyage"].firstMatch.tap()
     app.buttons["Location precision"].tap()
     XCTAssertTrue(
-      app.staticTexts["Map unavailable offline — schematic example"].waitForExistence(timeout: 5))
+      app.staticTexts["Map unavailable offline — schematic example"].waitForExistence(timeout: 5)
+    )
     app.buttons["Approximately 50 km"].tap()
     app.buttons["Cancel"].tap()
     XCTAssertTrue(app.buttons["Location precision"].waitForExistence(timeout: 5))
     app.buttons["Location precision"].tap()
     app.buttons["Exact"].tap()
     XCTAssertTrue(
-      app.staticTexts["Exact recorded locations will be public"].waitForExistence(timeout: 5))
+      app.staticTexts["Exact recorded locations will be public"].waitForExistence(timeout: 5)
+    )
     app.buttons["Done"].tap()
     XCTAssertTrue(
-      app.staticTexts["Exact recorded locations will be public"].waitForExistence(timeout: 5))
+      app.staticTexts["Exact recorded locations will be public"].waitForExistence(timeout: 5)
+    )
   }
 }

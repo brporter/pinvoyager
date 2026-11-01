@@ -12,12 +12,16 @@ actor TestPublicationNotifications: PublicationNotifications {
   var fail = false
   var deliveries = 0
   var afterSend: (@Sendable () async throws -> Void)?
+
   func setAfterSend(_ action: @escaping @Sendable () async throws -> Void) { afterSend = action }
+
   func requestPermission() -> Bool {
     requested += 1
     return allowed
   }
+
   func contains(id: String) -> Bool { existing.contains(id) }
+
   func send(id: String, title: String) async throws {
     if fail { throw URLError(.unknown) }
     sent[id] = title
@@ -25,21 +29,29 @@ actor TestPublicationNotifications: PublicationNotifications {
     deliveries += 1
     try await afterSend?()
   }
+
   func remove(id: String) {
     existing.remove(id)
     sent.removeValue(forKey: id)
   }
+
   func allow(_ value: Bool) { allowed = value }
+
   func setFailure(_ value: Bool) { fail = value }
+
   func setExisting(_ id: String) { existing.insert(id) }
 }
 
-@Test func publicationNotificationsAreOptInAndRequireBothTerminalAndCurrentPublication()
+@Test
+func publicationNotificationsAreOptInAndRequireBothTerminalAndCurrentPublication()
   async throws
 {
   var state = workspaceWithPhotos(remote: true)
   var intent = try PublicationIntent.review(
-    voyage: state.voyages[0], photos: state.photos, at: Date())
+    voyage: state.voyages[0],
+    photos: state.photos,
+    at: Date()
+  )
   intent.serverId = UUID()
   intent.status = .published
   state.publicationIntents = [intent]
@@ -63,12 +75,16 @@ actor TestPublicationNotifications: PublicationNotifications {
   #expect(await notifications.requested == 1)
 }
 
-@Test func deniedNotificationPermissionAndDeliveryFailuresKeepPublicationStateAndAllowRetry()
+@Test
+func deniedNotificationPermissionAndDeliveryFailuresKeepPublicationStateAndAllowRetry()
   async throws
 {
   var state = workspaceWithPhotos(remote: true)
   var intent = try PublicationIntent.review(
-    voyage: state.voyages[0], photos: state.photos, at: Date())
+    voyage: state.voyages[0],
+    photos: state.photos,
+    at: Date()
+  )
   intent.status = .published
   state.publicationIntents = [intent]
   state.voyages[0].confirmedPublished = true
@@ -88,19 +104,24 @@ actor TestPublicationNotifications: PublicationNotifications {
     try await notifier.notifyCompleted(accountId: state.account.id)
   }
   #expect(
-    try await store.read(accountId: state.account.id).publicationIntents[0].status == .published)
+    try await store.read(accountId: state.account.id).publicationIntents[0].status == .published
+  )
   #expect(try await store.read(accountId: state.account.id).publicationIntents[0].notifiedAt == nil)
   await notifications.setFailure(false)
   try await notifier.notifyCompleted(accountId: state.account.id)
   #expect(await notifications.sent.count == 1)
 }
 
-@Test func existingSystemNotificationsRecoverTheirCheckpointAndLockedAccountsStaySilent()
+@Test
+func existingSystemNotificationsRecoverTheirCheckpointAndLockedAccountsStaySilent()
   async throws
 {
   var state = workspaceWithPhotos(remote: true)
   var intent = try PublicationIntent.review(
-    voyage: state.voyages[0], photos: state.photos, at: Date())
+    voyage: state.voyages[0],
+    photos: state.photos,
+    at: Date()
+  )
   intent.status = .published
   state.publicationIntents = [intent]
   state.voyages[0].confirmedPublished = true
@@ -117,16 +138,21 @@ actor TestPublicationNotifications: PublicationNotifications {
   #expect(await notifications.requested == 0)
   try await store.update(accountId: state.account.id) { $0.account.access = .unlocked }
   await notifications.setExisting(
-    PublicationNotifier.identifier(accountId: state.account.id, intentId: intent.id))
+    PublicationNotifier.identifier(accountId: state.account.id, intentId: intent.id)
+  )
   try await notifier.notifyCompleted(accountId: state.account.id)
   #expect(await notifications.sent.isEmpty)
   #expect(try await store.read(accountId: state.account.id).publicationIntents[0].notifiedAt != nil)
 }
 
-@Test func signOutDuringNotificationDeliveryRemovesTheStaleNotification() async throws {
+@Test
+func signOutDuringNotificationDeliveryRemovesTheStaleNotification() async throws {
   var state = workspaceWithPhotos(remote: true)
   var intent = try PublicationIntent.review(
-    voyage: state.voyages[0], photos: state.photos, at: Date())
+    voyage: state.voyages[0],
+    photos: state.photos,
+    at: Date()
+  )
   intent.status = .published
   state.publicationIntents = [intent]
   state.voyages[0].confirmedPublished = true
@@ -139,16 +165,21 @@ actor TestPublicationNotifications: PublicationNotifications {
     try await LocalRepository(store: store).lock(accountId: account)
   }
   try await PublicationNotifier(store: store, notifications: notifications).notifyCompleted(
-    accountId: account)
+    accountId: account
+  )
   #expect(await notifications.existing.isEmpty)
   #expect(await notifications.sent.isEmpty)
   #expect(try await store.read(accountId: account).publicationIntents[0].notifiedAt == nil)
 }
 
-@Test func concurrentPublicationChecksScheduleEachNotificationOnce() async throws {
+@Test
+func concurrentPublicationChecksScheduleEachNotificationOnce() async throws {
   var state = workspaceWithPhotos(remote: true)
   var intent = try PublicationIntent.review(
-    voyage: state.voyages[0], photos: state.photos, at: Date())
+    voyage: state.voyages[0],
+    photos: state.photos,
+    at: Date()
+  )
   intent.status = .published
   state.publicationIntents = [intent]
   state.voyages[0].confirmedPublished = true

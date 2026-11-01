@@ -4,17 +4,33 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct PhotoRecoveryView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   let photo: LocalPhoto
-  @State private var selected: PhotosPickerItem?
-  @State private var maximum = 2048
-  @State private var publicConsent = false
-  @State private var working = false
-  @State private var error: String?
+
+  @State
+  private var selected: PhotosPickerItem?
+
+  @State
+  private var maximum = 2048
+
+  @State
+  private var publicConsent = false
+
+  @State
+  private var working = false
+
+  @State
+  private var error: String?
+
   private var published: Bool {
     model.workspace?.voyages.first { $0.id == photo.voyageId }?.confirmedPublished == true
   }
+
   var body: some View {
     NavigationStack {
       Form {
@@ -51,6 +67,7 @@ struct PhotoRecoveryView: View {
         }
     }.interactiveDismissDisabled(working)
   }
+
   private func recover(smaller: Bool) async {
     guard !working, let accountId = model.activeAccountId, let vault = model.vault else { return }
     working = true
@@ -64,12 +81,20 @@ struct PhotoRecoveryView: View {
     do {
       if smaller {
         try await importer.makeSmallerCopy(
-          accountId: accountId, photoId: photo.id, maxBytes: limit,
-          maxDimension: maximum, publicConsent: publicConsent)
+          accountId: accountId,
+          photoId: photo.id,
+          maxBytes: limit,
+          maxDimension: maximum,
+          publicConsent: publicConsent
+        )
       } else if let selected {
         try await importer.replace(
           PickerPhotoSource(item: selected, filename: photo.filename),
-          accountId: accountId, photoId: photo.id, maxBytes: limit, publicConsent: publicConsent)
+          accountId: accountId,
+          photoId: photo.id,
+          maxBytes: limit,
+          publicConsent: publicConsent
+        )
       } else {
         return
       }

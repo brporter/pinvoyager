@@ -2,13 +2,26 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct RootView: View {
-  @Bindable var model: AppModel
-  @Environment(\.horizontalSizeClass) private var sizeClass
-  @State private var router = SceneRouter()
-  @State private var window = WindowContext()
-  @State private var restored = false
-  @SceneStorage("routes.v1") private var savedRoutes = Data()
-  @AppStorage("activeAccountId") private var savedAccount = ""
+  @Bindable
+  var model: AppModel
+
+  @Environment(\.horizontalSizeClass)
+  private var sizeClass
+
+  @State
+  private var router = SceneRouter()
+
+  @State
+  private var window = WindowContext()
+
+  @State
+  private var restored = false
+
+  @SceneStorage("routes.v1")
+  private var savedRoutes = Data()
+
+  @AppStorage("activeAccountId")
+  private var savedAccount = ""
 
   var body: some View {
     VStack(spacing: 0) {
@@ -23,7 +36,8 @@ struct RootView: View {
                 Label(tab.title, systemImage: tab.symbol)
               }
               .listRowBackground(
-                router.selectedTab == tab ? Color.accentColor.opacity(0.12) : .clear)
+                router.selectedTab == tab ? Color.accentColor.opacity(0.12) : .clear
+              )
             }.navigationTitle("PinVoyager")
           } detail: {
             destination(router.selectedTab)
@@ -95,7 +109,8 @@ struct RootView: View {
     .background(WindowAccessor(context: window).frame(width: 0, height: 0))
   }
 
-  @ViewBuilder private var connectionBanner: some View {
+  @ViewBuilder
+  private var connectionBanner: some View {
     if let banner {
       Button {
         router.selectedTab = .sync
@@ -136,7 +151,9 @@ struct RootView: View {
       }.navigationDestination(for: SceneDestination.self) { accountDestination($0) }
     }.id(tab)
   }
-  @ViewBuilder private func accountDestination(_ destination: SceneDestination) -> some View {
+
+  @ViewBuilder
+  private func accountDestination(_ destination: SceneDestination) -> some View {
     switch destination {
     case .voyage(let id): RemoteVoyageView(id: id)
     case .profile(let identifier): ProfileView(identifier: identifier)
@@ -165,5 +182,4 @@ struct RootView: View {
     case .deletionRecovery: DeletionRecoveryView()
     }
   }
-
 }

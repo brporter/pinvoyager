@@ -6,31 +6,39 @@ import XCTest
 @testable import PinVoyager
 @testable import PinVoyagerData
 
-@MainActor private final class PresentationBrowser: BrowserAuthenticating {
+@MainActor
+private final class PresentationBrowser: BrowserAuthenticating {
   var opened: [(URL, Bool)] = []
   var action: (URL) async throws -> URL
+
   init(action: @escaping (URL) async throws -> URL) { self.action = action }
+
   func open(_ url: URL, ephemeral: Bool) async throws -> URL {
     opened.append((url, ephemeral))
     return try await action(url)
   }
 }
 
-@MainActor final class AuthenticationPresentationTests: XCTestCase {
+@MainActor
+final class AuthenticationPresentationTests: XCTestCase {
   private func start(_ id: UUID) -> HTTPResponse {
     response(
       201,
       "{\"attempt_id\":\"\(id)\",\"browser_start_url\":\"https://pinvoyager.com/auth/native/attempts/\(id)/start\"}"
     )
   }
+
   private func callback(_ transport: StubHTTP) async throws -> URL {
     let requests = await transport.requests
     let request = try XCTUnwrap(requests.first)
     let body = try XCTUnwrap(
-      try JSONSerialization.jsonObject(with: request.httpBody!) as? [String: String])
+      try JSONSerialization.jsonObject(with: request.httpBody!) as? [String: String]
+    )
     return try XCTUnwrap(
-      URL(string: "pinvoyager://auth/callback?code=returned-code&state=\(body["state"]!)"))
+      URL(string: "pinvoyager://auth/callback?code=returned-code&state=\(body["state"]!)")
+    )
   }
+
   func testSignInAndLinkingUseTheBrowserPreferenceAndAcceptOnlyACompletedExchange() async throws {
     for linking in [false, true] {
       let account = UUID()
@@ -46,12 +54,15 @@ import XCTest
       ])
       let auth = NativeAuthentication(
         client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-        credentials: credentials)
+        credentials: credentials
+      )
       let browser = PresentationBrowser { _ in try await self.callback(transport) }
       let presentation = AuthenticationPresentation(authentication: auth, browser: browser)
       var accepted = false
       let completed = await presentation.signIn(
-        provider: "google", linkingAccountId: linking ? account : nil, ephemeral: true
+        provider: "google",
+        linkingAccountId: linking ? account : nil,
+        ephemeral: true
       ) { session in
         XCTAssertTrue(presentation.busy)
         XCTAssertEqual(session.user.id, account)
@@ -66,10 +77,12 @@ import XCTest
       XCTAssertEqual(browser.opened.first?.1, true)
       let requests = await transport.requests
       let body = try XCTUnwrap(
-        try JSONSerialization.jsonObject(with: requests[0].httpBody!) as? [String: String])
+        try JSONSerialization.jsonObject(with: requests[0].httpBody!) as? [String: String]
+      )
       XCTAssertEqual(body["mode"], linking ? "link" : "sign_in")
     }
   }
+
   func testCancellationClearsTheAttemptAndAConcurrentButtonPressCannotCreateAnotherFlow()
     async throws
   {
@@ -78,7 +91,8 @@ import XCTest
     let transport = StubHTTP([start(attempt)])
     let auth = NativeAuthentication(
       client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-      credentials: credentials)
+      credentials: credentials
+    )
     let browser = PresentationBrowser { _ in throw AuthenticationError.canceled }
     let presentation = AuthenticationPresentation(authentication: auth, browser: browser)
     browser.action = { _ in
@@ -97,21 +111,29 @@ import XCTest
     let requests = await transport.requests
     XCTAssertEqual(requests.count, 1)
     let body = try XCTUnwrap(
-      try JSONSerialization.jsonObject(with: requests[0].httpBody!) as? [String: String])
+      try JSONSerialization.jsonObject(with: requests[0].httpBody!) as? [String: String]
+    )
     let pending = PendingAuthentication(
-      id: attempt, state: body["state"]!, verifier: "unused", browserStartUrl: browser.opened[0].0,
-      linkingAccountId: nil, deletionAccountId: nil)
+      id: attempt,
+      state: body["state"]!,
+      verifier: "unused",
+      browserStartUrl: browser.opened[0].0,
+      linkingAccountId: nil,
+      deletionAccountId: nil
+    )
     do {
       _ = try await auth.complete(try await callback(transport), pending: pending)
       XCTFail("A canceled attempt must not exchange")
     } catch is AuthenticationError {} catch { XCTFail("Unexpected error: \(error)") }
   }
+
   func testBrowserFailuresRemainVisibleAndTheSpinnerStops() async throws {
     let credentials = TestCredentials()
     let transport = StubHTTP([start(UUID())])
     let auth = NativeAuthentication(
       client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-      credentials: credentials)
+      credentials: credentials
+    )
     let browser = PresentationBrowser { _ in throw AuthenticationError.invalidAttempt }
     let presentation = AuthenticationPresentation(authentication: auth, browser: browser)
     let completed = await presentation.signIn(provider: "google", ephemeral: false) { _ in
@@ -126,17 +148,21 @@ import XCTest
     XCTAssertFalse(invalid)
     XCTAssertNotNil(presentation.error)
   }
+
   func testACompletedExchangeStillReportsFailureWhenSavingTheLocalWorkspaceFails() async throws {
     let credentials = TestCredentials()
     let exchange = try Data(
-      contentsOf: Fixtures.directory("api").appendingPathComponent("native_session_exchange.json"))
+      contentsOf: Fixtures.directory("api").appendingPathComponent("native_session_exchange.json")
+    )
     let transport = StubHTTP([start(UUID()), HTTPResponse(status: 200, body: exchange)])
     let auth = NativeAuthentication(
       client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-      credentials: credentials)
+      credentials: credentials
+    )
     let presentation = AuthenticationPresentation(
       authentication: auth,
-      browser: PresentationBrowser { _ in try await self.callback(transport) })
+      browser: PresentationBrowser { _ in try await self.callback(transport) }
+    )
     let completed = await presentation.signIn(provider: "google", ephemeral: false) { _ in
       throw CocoaError(.fileWriteOutOfSpace)
     }
@@ -160,7 +186,8 @@ import XCTest
     ])
     let auth = NativeAuthentication(
       client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-      credentials: credentials)
+      credentials: credentials
+    )
     let browser = PresentationBrowser { _ in try await self.callback(transport) }
     let presentation = AuthenticationPresentation(authentication: auth, browser: browser)
     var proof: String?
@@ -176,10 +203,13 @@ import XCTest
   }
 }
 
-@MainActor private final class StubAuthenticationSession: AuthenticationBrowserSession {
+@MainActor
+private final class StubAuthenticationSession: AuthenticationBrowserSession {
   var prefersEphemeralWebBrowserSession = false
   let startAction: () -> Bool
+
   init(start: @escaping () -> Bool) { startAction = start }
+
   func start() -> Bool { startAction() }
 }
 
@@ -199,19 +229,22 @@ extension AuthenticationPresentationTests {
         }
         created = session
         return session
-      })
+      }
+    )
     let result = try await browser.open(url, ephemeral: true)
     XCTAssertEqual(result, callback)
     XCTAssertEqual(created?.prefersEphemeralWebBrowserSession, true)
     let anchorSession = ASWebAuthenticationSession(url: url, callbackURLScheme: "pinvoyager") {
-      _, _ in
+      _,
+      _ in
     }
     XCTAssertTrue(browser.presentationAnchor(for: anchorSession) === window)
     let cannotStart = BrowserAuthentication(
       anchor: { window },
       factory: { _, _, _ in
         StubAuthenticationSession { false }
-      })
+      }
+    )
     do {
       _ = try await cannotStart.open(url, ephemeral: false)
       XCTFail("A browser that cannot start must fail")
@@ -223,7 +256,8 @@ extension AuthenticationPresentationTests {
           complete(nil, nil)
           return true
         }
-      })
+      }
+    )
     do {
       _ = try await canceled.open(url, ephemeral: false)
       XCTFail("A missing callback must report cancellation")

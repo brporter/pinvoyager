@@ -1,6 +1,7 @@
 import XCTest
 
-@MainActor final class ProfileFlowTests: XCTestCase {
+@MainActor
+final class ProfileFlowTests: XCTestCase {
   func testProfilePaginationReportingAndBlockingKeepTheirScope() throws {
     let fixture = try fixture()
     let app = try fixture.launch()
@@ -26,7 +27,9 @@ import XCTest
     let app = XCUIApplication()
     app.launchArguments = ["--ui-testing"]
     app.launchEnvironment["PINVOYAGER_TEST_RESPONSES"] = String(
-      decoding: try JSONSerialization.data(withJSONObject: fixture.replies), as: UTF8.self)
+      decoding: try JSONSerialization.data(withJSONObject: fixture.replies),
+      as: UTF8.self
+    )
     app.launch()
     app.buttons["View traveler"].firstMatch.tap()
     XCTAssertTrue(app.staticTexts["fixture-traveler"].waitForExistence(timeout: 5))
@@ -51,8 +54,10 @@ import XCTest
       "/api/profiles/\(owner)",
       body: try JSONSerialization.data(withJSONObject: [
         "user": ["id": owner.uuidString, "display_name": "fixture-traveler"],
-        "voyages": voyages, "next_before": "next-profile-page",
-      ]))
+        "voyages": voyages,
+        "next_before": "next-profile-page",
+      ])
+    )
     return fixture
   }
 }

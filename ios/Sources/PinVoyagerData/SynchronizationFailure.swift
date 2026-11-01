@@ -14,9 +14,12 @@ struct SynchronizationFailure: Sendable {
       disposition = .classify(status: api.status)
     } else if let transport = error as? URLError,
       [
-        .serverCertificateUntrusted, .serverCertificateHasUnknownRoot,
-        .serverCertificateHasBadDate, .serverCertificateNotYetValid,
-        .clientCertificateRejected, .clientCertificateRequired,
+        .serverCertificateUntrusted,
+        .serverCertificateHasUnknownRoot,
+        .serverCertificateHasBadDate,
+        .serverCertificateNotYetValid,
+        .clientCertificateRejected,
+        .clientCertificateRequired,
         .appTransportSecurityRequiresSecureConnection,
       ].contains(transport.code)
     {
@@ -32,7 +35,11 @@ struct SynchronizationFailure: Sendable {
   }
 
   func apply(
-    to state: inout Workspace, operationId: UUID, generation: Int, now: Date, randomUnit: Double,
+    to state: inout Workspace,
+    operationId: UUID,
+    generation: Int,
+    now: Date,
+    randomUnit: Double,
     allowApplied: Bool = false
   ) {
     guard state.account.access == .unlocked, state.account.generation == generation,
@@ -57,7 +64,10 @@ struct SynchronizationFailure: Sendable {
         state.operations[index].attempts >= 8 ? .attention : .uncertain
       state.operations[index].nextAttempt = now.addingTimeInterval(
         RetrySchedule.delay(
-          attempt: state.operations[index].attempts, randomUnit: randomUnit, retryAfter: retryAfter)
+          attempt: state.operations[index].attempts,
+          randomUnit: randomUnit,
+          retryAfter: retryAfter
+        )
       )
     }
     if state.operations[index].state == .attention,

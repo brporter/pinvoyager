@@ -4,10 +4,18 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct DiscoverView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @State private var mode = "Recent"
-  @State private var hasShownMap = false
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @State
+  private var mode = "Recent"
+
+  @State
+  private var hasShownMap = false
+
   var body: some View {
     VStack(spacing: 0) {
       Picker("Discover view", selection: $mode) {
@@ -23,7 +31,9 @@ struct DiscoverView: View {
               description: Text(
                 model.offline
                   ? "Your saved voyages are in My Voyages."
-                  : "Published travelogues will appear here."))
+                  : "Published travelogues will appear here."
+              )
+            )
           }
           ForEach(model.discover) { voyage in VoyageCard(voyage: voyage) }
           if let error = model.discoverError {
@@ -32,7 +42,8 @@ struct DiscoverView: View {
           if model.loadingDiscover { ProgressView("Loading voyages") }
           if model.discoverCursor != nil {
             Button("Load more") { Task { await model.loadDiscover(refresh: false) } }.disabled(
-              model.loadingDiscover || model.offline)
+              model.loadingDiscover || model.offline
+            )
           }
         }.listStyle(.plain).refreshable { await model.loadDiscover(refresh: true) }
           .opacity(mode == "Recent" ? 1 : 0)
@@ -64,15 +75,21 @@ struct DiscoverView: View {
 }
 
 struct VoyageCard: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
   let voyage: VoyageSummary
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       NavigationLink(value: SceneDestination.voyage(voyage.id)) {
         VStack(alignment: .leading, spacing: 12) {
           RemoteImage(path: voyage.coverUrl).frame(height: 200).clipShape(
-            RoundedRectangle(cornerRadius: 12))
+            RoundedRectangle(cornerRadius: 12)
+          )
           Text(voyage.title).font(.title3.bold()).foregroundStyle(.primary)
           if let description = voyage.description {
             Text(description).lineLimit(3).foregroundStyle(.secondary)
@@ -89,22 +106,46 @@ struct VoyageCard: View {
 }
 
 struct DiscoveryMapView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
   var active = true
-  @State private var position = MapCameraPosition.region(
+
+  @State
+  private var position = MapCameraPosition.region(
     MKCoordinateRegion(
       center: CLLocationCoordinate2D(latitude: 25, longitude: 0),
-      span: MKCoordinateSpan(latitudeDelta: 100, longitudeDelta: 180)))
-  @State private var region = MKCoordinateRegion(
+      span: MKCoordinateSpan(latitudeDelta: 100, longitudeDelta: 180)
+    )
+  )
+
+  @State
+  private var region = MKCoordinateRegion(
     center: CLLocationCoordinate2D(latitude: 25, longitude: 0),
-    span: MKCoordinateSpan(latitudeDelta: 100, longitudeDelta: 180))
-  @State private var loadedAccess: PublicAccess?
-  @State private var clusters: [DiscoveryCluster] = []
-  @State private var truncated = false
-  @State private var error: String?
-  @State private var selectedCluster: DiscoveryCluster?
-  @State private var requestKey = "initial"
+    span: MKCoordinateSpan(latitudeDelta: 100, longitudeDelta: 180)
+  )
+
+  @State
+  private var loadedAccess: PublicAccess?
+
+  @State
+  private var clusters: [DiscoveryCluster] = []
+
+  @State
+  private var truncated = false
+
+  @State
+  private var error: String?
+
+  @State
+  private var selectedCluster: DiscoveryCluster?
+
+  @State
+  private var requestKey = "initial"
+
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
@@ -112,14 +153,16 @@ struct DiscoveryMapView: View {
           ContentUnavailableView(
             "Map waiting for blocked-account changes",
             systemImage: "person.crop.circle.badge.clock",
-            description: Text("Open Sync to finish blocking before reloading the map."))
+            description: Text("Open Sync to finish blocking before reloading the map.")
+          )
         } else if model.offline {
           ContentUnavailableView("Map unavailable offline", systemImage: "wifi.slash")
         } else {
           Map(position: $position, interactionModes: [.pan, .zoom]) {
             ForEach(loadedAccess == model.publicAccess ? clusters : []) { cluster in
               Annotation(
-                "\(cluster.count) photographs", coordinate: cluster.coordinate.mapCoordinate
+                "\(cluster.count) photographs",
+                coordinate: cluster.coordinate.mapCoordinate
               ) {
                 Button {
                   activate(cluster, width: geometry.size.width)
@@ -127,7 +170,8 @@ struct DiscoveryMapView: View {
                   Label("\(cluster.count)", systemImage: "mappin.circle.fill").padding(8)
                     .background(Design.pin, in: Capsule()).foregroundStyle(.white)
                 }.accessibilityLabel(
-                  "\(cluster.count) photographs in \(cluster.voyages.count) voyages")
+                  "\(cluster.count) photographs in \(cluster.voyages.count) voyages"
+                )
               }
             }
           }.mapStyle(.standard(elevation: .flat)).mapControls {
@@ -167,11 +211,13 @@ struct DiscoveryMapView: View {
       }.presentationDetents([.medium, .large])
     }
   }
+
   private var visibleVoyages: [ClusterVoyage] {
     guard loadedAccess == model.publicAccess else { return [] }
     var seen: Set<UUID> = []
     return clusters.flatMap(\.voyages).filter { seen.insert($0.id).inserted }
   }
+
   private func query(width: Double) async {
     let access = model.publicAccess
     guard !model.offline, !access.pendingBlocks else {
@@ -200,8 +246,10 @@ struct DiscoveryMapView: View {
         ("zoom", Double(MapGeometry.discoveryZoom(width: width, worldFraction: fraction))),
       ]
       let response: DiscoveryResponse = try await model.client.get(
-        path: "/api/map", query: values.map { URLQueryItem(name: $0.0, value: String($0.1)) },
-        accountId: model.signedIn ? model.activeAccountId : nil)
+        path: "/api/map",
+        query: values.map { URLQueryItem(name: $0.0, value: String($0.1)) },
+        accountId: model.signedIn ? model.activeAccountId : nil
+      )
       guard !Task.isCancelled, access == model.publicAccess, !model.offline else { return }
       loadedAccess = access
       clusters = response.clusters
@@ -211,12 +259,14 @@ struct DiscoveryMapView: View {
       if !Task.isCancelled, access == model.publicAccess { self.error = error.localizedDescription }
     }
   }
+
   private func activate(_ cluster: DiscoveryCluster, width: Double) {
     if cluster.count == 1 {
       router.discoverPath.append(.voyage(cluster.voyageId))
     } else if MapGeometry.discoveryZoom(
-      width: width, worldFraction: region.span.longitudeDelta / 360) >= 20
-    {
+      width: width,
+      worldFraction: region.span.longitudeDelta / 360
+    ) >= 20 {
       selectedCluster = cluster
     } else {
       position = .region(
@@ -224,7 +274,10 @@ struct DiscoveryMapView: View {
           center: cluster.coordinate.mapCoordinate,
           span: MKCoordinateSpan(
             latitudeDelta: region.span.latitudeDelta / 4,
-            longitudeDelta: region.span.longitudeDelta / 4)))
+            longitudeDelta: region.span.longitudeDelta / 4
+          )
+        )
+      )
     }
   }
 }

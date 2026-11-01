@@ -6,19 +6,25 @@ public struct SyncActivity: Sendable {
     case inProgress = "In progress"
     case waiting = "Waiting"
     case completed = "Completed"
+
     public var id: Self { self }
   }
+
   public struct Row: Identifiable, Sendable {
     public var id: UUID? { voyageId }
+
     public let voyageId: UUID?
     public let operations: [OutboxOperation]
   }
+
   private let operations: [OutboxOperation]
   private let now: Date
+
   public init(operations: [OutboxOperation], now: Date = Date()) {
     self.operations = operations
     self.now = now
   }
+
   public func rows(for section: Section) -> [Row] {
     let matching = operations.filter { operation in
       switch (section, operation.state) {

@@ -2,26 +2,32 @@ import Observation
 import PinVoyagerDomain
 import SwiftUI
 
-@MainActor @Observable
+@MainActor
+@Observable
 final class GalleryNavigation {
   private(set) var ids: [UUID]
   private(set) var selectedId: UUID?
   var zoomed = false
+
   var index: Int { ids.firstIndex { $0 == selectedId } ?? 0 }
+
   init(ids: [UUID], selectedId: UUID?) {
     self.ids = ids
     self.selectedId = selectedId.flatMap { ids.contains($0) ? $0 : nil } ?? ids.first
   }
+
   func select(_ id: UUID) {
     guard ids.contains(id), id != selectedId else { return }
     selectedId = id
     zoomed = false
   }
+
   func move(_ amount: Int) {
     let next = index + amount
     guard ids.indices.contains(next) else { return }
     select(ids[next])
   }
+
   func refresh(_ next: [UUID]) {
     let previousIndex = index
     ids = next
@@ -32,8 +38,12 @@ final class GalleryNavigation {
 }
 
 struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: View {
-  @Environment(\.dismiss) private var dismiss
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dismiss)
+  private var dismiss
+
+  @Environment(\.accessibilityReduceMotion)
+  private var reduceMotion
+
   let ids: [UUID]
   let image: (UUID, Bool, Binding<Bool>) -> ImageContent
   let thumbnail: (UUID) -> Thumbnail
@@ -41,14 +51,22 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
   var showOnMap: ((UUID) -> Void)?
   var canShowOnMap: (UUID) -> Bool = { _ in false }
   var report: ((UUID) -> Void)?
-  @State private var navigation: GalleryNavigation
-  @State private var info = false
+
+  @State
+  private var navigation: GalleryNavigation
+
+  @State
+  private var info = false
+
   init(
-    ids: [UUID], selectedId: UUID?, report: ((UUID) -> Void)? = nil,
+    ids: [UUID],
+    selectedId: UUID?,
+    report: ((UUID) -> Void)? = nil,
     @ViewBuilder image: @escaping (UUID, Bool, Binding<Bool>) -> ImageContent,
     @ViewBuilder thumbnail: @escaping (UUID) -> Thumbnail,
     @ViewBuilder information: @escaping (UUID) -> Information,
-    showOnMap: ((UUID) -> Void)? = nil, canShowOnMap: @escaping (UUID) -> Bool = { _ in false }
+    showOnMap: ((UUID) -> Void)? = nil,
+    canShowOnMap: @escaping (UUID) -> Bool = { _ in false }
   ) {
     self.ids = ids
     self.image = image
@@ -59,16 +77,19 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
     self.report = report
     _navigation = State(initialValue: GalleryNavigation(ids: ids, selectedId: selectedId))
   }
+
   var body: some View {
     NavigationStack {
       ScrollView(.horizontal) {
         LazyHStack(spacing: 0) {
           ForEach(ids, id: \.self) { id in
             image(
-              id, navigation.selectedId == id,
+              id,
+              navigation.selectedId == id,
               Binding(
                 get: { navigation.selectedId == id && navigation.zoomed },
-                set: { if navigation.selectedId == id { navigation.zoomed = $0 } })
+                set: { if navigation.selectedId == id { navigation.zoomed = $0 } }
+              )
             )
             .containerRelativeFrame([.horizontal, .vertical])
             .id(id)
@@ -78,7 +99,9 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
       .scrollTargetBehavior(.paging)
       .scrollPosition(
         id: Binding(
-          get: { navigation.selectedId }, set: { if let id = $0 { navigation.select(id) } })
+          get: { navigation.selectedId },
+          set: { if let id = $0 { navigation.select(id) } }
+        )
       )
       .scrollIndicators(.hidden)
       .scrollDisabled(navigation.zoomed)
@@ -92,10 +115,12 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
         }
         ToolbarItemGroup(placement: .bottomBar) {
           Button("Previous", systemImage: "chevron.left") { navigation.move(-1) }.disabled(
-            navigation.index == 0)
+            navigation.index == 0
+          )
           Spacer()
           Button("Next", systemImage: "chevron.right") { navigation.move(1) }.disabled(
-            navigation.index >= ids.count - 1)
+            navigation.index >= ids.count - 1
+          )
         }
       }
       .sheet(isPresented: $info) {
@@ -123,6 +148,7 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
       }
     }.onChange(of: ids) { _, next in navigation.refresh(next) }
   }
+
   private var thumbnails: some View {
     ScrollViewReader { proxy in
       ScrollView(.horizontal) {
@@ -136,7 +162,10 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
               )
               .overlay(
                 RoundedRectangle(cornerRadius: 6).stroke(
-                  navigation.selectedId == id ? Color.accentColor : Color.clear, lineWidth: 3))
+                  navigation.selectedId == id ? Color.accentColor : Color.clear,
+                  lineWidth: 3
+                )
+              )
             }.id(id).buttonStyle(.plain).accessibilityLabel("Thumbnail \(index + 1)")
               .accessibilityAddTraits(navigation.selectedId == id ? .isSelected : [])
           }
@@ -152,25 +181,36 @@ struct PhotoGallery<ImageContent: View, Thumbnail: View, Information: View>: Vie
 }
 
 struct OwnerGallery: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   let voyageId: UUID
   let selectedId: UUID
   var members: Set<UUID>?
   var showOnMap: ((UUID) -> Void)?
+
   private var photos: [LocalPhoto] {
     (model.workspace?.photos(for: voyageId) ?? []).filter { members?.contains($0.id) != false }
   }
+
   var body: some View {
     PhotoGallery(ids: photos.map(\.id), selectedId: selectedId) { id, selected, zoomed in
       if let photo = photos.first(where: { $0.id == id }) {
         VStack {
           if let remote = photo.serverId, photo.source == nil, photo.offlineCopy == nil {
             RemoteOwnerGalleryImage(
-              photo: photo, remoteId: remote, selected: selected, zoomed: zoomed)
+              photo: photo,
+              remoteId: remote,
+              selected: selected,
+              zoomed: zoomed
+            )
           } else {
             LocalPhotoImage(
-              photo: photo, fullSize: true, selected: selected,
-              onZoomChanged: { zoomed.wrappedValue = $0 })
+              photo: photo,
+              fullSize: true,
+              selected: selected,
+              onZoomChanged: { zoomed.wrappedValue = $0 }
+            )
           }
           Text(
             photo.source != nil
@@ -201,7 +241,8 @@ struct OwnerGallery: View {
         if let coordinate = photo.coordinate {
           LabeledContent(
             "Exact location — private metadata",
-            value: "\(coordinate.latitude.formatted()), \(coordinate.longitude.formatted())")
+            value: "\(coordinate.latitude.formatted()), \(coordinate.longitude.formatted())"
+          )
         } else {
           Text("No recorded location")
         }
@@ -219,9 +260,13 @@ private struct RemoteOwnerGalleryImage: View {
   let remoteId: UUID
   let selected: Bool
   let zoomed: Binding<Bool>
+
   var body: some View {
     GalleryImage(
-      displayPath: "/api/photos/\(remoteId)/display", fullPath: "/api/photos/\(remoteId)/full",
-      selected: selected, onZoomChanged: { zoomed.wrappedValue = $0 })
+      displayPath: "/api/photos/\(remoteId)/display",
+      fullPath: "/api/photos/\(remoteId)/full",
+      selected: selected,
+      onZoomChanged: { zoomed.wrappedValue = $0 }
+    )
   }
 }

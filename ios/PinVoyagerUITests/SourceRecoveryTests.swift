@@ -1,13 +1,17 @@
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class SourceRecoveryTests: XCTestCase {
+@MainActor
+final class SourceRecoveryTests: XCTestCase {
   func testReplacingAFailedPublicPhotoRequiresConsentAndKeepsExactlyOneActivePhoto() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
       fields: VoyageFields(
-        title: "Recover a failed photograph", description: "Replace only with consent"))
+        title: "Recover a failed photograph",
+        description: "Replace only with consent"
+      )
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     voyage.confirmedPublished = true
@@ -35,7 +39,8 @@ import XCTest
     app.selectFirstSystemPhoto(requiresConfirmation: false)
     XCTAssertTrue(
       app.navigationBars["Recover photograph"].waitForNonExistence(timeout: 10),
-      app.debugDescription)
+      app.debugDescription
+    )
     XCTAssertTrue(row.waitForExistence(timeout: 5))
     XCTAssertTrue(row.label.contains("Saved on this iPhone"), row.label)
     app.buttons["Sync"].tap()

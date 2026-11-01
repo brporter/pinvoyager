@@ -6,6 +6,7 @@ public struct TransferDescriptor: Equatable, Sendable {
   public let generation: Int
   public let operationId: UUID
   public let cellularException: Bool
+
   public init(accountId: UUID, generation: Int, operationId: UUID, cellularException: Bool = false)
   {
     self.accountId = accountId
@@ -13,9 +14,11 @@ public struct TransferDescriptor: Equatable, Sendable {
     self.operationId = operationId
     self.cellularException = cellularException
   }
+
   public var rawValue: String {
     "\(accountId):\(generation):\(operationId)" + (cellularException ? ":cellular" : "")
   }
+
   public init?(rawValue: String) {
     let parts = rawValue.split(separator: ":", omittingEmptySubsequences: false)
     guard parts.count == 3 || (parts.count == 4 && parts[3] == "cellular"),
@@ -24,12 +27,18 @@ public struct TransferDescriptor: Equatable, Sendable {
       let operationId = UUID(uuidString: String(parts[2]))
     else { return nil }
     self.init(
-      accountId: accountId, generation: generation, operationId: operationId,
-      cellularException: parts.count == 4)
+      accountId: accountId,
+      generation: generation,
+      operationId: operationId,
+      cellularException: parts.count == 4
+    )
   }
+
   public var sessionIdentifier: String {
     TransferSession(
-      accountId: accountId, generation: generation, cellularException: cellularException
+      accountId: accountId,
+      generation: generation,
+      cellularException: cellularException
     ).identifier
   }
 }
@@ -39,8 +48,11 @@ public struct TransferCompletion: Sendable {
   public let taskId: Int?
   public let response: HTTPResponse?
   public let transportError: URLError.Code?
+
   public init(
-    descriptor: TransferDescriptor, taskId: Int? = nil, response: HTTPResponse? = nil,
+    descriptor: TransferDescriptor,
+    taskId: Int? = nil,
+    response: HTTPResponse? = nil,
     transportError: URLError.Code? = nil
   ) {
     self.descriptor = descriptor
@@ -53,6 +65,7 @@ public struct TransferCompletion: Sendable {
 public struct SystemTransfer: Equatable, Sendable {
   public let id: Int
   public let descriptor: TransferDescriptor
+
   public init(id: Int, descriptor: TransferDescriptor) {
     self.id = id
     self.descriptor = descriptor
@@ -61,15 +74,25 @@ public struct SystemTransfer: Equatable, Sendable {
 
 public protocol TransferDriver: Sendable {
   func configure(sessionIdentifier: String, policy: SyncPolicy) async
+
   func pendingCompletions(sessionIdentifier: String) async throws -> [TransferCompletion]
+
   func discardCompletion(_ completion: TransferCompletion) async
+
   func tasks(sessionIdentifier: String) async -> [SystemTransfer]
+
   func createSuspended(
-    sessionIdentifier: String, request: URLRequest, body: URL, descriptor: TransferDescriptor,
+    sessionIdentifier: String,
+    request: URLRequest,
+    body: URL,
+    descriptor: TransferDescriptor,
     policy: SyncPolicy
   ) async throws -> SystemTransfer
+
   func resume(_ task: SystemTransfer, sessionIdentifier: String) async
+
   func cancel(sessionIdentifier: String) async
+
   func cancel(_ task: SystemTransfer, sessionIdentifier: String) async
 }
 
@@ -77,7 +100,9 @@ extension TransferDriver {
   public func pendingCompletions(sessionIdentifier: String) async throws -> [TransferCompletion] {
     []
   }
+
   public func discardCompletion(_ completion: TransferCompletion) async {}
+
   public func configure(sessionIdentifier: String, policy: SyncPolicy) async {}
 }
 
@@ -88,9 +113,14 @@ public actor BackgroundUploadService: UploadSubmitting {
   private let driver: any TransferDriver
   private let origin: TrustedOrigin
   private let maxBytes: Int64
+
   public init(
-    store: any WorkspaceStore, vault: FileVault, credentials: any CredentialStore,
-    driver: any TransferDriver, origin: TrustedOrigin, maxBytes: Int64
+    store: any WorkspaceStore,
+    vault: FileVault,
+    credentials: any CredentialStore,
+    driver: any TransferDriver,
+    origin: TrustedOrigin,
+    maxBytes: Int64
   ) {
     self.store = store
     self.vault = vault
@@ -100,7 +130,11 @@ public actor BackgroundUploadService: UploadSubmitting {
     self.maxBytes = maxBytes
   }
 
-  public func submit(operation: OutboxOperation, request: MutationRequest, workspace: Workspace)
+  public func submit(
+    operation: OutboxOperation,
+    request: MutationRequest,
+    workspace: Workspace
+  )
     async throws
   {
     guard case .upload(let photoId, _) = operation.kind,
@@ -112,10 +146,15 @@ public actor BackgroundUploadService: UploadSubmitting {
     else { throw AuthenticationError.signInRequired }
     let generation = workspace.account.generation
     let descriptor = TransferDescriptor(
-      accountId: operation.accountId, generation: generation, operationId: operation.id,
-      cellularException: photo.cellularException == true)
+      accountId: operation.accountId,
+      generation: generation,
+      operationId: operation.id,
+      cellularException: photo.cellularException == true
+    )
     await driver.configure(
-      sessionIdentifier: descriptor.sessionIdentifier, policy: workspace.uploadPolicy(for: photoId))
+      sessionIdentifier: descriptor.sessionIdentifier,
+      policy: workspace.uploadPolicy(for: photoId)
+    )
     let existing = await driver.tasks(sessionIdentifier: descriptor.sessionIdentifier)
     if let task = existing.first(where: { $0.descriptor == descriptor }) {
       try await activate(task, photoId: photoId, descriptor: descriptor)
@@ -129,17 +168,27 @@ public actor BackgroundUploadService: UploadSubmitting {
       let size = Int64(try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
       guard size <= maxBytes else { throw FileVaultError.tooLarge }
       multipart = MultipartBody(
-        url: destination, byteCount: size, contentType: "multipart/form-data; boundary=\(boundary)")
+        url: destination,
+        byteCount: size,
+        contentType: "multipart/form-data; boundary=\(boundary)"
+      )
     } else {
       let input = try await vault.url(source.relativePath, accountId: operation.accountId)
       multipart = try MultipartBody.write(
-        source: input, destination: destination, mediaType: source.mediaType, boundary: boundary,
-        maxBytes: maxBytes)
+        source: input,
+        destination: destination,
+        mediaType: source.mediaType,
+        boundary: boundary,
+        maxBytes: maxBytes
+      )
     }
     let record = BackgroundTransfer(
-      operationId: operation.id, generation: generation,
-      sessionIdentifier: descriptor.sessionIdentifier, bodyPath: bodyPath,
-      byteCount: multipart.byteCount)
+      operationId: operation.id,
+      generation: generation,
+      sessionIdentifier: descriptor.sessionIdentifier,
+      bodyPath: bodyPath,
+      byteCount: multipart.byteCount
+    )
     try await store.update(accountId: operation.accountId) { state in
       guard state.account.generation == generation, state.account.access == .unlocked,
         !state.uploadPolicy(for: photoId).paused,
@@ -158,12 +207,20 @@ public actor BackgroundUploadService: UploadSubmitting {
     urlRequest.setValue(multipart.contentType, forHTTPHeaderField: "Content-Type")
     for (name, value) in request.headers { urlRequest.setValue(value, forHTTPHeaderField: name) }
     let task = try await driver.createSuspended(
-      sessionIdentifier: descriptor.sessionIdentifier, request: urlRequest, body: multipart.url,
-      descriptor: descriptor, policy: workspace.uploadPolicy(for: photoId))
+      sessionIdentifier: descriptor.sessionIdentifier,
+      request: urlRequest,
+      body: multipart.url,
+      descriptor: descriptor,
+      policy: workspace.uploadPolicy(for: photoId)
+    )
     try await activate(task, photoId: photoId, descriptor: descriptor)
   }
 
-  private func activate(_ task: SystemTransfer, photoId: UUID, descriptor: TransferDescriptor)
+  private func activate(
+    _ task: SystemTransfer,
+    photoId: UUID,
+    descriptor: TransferDescriptor
+  )
     async throws
   {
     do {
@@ -175,7 +232,11 @@ public actor BackgroundUploadService: UploadSubmitting {
     }
   }
 
-  private func persistTask(_ task: SystemTransfer, photoId: UUID, descriptor: TransferDescriptor)
+  private func persistTask(
+    _ task: SystemTransfer,
+    photoId: UUID,
+    descriptor: TransferDescriptor
+  )
     async throws
   {
     try await store.update(accountId: descriptor.accountId) { state in
@@ -210,6 +271,7 @@ public actor BackgroundUploadService: UploadSubmitting {
 
   public func cancel(accountId: UUID) async {
     await BackgroundTransferRecovery(store: store, credentials: credentials, driver: driver).cancel(
-      accountId: accountId)
+      accountId: accountId
+    )
   }
 }

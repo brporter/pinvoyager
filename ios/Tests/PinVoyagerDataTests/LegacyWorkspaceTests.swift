@@ -4,7 +4,8 @@ import Testing
 
 @testable import PinVoyagerData
 
-@Test func aVersionOnePendingRequestReopensWithoutNewOptionalFieldsAndReconcilesBeforeReplay()
+@Test
+func aVersionOnePendingRequestReopensWithoutNewOptionalFieldsAndReconcilesBeforeReplay()
   async throws
 {
   let legacy = Data(
@@ -13,7 +14,8 @@ import Testing
      "voyages":[{"id":"00000000-0000-0000-0000-000000000002","ownerId":"00000000-0000-0000-0000-000000000001","fields":{"title":"Legacy draft","description":"Saved before the upgrade","granularity":"km1"},"localSequence":0,"confirmedPublished":false,"deleted":false,"updatedAt":0}],
      "photos":[],"operations":[{"id":"00000000-0000-0000-0000-000000000003","accountId":"00000000-0000-0000-0000-000000000001","generation":0,"voyageId":"00000000-0000-0000-0000-000000000002","kind":{"create":{"_0":{"title":"Legacy draft","description":"Saved before the upgrade","granularity":"km1"}}},"dependencies":[],"state":"uncertain","request":{"method":"POST","path":"/api/voyages","body":"eyJ0aXRsZSI6IkxlZ2FjeSBkcmFmdCIsImRlc2NyaXB0aW9uIjoiU2F2ZWQgYmVmb3JlIHRoZSB1cGdyYWRlIiwiZ3JhbnVsYXJpdHkiOiJrbTEifQ==","headers":{}},"attempts":1,"nextAttempt":0}],
      "workingCopies":[],"publicationIntents":[],"transfers":[],"blockedAccounts":[],"policy":{"wifiOnly":true,"allowsConstrained":false,"backgroundPreparation":true,"keepOriginals":true,"paused":false}}
-    """#.utf8)
+    """#.utf8
+  )
   let state = try JSONDecoder().decode(Workspace.self, from: legacy)
   let directory = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: directory) }
@@ -32,7 +34,9 @@ import Testing
   let serverId = UUID()
   await remote.setReceipt(.applied(targetId: serverId, revision: "1"), id: state.operations[0].id)
   try await SyncCoordinator(store: reopened, remote: remote).run(
-    accountId: state.account.id, network: .wifi(constrained: false))
+    accountId: state.account.id,
+    network: .wifi(constrained: false)
+  )
   #expect(await remote.submissions.isEmpty)
   let settled = try await reopened.read(accountId: state.account.id)
   #expect(settled.voyages[0].serverId == serverId)

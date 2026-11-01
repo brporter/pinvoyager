@@ -4,6 +4,7 @@ import PinVoyagerDomain
 
 public enum FileVaultError: Error, Equatable, LocalizedError, Sendable {
   case invalidPath, unsupportedFormat, tooLarge, insufficientSpace, missingSource
+
   public var errorDescription: String? {
     switch self {
     case .invalidPath: "The file path is outside this account's workspace."
@@ -18,6 +19,7 @@ public enum FileVaultError: Error, Equatable, LocalizedError, Sendable {
 
 public actor FileVault {
   public let root: URL
+
   public init(root: URL) throws {
     self.root = root.standardizedFileURL
     try Self.protectDirectory(root)
@@ -31,7 +33,8 @@ public actor FileVault {
     let candidate = directory.appendingPathComponent(relativePath).standardizedFileURL
     guard
       candidate.resolvingSymlinksInPath().path.hasPrefix(
-        directory.resolvingSymlinksInPath().path + "/")
+        directory.resolvingSymlinksInPath().path + "/"
+      )
     else { throw FileVaultError.invalidPath }
     return candidate
   }
@@ -40,7 +43,12 @@ public actor FileVault {
     try Data(contentsOf: url(relativePath, accountId: accountId))
   }
 
-  public func importFile(_ source: URL, accountId: UUID, photoId: UUID, maxBytes: Int64) throws
+  public func importFile(
+    _ source: URL,
+    accountId: UUID,
+    photoId: UUID,
+    maxBytes: Int64
+  ) throws
     -> SourceFile
   {
     guard source.isFileURL, FileManager.default.fileExists(atPath: source.path) else {
@@ -90,8 +98,10 @@ public actor FileVault {
     }
     return SourceFile(
       relativePath: relative,
-      contentHash: hash.finalize().map { String(format: "%02x", $0) }.joined(), byteCount: count,
-      mediaType: mediaType)
+      contentHash: hash.finalize().map { String(format: "%02x", $0) }.joined(),
+      byteCount: count,
+      mediaType: mediaType
+    )
   }
 
   public func inspectOriginal(accountId: UUID, photoId: UUID, maxBytes: Int64) throws -> SourceFile
@@ -114,8 +124,11 @@ public actor FileVault {
     }
     guard count > 0 else { throw FileVaultError.missingSource }
     return SourceFile(
-      relativePath: path, contentHash: hash.finalize().map { String(format: "%02x", $0) }.joined(),
-      byteCount: count, mediaType: type)
+      relativePath: path,
+      contentHash: hash.finalize().map { String(format: "%02x", $0) }.joined(),
+      byteCount: count,
+      mediaType: type
+    )
   }
 
   public func write(_ data: Data, relativePath: String, accountId: UUID) throws {
@@ -144,6 +157,7 @@ public actor FileVault {
     public let byteCount: Int64
     public let missingOriginals: [String]
   }
+
   public func exportPreview(_ workspace: Workspace, voyageId: UUID) throws -> ExportPreview {
     guard workspace.account.access != .locked else { throw WorkspaceError.locked }
     guard workspace.voyages.contains(where: { $0.id == voyageId }) else {
@@ -157,7 +171,8 @@ public actor FileVault {
     }) {
       guard let source = photo.source,
         FileManager.default.fileExists(
-          atPath: try url(source.relativePath, accountId: workspace.account.id).path)
+          atPath: try url(source.relativePath, accountId: workspace.account.id).path
+        )
       else {
         missing.append(photo.filename)
         continue
@@ -176,7 +191,9 @@ public actor FileVault {
       let preview = try exportPreview(workspace, voyageId: voyageId)
       try Self.protectDirectory(destination)
       try JSONEncoder().encode(preview).write(
-        to: destination.appendingPathComponent("export-preview.json"), options: .atomic)
+        to: destination.appendingPathComponent("export-preview.json"),
+        options: .atomic
+      )
       workspace.voyages = workspace.voyages.filter { $0.id == voyageId }
       workspace.photos = workspace.photos.filter { $0.voyageId == voyageId }
       workspace.operations = workspace.operations.filter { $0.voyageId == voyageId }
@@ -191,13 +208,17 @@ public actor FileVault {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     try encoder.encode(workspace).write(
-      to: destination.appendingPathComponent("workspace.json"), options: .atomic)
+      to: destination.appendingPathComponent("workspace.json"),
+      options: .atomic
+    )
     for photo in workspace.photos {
       guard let source = photo.source else { continue }
       let original = try url(source.relativePath, accountId: workspace.account.id)
       if FileManager.default.fileExists(atPath: original.path) {
         try FileManager.default.copyItem(
-          at: original, to: destination.appendingPathComponent(photo.id.uuidString))
+          at: original,
+          to: destination.appendingPathComponent(photo.id.uuidString)
+        )
       }
     }
     return destination
@@ -210,7 +231,9 @@ public actor FileVault {
     var coordinationError: NSError?
     var copyError: (any Error)?
     NSFileCoordinator().coordinate(
-      readingItemAt: directory, options: .forUploading, error: &coordinationError
+      readingItemAt: directory,
+      options: .forUploading,
+      error: &coordinationError
     ) { snapshot in
       do { try FileManager.default.copyItem(at: snapshot, to: archive) } catch { copyError = error }
     }
@@ -233,7 +256,8 @@ public actor FileVault {
     #if os(iOS)
       try FileManager.default.setAttributes(
         [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-        ofItemAtPath: url.path)
+        ofItemAtPath: url.path
+      )
     #endif
   }
 
@@ -248,7 +272,8 @@ public actor FileVault {
     }
     if bytes.count >= 12, String(decoding: bytes[4..<8], as: UTF8.self) == "ftyp",
       ["heic", "heix", "hevc", "hevx", "mif1"].contains(
-        String(decoding: bytes[8..<12], as: UTF8.self))
+        String(decoding: bytes[8..<12], as: UTF8.self)
+      )
     {
       return "image/heic"
     }
@@ -262,14 +287,19 @@ public struct MultipartBody: Sendable {
   public let contentType: String
 
   public static func write(
-    source: URL, destination: URL, mediaType: String, boundary: String, maxBytes: Int64
+    source: URL,
+    destination: URL,
+    mediaType: String,
+    boundary: String,
+    maxBytes: Int64
   ) throws -> Self {
     guard ["image/jpeg", "image/png", "image/webp", "image/heic"].contains(mediaType),
       boundary.range(of: "^[A-Za-z0-9-]{1,70}$", options: .regularExpression) != nil
     else { throw FileVaultError.unsupportedFormat }
     let prefix = Data(
       "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"photo\"\r\nContent-Type: \(mediaType)\r\n\r\n"
-        .utf8)
+        .utf8
+    )
     let suffix = Data("\r\n--\(boundary)--\r\n".utf8)
     let size =
       Int64(try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
@@ -295,7 +325,10 @@ public struct MultipartBody: Sendable {
       try FileManager.default.moveItem(at: staging, to: destination)
       try FileVault.protectFile(destination)
       return Self(
-        url: destination, byteCount: size, contentType: "multipart/form-data; boundary=\(boundary)")
+        url: destination,
+        byteCount: size,
+        contentType: "multipart/form-data; boundary=\(boundary)"
+      )
     } catch {
       try? FileManager.default.removeItem(at: staging)
       throw error

@@ -14,19 +14,26 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     model.capabilities = try APIJSON.decoder().decode(
       ClientCapabilities.self,
       from: Data(
-        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")))
+        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")
+      )
+    )
     let sent = expectation(description: "Local save schedules the outbox")
     let remoteId = UUID()
     let remote = AutomaticSyncRemote(targetId: remoteId, submitted: sent)
     model.makeCoordinator = { _, _ in SyncCoordinator(store: store, remote: remote) }
     let localId = try await model.create(
-      VoyageFields(title: "Automatic", description: "Saved first"))
+      VoyageFields(title: "Automatic", description: "Saved first")
+    )
     XCTAssertEqual(model.workspace?.voyages.first?.id, localId)
     await fulfillment(of: [sent], timeout: 2)
     await model.sync()
@@ -39,8 +46,11 @@ final class AppModelTests: XCTestCase {
     state.account.access = .requiresSignIn
     state.account.generation = 4
     let operation = OutboxOperation(
-      accountId: state.account.id, generation: 4, voyageId: state.voyages[0].id,
-      kind: .upload(photoId: state.photos[0].id, publicConsent: false))
+      accountId: state.account.id,
+      generation: 4,
+      voyageId: state.voyages[0].id,
+      kind: .upload(photoId: state.photos[0].id, publicConsent: false)
+    )
     state.operations = [operation]
     let store = try CoreDataWorkspaceStore(url: nil)
     try await store.insert(state)
@@ -48,20 +58,28 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     let id = state.account.id
     let session = try APIJSON.decoder().decode(
       SessionExchange.self,
       from: Data(
         "{\"session_token\":\"new-session\",\"user\":{\"id\":\"\(id)\",\"display_name\":\"traveler\"},\"identities\":[],\"idle_deadline\":\"2026-11-01T00:00:00Z\",\"absolute_deadline\":\"2026-12-01T00:00:00Z\"}"
-          .utf8))
+          .utf8
+      )
+    )
     try await model.acceptSession(session)
     let saved = try await store.read(accountId: id)
     XCTAssertEqual(saved.account.generation, 5)
     XCTAssertEqual(saved.operations.first?.id, operation.id)
     XCTAssertEqual(
-      saved.photos.first { $0.id == state.photos[0].id }?.uploadKey, state.photos[0].uploadKey)
+      saved.photos.first { $0.id == state.photos[0].id }?.uploadKey,
+      state.photos[0].uploadKey
+    )
   }
 
   func testBlockReconciliationPreservesPendingChoicesAndAppliesWebsiteChanges() async throws {
@@ -71,7 +89,10 @@ final class AppModelTests: XCTestCase {
     let pending = UUID()
     let remote = UUID()
     try await LocalRepository(store: store).setBlocked(
-      accountId: state.account.id, userId: pending, blocked: true)
+      accountId: state.account.id,
+      userId: pending,
+      blocked: true
+    )
     let credentials = TestCredentials()
     await credentials.save(SessionCredential(accountId: state.account.id, token: "session"))
     let model = AppModel(
@@ -79,8 +100,13 @@ final class AppModelTests: XCTestCase {
       client: APIClient(
         origin: try testOrigin(),
         transport: StubHTTP([
-          response(200, "{\"user_ids\":[\"\(remote)\"]}"), response(200, "{\"user_ids\":[]}"),
-        ]), credentials: credentials), credentials: credentials)
+          response(200, "{\"user_ids\":[\"\(remote)\"]}"),
+          response(200, "{\"user_ids\":[]}"),
+        ]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     await model.reconcileBlocks()
     XCTAssertEqual(model.workspace?.blockedAccounts, Set([pending, remote]))
@@ -100,8 +126,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: try CoreDataWorkspaceStore(url: nil),
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([response(204, ""), response(200, me)]),
-        credentials: credentials), credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([response(204, ""), response(200, me)]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     let router = SceneRouter()
     await router.handle(URL(string: "https://pinvoyager.com/upload")!, model: model)
     XCTAssertEqual(router.pendingRoute, .createVoyage)
@@ -109,7 +139,9 @@ final class AppModelTests: XCTestCase {
       SessionExchange.self,
       from: Data(
         "{\"session_token\":\"session\",\"user\":{\"id\":\"\(account)\",\"display_name\":null},\"identities\":[],\"idle_deadline\":\"2026-11-01T00:00:00Z\",\"absolute_deadline\":\"2026-12-01T00:00:00Z\"}"
-          .utf8))
+          .utf8
+      )
+    )
     try await model.acceptSession(session)
     await router.resumePendingRoute(model: model)
     XCTAssertTrue(router.showingNameSetup)
@@ -130,15 +162,24 @@ final class AppModelTests: XCTestCase {
     let credentials = TestCredentials()
     await credentials.save(SessionCredential(accountId: state.account.id, token: "session"))
     let first = APIClient(
-      origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials)
+      origin: try testOrigin(),
+      transport: StubHTTP([]),
+      credentials: credentials
+    )
     _ = try? await AccountDeletionService(client: first, recovery: recovery).prepare(
-      accountId: state.account.id, proofToken: "proof")
+      accountId: state.account.id,
+      proofToken: "proof"
+    )
     let model = AppModel(
       store: store,
       client: APIClient(
         origin: try testOrigin(),
         transport: StubHTTP([response(200, "{\"status\":\"complete\"}"), response(204, "")]),
-        credentials: credentials), credentials: credentials, deletionRecovery: recovery)
+        credentials: credentials
+      ),
+      credentials: credentials,
+      deletionRecovery: recovery
+    )
     await model.restore(accountId: state.account.id)
     await model.refreshDeletion(accountId: state.account.id)
     XCTAssertNil(model.workspace)
@@ -156,8 +197,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     model.changeNetwork(.offline)
     await model.downloadOwnerCopy(UUID())
@@ -173,8 +218,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: TestCredentials()),
-      credentials: TestCredentials())
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: TestCredentials()
+      ),
+      credentials: TestCredentials()
+    )
     await model.restore(accountId: state.account.id)
     XCTAssertEqual(model.workspace?.account.id, state.account.id)
     XCTAssertNil(model.error)
@@ -188,8 +237,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: TestCredentials()),
-      credentials: TestCredentials())
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: TestCredentials()
+      ),
+      credentials: TestCredentials()
+    )
     await model.restore(accountId: state.account.id)
     XCTAssertNil(model.workspace)
   }
@@ -198,12 +251,19 @@ final class AppModelTests: XCTestCase {
     let fixtures = Fixtures.directory("api").appendingPathComponent("voyage_list.json")
     let body = try Data(contentsOf: fixtures)
     let transport = StubHTTP([
-      HTTPResponse(status: 200, body: body), HTTPResponse(status: 200, body: body),
+      HTTPResponse(status: 200, body: body),
+      HTTPResponse(status: 200, body: body),
     ])
     let client = APIClient(
-      origin: try testOrigin(), transport: transport, credentials: TestCredentials())
+      origin: try testOrigin(),
+      transport: transport,
+      credentials: TestCredentials()
+    )
     let model = AppModel(
-      store: try CoreDataWorkspaceStore(url: nil), client: client, credentials: TestCredentials())
+      store: try CoreDataWorkspaceStore(url: nil),
+      client: client,
+      credentials: TestCredentials()
+    )
     await model.loadDiscover(refresh: true)
     let count = model.discover.count
     await model.loadDiscover(refresh: false)
@@ -220,8 +280,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: TestCredentials()),
-      credentials: TestCredentials())
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: TestCredentials()
+      ),
+      credentials: TestCredentials()
+    )
     await model.restore(accountId: state.account.id)
     let id = try await model.create(VoyageFields(title: "First", description: "Text"))
     XCTAssertEqual(model.localVoyages.count, 1)
@@ -246,22 +310,31 @@ final class AppModelTests: XCTestCase {
     let offline = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await offline.restore(accountId: state.account.id)
     await offline.verifyAccount()
     XCTAssertNotNil(offline.workspace)
     let rejected = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([response(401, "")]), credentials: credentials
-      ), credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([response(401, "")]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await rejected.restore(accountId: state.account.id)
     await rejected.verifyAccount()
     XCTAssertNotNil(rejected.workspace)
     XCTAssertFalse(rejected.signedIn)
     let local = try await rejected.create(
-      VoyageFields(title: "Offline after expiry", description: "Still saved locally"))
+      VoyageFields(title: "Offline after expiry", description: "Still saved locally")
+    )
     XCTAssertTrue(rejected.workspace?.voyages.contains { $0.id == local } == true)
     let saved = try await store.read(accountId: state.account.id)
     XCTAssertEqual(saved.account.access, .requiresSignIn)
@@ -278,8 +351,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([response(200, accountJSON)]),
-        credentials: credentials), credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([response(200, accountJSON)]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     await model.verifyAccount()
     XCTAssertEqual(model.workspace?.account.profile.displayName, "updated")
@@ -294,15 +371,21 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: first.account.id)
     let secondId = UUID()
     let session = try APIJSON.decoder().decode(
       SessionExchange.self,
       from: Data(
         "{\"session_token\":\"token\",\"user\":{\"id\":\"\(secondId)\",\"display_name\":\"second\"},\"identities\":[],\"idle_deadline\":\"date\",\"absolute_deadline\":\"date\"}"
-          .utf8))
+          .utf8
+      )
+    )
     try await model.acceptSession(session)
     let locked = try await store.read(accountId: first.account.id)
     XCTAssertEqual(locked.account.access, .locked)
@@ -322,8 +405,12 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: try CoreDataWorkspaceStore(url: nil),
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: TestCredentials()),
-      credentials: TestCredentials())
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: TestCredentials()
+      ),
+      credentials: TestCredentials()
+    )
     let id = UUID()
     let router = SceneRouter()
     await router.handle(URL(string: "https://evil.test/upload")!, model: model)
@@ -344,17 +431,25 @@ final class AppModelTests: XCTestCase {
     let page = try APIJSON.decoder().decode(VoyagePage.self, from: body)
     let accountId = try XCTUnwrap(page.voyages.first?.ownerId)
     var state = Workspace(
-      account: LocalAccount(profile: UserProfile(id: accountId, displayName: "alice")))
+      account: LocalAccount(profile: UserProfile(id: accountId, displayName: "alice"))
+    )
     let remote = try XCTUnwrap(page.voyages.first)
     var local = LocalVoyage(
-      ownerId: accountId, fields: VoyageFields(title: "Unsynced local name", description: "Local"))
+      ownerId: accountId,
+      fields: VoyageFields(title: "Unsynced local name", description: "Local")
+    )
     local.serverId = remote.id
     local.revision = "1"
     state.voyages.append(local)
     state.operations.append(
       OutboxOperation(
-        accountId: accountId, generation: 0, voyageId: local.id, kind: .edit(local.fields),
-        expectedRevision: "1"))
+        accountId: accountId,
+        generation: 0,
+        voyageId: local.id,
+        kind: .edit(local.fields),
+        expectedRevision: "1"
+      )
+    )
     let store = try CoreDataWorkspaceStore(url: nil)
     try await store.insert(state)
     let credentials = TestCredentials()
@@ -362,23 +457,32 @@ final class AppModelTests: XCTestCase {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([HTTPResponse(status: 200, body: body)]),
-        credentials: credentials), credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([HTTPResponse(status: 200, body: body)]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: accountId)
     await model.refreshOwnerList()
     XCTAssertEqual(
-      model.workspace?.voyages.first { $0.id == local.id }?.fields.title, "Unsynced local name")
+      model.workspace?.voyages.first { $0.id == local.id }?.fields.title,
+      "Unsynced local name"
+    )
     XCTAssertTrue(model.workspace?.voyages.contains { $0.id == local.id } == true)
   }
 
   func testRemoteOwnerPhotosUsePrivateMetadataAndNeverClaimDownloadedOriginals() async throws {
     let detail = try Data(
-      contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_detail.json"))
+      contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_detail.json")
+    )
     let photos = try Data(
-      contentsOf: Fixtures.directory("api").appendingPathComponent("photo_list.json"))
+      contentsOf: Fixtures.directory("api").appendingPathComponent("photo_list.json")
+    )
     let remote = try APIJSON.decoder().decode(RemoteVoyage.self, from: detail)
     var state = Workspace(
-      account: LocalAccount(profile: UserProfile(id: remote.ownerId, displayName: "alice")))
+      account: LocalAccount(profile: UserProfile(id: remote.ownerId, displayName: "alice"))
+    )
     var local = LocalVoyage(ownerId: remote.ownerId, fields: remote.fields)
     local.serverId = remote.id
     state.voyages.append(local)
@@ -391,8 +495,13 @@ final class AppModelTests: XCTestCase {
       client: APIClient(
         origin: try testOrigin(),
         transport: StubHTTP([
-          HTTPResponse(status: 200, body: detail), HTTPResponse(status: 200, body: photos),
-        ]), credentials: credentials), credentials: credentials)
+          HTTPResponse(status: 200, body: detail),
+          HTTPResponse(status: 200, body: photos),
+        ]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     await model.refreshVoyage(local.id)
     XCTAssertEqual(model.workspace?.photos.count, 3)
@@ -404,12 +513,16 @@ final class AppModelTests: XCTestCase {
 private actor AutomaticSyncRemote: SyncRemote {
   let targetId: UUID
   let submitted: XCTestExpectation
+
   init(targetId: UUID, submitted: XCTestExpectation) {
     self.targetId = targetId
     self.submitted = submitted
   }
+
   func supportsNativeSync() -> Bool { true }
+
   func receipt(operationId: UUID) -> OperationReceipt { .notSeen }
+
   func submit(_ request: MutationRequest, operationId: UUID) -> OperationReceipt {
     submitted.fulfill()
     return .applied(targetId: targetId, revision: "1")
@@ -422,15 +535,21 @@ extension AppModelTests {
     let model = AppModel(
       store: try CoreDataWorkspaceStore(url: nil),
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     func session(_ id: UUID) throws -> SessionExchange {
       try APIJSON.decoder().decode(
         SessionExchange.self,
         from: Data(
           """
           {"session_token":"new-session","user":{"id":"\(id)","display_name":"traveler"},"identities":[],"idle_deadline":"2026-11-01T00:00:00Z","absolute_deadline":"2026-12-01T00:00:00Z"}
-          """.utf8))
+          """.utf8
+        )
+      )
     }
     let signedOut = model.publicAccess
     let account = UUID()
@@ -451,13 +570,16 @@ extension AppModelTests {
 private actor DelayedVerification: HTTPTransport {
   let started: XCTestExpectation
   var continuation: CheckedContinuation<HTTPResponse, Never>?
+
   init(started: XCTestExpectation) { self.started = started }
+
   func send(_ request: URLRequest) async -> HTTPResponse {
     await withCheckedContinuation { continuation in
       self.continuation = continuation
       started.fulfill()
     }
   }
+
   func rejectOldSession() {
     continuation?.resume(returning: response(401, "{}"))
     continuation = nil
@@ -476,7 +598,8 @@ extension AppModelTests {
     let model = AppModel(
       store: store,
       client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-      credentials: credentials)
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     let checking = Task { await model.verifyAccount() }
     await fulfillment(of: [started], timeout: 2)
@@ -485,7 +608,9 @@ extension AppModelTests {
       from: Data(
         """
         {"session_token":"new-session","user":{"id":"\(state.account.id)","display_name":"traveler"},"identities":[],"idle_deadline":"2026-11-01T00:00:00Z","absolute_deadline":"2026-12-01T00:00:00Z"}
-        """.utf8))
+        """.utf8
+      )
+    )
     try await model.acceptSession(session)
     await transport.rejectOldSession()
     await checking.value
@@ -507,19 +632,27 @@ extension AppModelTests {
     let record = try JSONDecoder().decode(
       PendingAccountDeletion.self,
       from: JSONSerialization.data(withJSONObject: [
-        "id": UUID().uuidString, "accountId": state.account.id.uuidString,
+        "id": UUID().uuidString,
+        "accountId": state.account.id.uuidString,
         "statusCapability": "synthetic-recovery-capability",
         "status": "prepared",
         "expiresAt": Date().addingTimeInterval(600).timeIntervalSinceReferenceDate,
-      ]))
+      ])
+    )
     await recovery.save(record)
     let model = AppModel(
       store: store,
       client: APIClient(
         origin: try testOrigin(),
         transport: StubHTTP([
-          response(503, "{}"), response(200, "{\"status\":\"prepared\"}"),
-        ]), credentials: credentials), credentials: credentials, deletionRecovery: recovery)
+          response(503, "{}"),
+          response(200, "{\"status\":\"prepared\"}"),
+        ]),
+        credentials: credentials
+      ),
+      credentials: credentials,
+      deletionRecovery: recovery
+    )
     await model.restore(accountId: state.account.id)
     var canceled = false
     model.cancelPersistedTransfers = { accountId in
@@ -546,17 +679,24 @@ extension AppModelTests {
     let record = try JSONDecoder().decode(
       PendingAccountDeletion.self,
       from: JSONSerialization.data(withJSONObject: [
-        "id": UUID().uuidString, "accountId": state.account.id.uuidString,
+        "id": UUID().uuidString,
+        "accountId": state.account.id.uuidString,
         "statusCapability": "synthetic-status-only-capability",
         "status": "prepared",
         "expiresAt": Date().addingTimeInterval(600).timeIntervalSinceReferenceDate,
-      ]))
+      ])
+    )
     await recovery.save(record)
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials, deletionRecovery: recovery)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials,
+      deletionRecovery: recovery
+    )
     await model.restore(accountId: state.account.id)
     await model.confirmAccountDeletion()
     let saved = try await store.read(accountId: state.account.id)
@@ -577,18 +717,26 @@ extension AppModelTests {
     let credentials = TestCredentials()
     await credentials.save(SessionCredential(accountId: state.account.id, token: "session"))
     let list = try Data(
-      contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_list.json"))
+      contentsOf: Fixtures.directory("api").appendingPathComponent("voyage_list.json")
+    )
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([HTTPResponse(status: 200, body: list)]),
-        credentials: credentials), credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([HTTPResponse(status: 200, body: list)]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     await model.loadDiscover(refresh: true)
     let owner = try XCTUnwrap(model.discover.first?.ownerId)
     await model.perform {
       try await model.repository.setBlocked(
-        accountId: state.account.id, userId: owner, blocked: true)
+        accountId: state.account.id,
+        userId: owner,
+        blocked: true
+      )
     }
     XCTAssertFalse(model.discover.contains { $0.ownerId == owner })
     XCTAssertTrue(model.publicAccess.pendingBlocks)
@@ -607,13 +755,19 @@ extension AppModelTests {
   {
     var state = workspaceWithPhotos(remote: true)
     var intent = try PublicationIntent.review(
-      voyage: state.voyages[0], photos: state.photos, at: Date())
+      voyage: state.voyages[0],
+      photos: state.photos,
+      at: Date()
+    )
     intent.serverId = UUID()
     intent.status = .processing
     state.publicationIntents = [intent]
     var operation = OutboxOperation(
-      accountId: state.account.id, generation: 0, voyageId: state.voyages[0].id,
-      kind: .publish(intentId: intent.id))
+      accountId: state.account.id,
+      generation: 0,
+      voyageId: state.voyages[0].id,
+      kind: .publish(intentId: intent.id)
+    )
     operation.state = .applied
     state.operations = [operation]
     let store = try CoreDataWorkspaceStore(url: nil)
@@ -624,17 +778,29 @@ extension AppModelTests {
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials, notifications: notifications)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials,
+      notifications: notifications
+    )
     await model.restore(accountId: state.account.id)
     model.capabilities = try APIJSON.decoder().decode(
       ClientCapabilities.self,
       from: Data(
-        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")))
+        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")
+      )
+    )
     let remote = StubSyncRemote()
     await remote.setPublicationResult(
       .publication(
-        intentId: intent.serverId!, status: .published, revision: "99", confirmedPublished: true))
+        intentId: intent.serverId!,
+        status: .published,
+        revision: "99",
+        confirmedPublished: true
+      )
+    )
     model.makeCoordinator = { _, _ in SyncCoordinator(store: store, remote: remote) }
     await model.setPublicationNotifications(true)
     XCTAssertEqual(model.workspace?.policy.notifyOnPublication, true)
@@ -661,24 +827,40 @@ extension AppModelTests {
     let vault = try FileVault(root: directory)
     let original = try XCTUnwrap(state.photos[0].source)
     try await vault.write(
-      Data([1, 2, 3]), relativePath: original.relativePath, accountId: state.account.id)
+      Data([1, 2, 3]),
+      relativePath: original.relativePath,
+      accountId: state.account.id
+    )
     let bytes = Data("RIFF1234WEBPstripped".utf8)
     let manifest = try downloadManifest(
-      account: state.account.id, voyage: state.voyages[0].serverId!,
-      photo: state.photos[0].serverId!, bytes: bytes, revision: "7")
+      account: state.account.id,
+      voyage: state.voyages[0].serverId!,
+      photo: state.photos[0].serverId!,
+      bytes: bytes,
+      revision: "7"
+    )
     let file = HTTPResponse(
-      status: 200, headers: ["x-pinvoyager-retention": "owner_offline_copy_v1"], body: bytes)
+      status: 200,
+      headers: ["x-pinvoyager-retention": "owner_offline_copy_v1"],
+      body: bytes
+    )
     let transport = StubHTTP([
-      HTTPResponse(status: 200, body: manifest), file, file, file,
+      HTTPResponse(status: 200, body: manifest),
+      file,
+      file,
+      file,
       HTTPResponse(status: 200, body: manifest),
     ])
     let credentials = TestCredentials()
     await credentials.save(
-      SessionCredential(accountId: state.account.id, token: "synthetic-download-session"))
+      SessionCredential(accountId: state.account.id, token: "synthetic-download-session")
+    )
     let model = AppModel(
       store: store,
       client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
-      credentials: credentials, vault: vault)
+      credentials: credentials,
+      vault: vault
+    )
     await model.restore(accountId: state.account.id)
     await model.downloadFullCopy(state.photos[0].id)
     XCTAssertNil(model.error)
@@ -706,19 +888,32 @@ extension AppModelTests {
     try await store.insert(other)
     let vault = try FileVault(root: directory)
     try await vault.write(
-      Data([1]), relativePath: "originals/kept-until-canceled", accountId: state.account.id)
+      Data([1]),
+      relativePath: "originals/kept-until-canceled",
+      accountId: state.account.id
+    )
     try await vault.write(
-      Data([2]), relativePath: "originals/other-account", accountId: other.account.id)
+      Data([2]),
+      relativePath: "originals/other-account",
+      accountId: other.account.id
+    )
     let credentials = TestCredentials()
     await credentials.save(
-      SessionCredential(accountId: state.account.id, token: "revocation-only-after-signout"))
+      SessionCredential(accountId: state.account.id, token: "revocation-only-after-signout")
+    )
     await credentials.save(
-      SessionCredential(accountId: other.account.id, token: "other-account-session"))
+      SessionCredential(accountId: other.account.id, token: "other-account-session")
+    )
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials, vault: vault)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials,
+      vault: vault
+    )
     await model.restore(accountId: state.account.id)
     model.changeNetwork(.offline)
     var canceled = false
@@ -752,34 +947,50 @@ extension AppModelTests {
     for status in [PublicationStatus.canceled, .processing, .published] {
       var state = workspaceWithPhotos(remote: true)
       var intent = try PublicationIntent.review(
-        voyage: state.voyages[0], photos: state.photos, at: Date())
+        voyage: state.voyages[0],
+        photos: state.photos,
+        at: Date()
+      )
       intent.serverId = UUID()
       intent.status = .processing
       state.publicationIntents = [intent]
       var publish = OutboxOperation(
-        accountId: state.account.id, generation: 0, voyageId: state.voyages[0].id,
-        kind: .publish(intentId: intent.id))
+        accountId: state.account.id,
+        generation: 0,
+        voyageId: state.voyages[0].id,
+        kind: .publish(intentId: intent.id)
+      )
       publish.state = .applied
       state.operations = [publish]
       let store = try CoreDataWorkspaceStore(url: nil)
       try await store.insert(state)
       let credentials = TestCredentials()
       await credentials.save(
-        SessionCredential(accountId: state.account.id, token: "synthetic-cancel-before-signout"))
+        SessionCredential(accountId: state.account.id, token: "synthetic-cancel-before-signout")
+      )
       let model = AppModel(
         store: store,
         client: APIClient(
-          origin: try testOrigin(), transport: StubHTTP([HTTPResponse(status: 204, body: Data())]),
-          credentials: credentials), credentials: credentials)
+          origin: try testOrigin(),
+          transport: StubHTTP([HTTPResponse(status: 204, body: Data())]),
+          credentials: credentials
+        ),
+        credentials: credentials
+      )
       await model.restore(accountId: state.account.id)
       model.capabilities = try APIJSON.decoder().decode(
         ClientCapabilities.self,
         from: Data(
-          contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")))
+          contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")
+        )
+      )
       let remote = StubSyncRemote()
       let receipt = OperationReceipt.publication(
-        intentId: intent.serverId!, status: status, revision: "7",
-        confirmedPublished: status == .published)
+        intentId: intent.serverId!,
+        status: status,
+        revision: "7",
+        confirmedPublished: status == .published
+      )
       await remote.setPublicationResult(receipt)
       await remote.setOutcomes([receipt])
       model.coordinators[state.account.id] = SyncCoordinator(store: store, remote: remote)
@@ -810,12 +1021,17 @@ extension AppModelTests {
     try await store.insert(state)
     let credentials = TestCredentials()
     await credentials.save(
-      SessionCredential(accountId: state.account.id, token: "stay-usable-until-choice"))
+      SessionCredential(accountId: state.account.id, token: "stay-usable-until-choice")
+    )
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     model.changeNetwork(.offline)
     let result = await model.cancelPublicationAndSignOut(intentIds: [UUID()])
@@ -834,17 +1050,24 @@ extension AppModelTests {
     try await store.insert(state)
     let credentials = TestCredentials()
     await credentials.save(
-      SessionCredential(accountId: state.account.id, token: "keep-session-for-resolution"))
+      SessionCredential(accountId: state.account.id, token: "keep-session-for-resolution")
+    )
     let model = AppModel(
       store: store,
       client: APIClient(
-        origin: try testOrigin(), transport: StubHTTP([]), credentials: credentials),
-      credentials: credentials)
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials
+    )
     await model.restore(accountId: state.account.id)
     model.capabilities = try APIJSON.decoder().decode(
       ClientCapabilities.self,
       from: Data(
-        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")))
+        contentsOf: Fixtures.directory("api").appendingPathComponent("native_capabilities.json")
+      )
+    )
     let remote = StubSyncRemote()
     await remote.setOutcomes([.rejected("Review the website revision", status: 412)])
     model.coordinators[state.account.id] = SyncCoordinator(store: store, remote: remote)

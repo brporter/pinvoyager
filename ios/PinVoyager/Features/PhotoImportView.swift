@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 private struct SelectedPhotoFile: Transferable {
   let url: URL
+
   static var transferRepresentation: some TransferRepresentation {
     FileRepresentation(importedContentType: .image) { received in
       let destination = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -20,6 +21,7 @@ private struct SelectedPhotoFile: Transferable {
 struct PickerPhotoSource: PhotoAcquiring {
   let item: PhotosPickerItem
   let filename: String
+
   func acquire() async throws -> URL {
     guard let file = try await item.loadTransferable(type: SelectedPhotoFile.self) else {
       throw FileVaultError.missingSource
@@ -29,15 +31,30 @@ struct PickerPhotoSource: PhotoAcquiring {
 }
 
 struct PhotoImportView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   let voyage: LocalVoyage
-  @State private var selection: [PhotosPickerItem] = []
-  @State private var presentation: PhotoImportPresentation?
+
+  @State
+  private var selection: [PhotosPickerItem] = []
+
+  @State
+  private var presentation: PhotoImportPresentation?
+
   private var preparing: Bool { presentation?.preparing == true }
-  @State private var publicConsent = false
-  @State private var cellularException = false
-  @State private var camera = false
+
+  @State
+  private var publicConsent = false
+
+  @State
+  private var cellularException = false
+
+  @State
+  private var camera = false
 
   var body: some View {
     NavigationStack {
@@ -54,13 +71,17 @@ struct PhotoImportView: View {
               .disabled(preparing)
           }
           PhotosPicker(
-            selection: $selection, maxSelectionCount: 100, selectionBehavior: .ordered,
-            matching: .images, preferredItemEncoding: .current
+            selection: $selection,
+            maxSelectionCount: 100,
+            selectionBehavior: .ordered,
+            matching: .images,
+            preferredItemEncoding: .current
           ) {
             Label("Choose photos", systemImage: "photo.on.rectangle.angled")
           }.disabled(preparing || (voyage.confirmedPublished && !publicConsent))
           Button("Take photo", systemImage: "camera") { camera = true }.disabled(
-            preparing || (voyage.confirmedPublished && !publicConsent))
+            preparing || (voyage.confirmedPublished && !publicConsent)
+          )
         }
         if preparing {
           Section {
@@ -101,15 +122,19 @@ struct PhotoImportView: View {
     let presentation =
       self.presentation
       ?? PhotoImportPresentation(
-        service: PhotoImportService(store: model.store, vault: vault))
+        service: PhotoImportService(store: model.store, vault: vault)
+      )
     self.presentation = presentation
     let sources = items.enumerated().map {
       PickerPhotoSource(item: $0.element, filename: "Photo \($0.offset + 1)")
     }
     await presentation.importPhotos(
-      sources, accountId: accountId, voyageId: voyage.id,
+      sources,
+      accountId: accountId,
+      voyageId: voyage.id,
       maxBytes: model.capabilities?.maxUploadBytes ?? 25 * 1_024 * 1_024,
-      publicConsent: publicConsent, cellularException: cellularException
+      publicConsent: publicConsent,
+      cellularException: cellularException
     ) { await model.reloadWorkspace() }
     selection = []
     cellularException = false
@@ -122,9 +147,12 @@ struct PhotoImportView: View {
     }
     try await PhotoImportService(store: model.store, vault: vault).saveFile(
       url,
-      accountId: accountId, voyageId: voyage.id,
+      accountId: accountId,
+      voyageId: voyage.id,
       maxBytes: model.capabilities?.maxUploadBytes ?? 25 * 1_024 * 1_024,
-      publicConsent: publicConsent, cellularException: cellularException)
+      publicConsent: publicConsent,
+      cellularException: cellularException
+    )
     cellularException = false
     await model.reloadWorkspace()
     model.scheduleSync()

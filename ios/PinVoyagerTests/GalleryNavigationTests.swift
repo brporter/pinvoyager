@@ -2,7 +2,8 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class GalleryNavigationTests: XCTestCase {
+@MainActor
+final class GalleryNavigationTests: XCTestCase {
   func testRefreshKeepsTheSelectedPhotoIdentityAndFallsBackToItsNearestSurvivingPosition() {
     let ids = (0..<4).map { _ in UUID() }
     let navigation = GalleryNavigation(ids: ids, selectedId: ids[2])

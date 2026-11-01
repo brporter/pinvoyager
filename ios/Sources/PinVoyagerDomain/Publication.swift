@@ -31,13 +31,17 @@ public struct PublicationIntent: Codable, Equatable, Identifiable, Sendable {
   }
 
   public static func review(
-    voyage: LocalVoyage, photos: [LocalPhoto], at date: Date, maximumPhotos: Int = 10_000
+    voyage: LocalVoyage,
+    photos: [LocalPhoto],
+    at date: Date,
+    maximumPhotos: Int = 10_000
   ) throws -> Self {
     let fields = try voyage.fields.validated(isNew: true)
     guard !voyage.confirmedPublished, !voyage.deleted, fields.granularity.canPublish else {
       throw ValidationError(
         field: "publication",
-        message: "Review a private voyage with a supported location precision.")
+        message: "Review a private voyage with a supported location precision."
+      )
     }
     let included = photos.filter { !$0.deleted }
     guard !included.isEmpty, included.count <= maximumPhotos,
@@ -48,15 +52,21 @@ public struct PublicationIntent: Codable, Equatable, Identifiable, Sendable {
     else {
       throw ValidationError(
         field: "photos",
-        message: "Save at least one photo and resolve missing or failed files before publication.")
+        message: "Save at least one photo and resolve missing or failed files before publication."
+      )
     }
     let references: [PhotoReference] = included.map {
       if let id = $0.serverId { return .photo(id: id) }
       return .upload(key: $0.uploadKey, contentHash: $0.source!.contentHash)
     }
     return Self(
-      id: UUID(), voyageId: voyage.id, fields: fields, expectedRevision: voyage.revision,
+      id: UUID(),
+      voyageId: voyage.id,
+      fields: fields,
+      expectedRevision: voyage.revision,
       photoReferences: references,
-      consentAt: date, expiresAt: date.addingTimeInterval(7 * 24 * 60 * 60))
+      consentAt: date,
+      expiresAt: date.addingTimeInterval(7 * 24 * 60 * 60)
+    )
   }
 }

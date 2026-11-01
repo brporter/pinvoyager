@@ -1,10 +1,14 @@
 import XCTest
 
-@MainActor final class PhotoPickerTests: XCTestCase {
+@MainActor
+final class PhotoPickerTests: XCTestCase {
   func testSystemPickerCopiesTheSelectedPhotoAndKeepsItsBatchCellularPermission() {
     let app = XCUIApplication()
     app.launchArguments = [
-      "--ui-testing", "--signed-in-fixture", "--populated-fixture", "--offline-fixture",
+      "--ui-testing",
+      "--signed-in-fixture",
+      "--populated-fixture",
+      "--offline-fixture",
     ]
     app.launch()
     app.buttons["My Voyages"].tap()
@@ -18,7 +22,10 @@ import XCTest
     app.selectFirstSystemPhoto()
     XCTAssertTrue(app.staticTexts["Photo 1"].waitForExistence(timeout: 10), app.debugDescription)
     XCTAssertEqual(
-      cellular.value as? String, "0", "A later import must require fresh cellular permission")
+      cellular.value as? String,
+      "0",
+      "A later import must require fresh cellular permission"
+    )
     app.navigationBars["Add photos"].buttons["Close"].tap()
     app.buttons["Sync"].tap()
     app.buttons["Sync and storage settings"].tap()

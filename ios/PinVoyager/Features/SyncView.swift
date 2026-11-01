@@ -2,8 +2,11 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct SyncView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   var voyageId: UUID?
+
   var body: some View {
     List {
       if let workspace = model.workspace {
@@ -17,7 +20,8 @@ struct SyncView: View {
         Section {
           Button(model.syncing ? "Syncing" : "Sync now", systemImage: "arrow.triangle.2.circlepath")
           { Task { await model.sync() } }.disabled(
-            model.syncing || model.offline || !model.nativeSupported)
+            model.syncing || model.offline || !model.nativeSupported
+          )
           if let voyageId, let voyage = workspace.voyages.first(where: { $0.id == voyageId }) {
             NavigationLink("Open voyage", value: SceneDestination.localVoyage(voyageId))
             Button(
@@ -27,8 +31,10 @@ struct SyncView: View {
               Task {
                 await model.perform {
                   try await model.repository.setUploadsPaused(
-                    accountId: workspace.account.id, voyageId: voyageId,
-                    paused: voyage.uploadsPaused != true)
+                    accountId: workspace.account.id,
+                    voyageId: voyageId,
+                    paused: voyage.uploadsPaused != true
+                  )
                 }
               }
             }
@@ -42,8 +48,10 @@ struct SyncView: View {
             Button(workspace.policy.areUploadsPaused ? "Resume uploads" : "Pause uploads") {
               Task {
                 await model.setPreference(
-                  .uploadsPaused, value: !workspace.policy.areUploadsPaused,
-                  accountId: workspace.account.id)
+                  .uploadsPaused,
+                  value: !workspace.policy.areUploadsPaused,
+                  accountId: workspace.account.id
+                )
               }
             }
             if workspace.policy.areUploadsPaused {
@@ -78,7 +86,8 @@ struct SyncView: View {
             Text(
               intent.status == .queued
                 ? "Queued on this iPhone — not published"
-                : intent.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                : intent.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+            )
             Text("Consent expires \(intent.expiresAt.formatted())").font(.caption)
             if intent.cancellationPending {
               Text("Cancellation is waiting for a connection. This voyage may still publish.")
@@ -88,7 +97,9 @@ struct SyncView: View {
                 Task {
                   await model.perform {
                     try await model.repository.cancelPublication(
-                      accountId: workspace.account.id, intentId: intent.id)
+                      accountId: workspace.account.id,
+                      intentId: intent.id
+                    )
                   }
                   await model.sync()
                 }
@@ -123,12 +134,15 @@ struct SyncView: View {
       }
     }.navigationTitle(voyageId == nil ? "Sync" : "Voyage sync details")
   }
+
   private var operations: [OutboxOperation] {
     (model.workspace?.operations ?? []).filter { voyageId == nil || $0.voyageId == voyageId }
   }
+
   private var activity: SyncActivity { SyncActivity(operations: operations) }
-  @ViewBuilder private func operationRow(_ operation: OutboxOperation, accountId: UUID) -> some View
-  {
+
+  @ViewBuilder
+  private func operationRow(_ operation: OutboxOperation, accountId: UUID) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(operationTitle(operation.kind)).font(.headline)
       Text(operation.state.rawValue.capitalized)
@@ -143,7 +157,9 @@ struct SyncView: View {
           Task {
             await model.perform {
               try await model.repository.retry(
-                accountId: accountId, operationId: operation.id)
+                accountId: accountId,
+                operationId: operation.id
+              )
             }
             await model.sync()
           }
@@ -161,6 +177,7 @@ struct SyncView: View {
       }
     }.padding(.vertical, 8)
   }
+
   private func operationTitle(_ kind: OperationKind) -> String {
     switch kind {
     case .create: "Create draft"
@@ -179,7 +196,9 @@ struct SyncView: View {
 }
 
 struct SyncSettingsView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   var body: some View {
     Form {
       Section("Network") {
@@ -194,7 +213,8 @@ struct SyncSettingsView: View {
         let batches = Dictionary(
           grouping: workspace.photos.filter {
             !$0.deleted && $0.serverId == nil && $0.importBatchId != nil
-          }, by: { $0.importBatchId! }
+          },
+          by: { $0.importBatchId! }
         ).sorted { $0.key.uuidString < $1.key.uuidString }
         if !batches.isEmpty {
           Section("Pending imports") {
@@ -238,25 +258,29 @@ struct SyncSettingsView: View {
         ).font(.footnote)
         Link(
           "Open notification settings",
-          destination: URL(string: UIApplication.openNotificationSettingsURLString)!)
+          destination: URL(string: UIApplication.openNotificationSettingsURLString)!
+        )
       }
       StorageSettingsSections()
       NavigationLink("Help", value: SceneDestination.help)
     }.navigationTitle("Sync and storage")
   }
+
   private func preference(_ preference: SyncPreference) -> Binding<Bool> {
     Binding(
       get: { (model.workspace?.policy ?? model.guestPolicy)[keyPath: preference.keyPath] },
       set: { value in
         let account = model.activeAccountId
         Task { await model.setPreference(preference, value: value, accountId: account) }
-      })
+      }
+    )
   }
-
 }
 
 struct HelpView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   var body: some View {
     List {
       Section("Privacy and terms") {
@@ -280,6 +304,7 @@ struct HelpView: View {
       }
     }.navigationTitle("Help")
   }
+
   private var diagnostics: String {
     let references = model.workspace?.operations.compactMap(\.requestId) ?? []
     return
@@ -288,18 +313,34 @@ struct HelpView: View {
 }
 
 struct ReportView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   let target: String
   var subject: String?
-  @State private var reason = "privacy_concern"
-  @State private var details = ""
-  @State private var queued = false
-  @State private var operationId: UUID?
+
+  @State
+  private var reason = "privacy_concern"
+
+  @State
+  private var details = ""
+
+  @State
+  private var queued = false
+
+  @State
+  private var operationId: UUID?
+
   private var received: Bool {
     model.workspace?.operations.first { $0.id == operationId }?.state == .applied
   }
+
   var body: some View {
     NavigationStack {
       Form {
@@ -307,11 +348,13 @@ struct ReportView: View {
         if queued {
           Label(
             received ? "Report received" : "Waiting to send",
-            systemImage: received ? "checkmark.circle" : "clock")
+            systemImage: received ? "checkmark.circle" : "clock"
+          )
           Text(
             received
               ? "The server confirmed receipt of your report."
-              : "Saved on this device. Waiting for the server to confirm receipt.")
+              : "Saved on this device. Waiting for the server to confirm receipt."
+          )
         } else {
           Picker("Reason", selection: $reason) {
             ForEach(
@@ -326,7 +369,11 @@ struct ReportView: View {
               Task {
                 do {
                   operationId = try await model.repository.report(
-                    accountId: id, target: target, reason: reason, details: details)
+                    accountId: id,
+                    target: target,
+                    reason: reason,
+                    details: details
+                  )
                   queued = true
                   await model.reloadWorkspace()
                   await model.sync()

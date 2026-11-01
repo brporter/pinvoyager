@@ -10,6 +10,7 @@ struct ErrorNotice: View {
   let message: String
   var retryTitle = "Try again"
   var retry: (() -> Void)?
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       Label(message, systemImage: "exclamationmark.circle").foregroundStyle(.secondary)
@@ -21,6 +22,7 @@ struct ErrorNotice: View {
 struct VoyageHeading: View {
   let title: String
   let description: String?
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title).font(.title2.bold()).textSelection(.enabled)
@@ -33,14 +35,17 @@ struct VoyageHeading: View {
 
 struct VisibilityLabel: View {
   let published: Bool
+
   var body: some View {
     Label(published ? "Public" : "Draft", systemImage: published ? "globe" : "lock").font(
-      .subheadline)
+      .subheadline
+    )
   }
 }
 
 struct PhotoPlaceholder: View {
   var label = "Photograph"
+
   var body: some View {
     Rectangle().fill(.quaternary).overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
       .accessibilityLabel(label)
@@ -56,6 +61,7 @@ extension AppTab {
     case .account: "Account"
     }
   }
+
   var symbol: String {
     switch self {
     case .discover: "map"

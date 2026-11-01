@@ -11,32 +11,44 @@ final class CaptureSessionBox: @unchecked Sendable { let session = AVCaptureSess
 
 protocol PhotoCapturing: Sendable {
   var box: CaptureSessionBox { get }
+
   func configure() async throws
+
   func start() async
+
   func stop() async
+
   func flip() async throws
+
   func capture(flash: Bool) async throws -> Data
 }
 
-@MainActor protocol CameraLocationProviding: AnyObject {
+@MainActor
+protocol CameraLocationProviding: AnyObject {
   var current: CLLocation? { get }
+
   func start()
+
   func stop()
 }
 
 @MainActor
 private final class CameraLocation: NSObject, CameraLocationProviding, CLLocationManagerDelegate {
   private let manager = CLLocationManager()
+
   var current: CLLocation? { manager.location }
+
   override init() {
     super.init()
     manager.delegate = self
     manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
   }
+
   func start() {
     manager.requestWhenInUseAuthorization()
     manager.startUpdatingLocation()
   }
+
   func stop() { manager.stopUpdatingLocation() }
 }
 
@@ -63,12 +75,16 @@ actor CaptureEngine: PhotoCapturing {
       session.addOutput(output)
     }
   }
+
   func start() { if !box.session.isRunning { box.session.startRunning() } }
+
   func stop() { if box.session.isRunning { box.session.stopRunning() } }
+
   func flip() throws {
     position = position == .back ? .front : .back
     try configure()
   }
+
   func capture(flash: Bool) async throws -> Data {
     let settings = AVCapturePhotoSettings()
     if output.supportedFlashModes.contains(.on) { settings.flashMode = flash ? .on : .off }
@@ -82,11 +98,14 @@ actor CaptureEngine: PhotoCapturing {
 
 private final class StillPhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, Sendable {
   let completion: @Sendable (Result<Data, any Error>) -> Void
+
   init(completion: @escaping @Sendable (Result<Data, any Error>) -> Void) {
     self.completion = completion
   }
+
   func photoOutput(
-    _ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto,
+    _ output: AVCapturePhotoOutput,
+    didFinishProcessingPhoto photo: AVCapturePhoto,
     error: (any Error)?
   ) {
     if let error {
@@ -101,6 +120,7 @@ private final class StillPhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate,
 
 enum CameraError: Error, LocalizedError {
   case unavailable, permission
+
   var errorDescription: String? {
     self == .permission
       ? "Camera access is off. Enable it in Settings or choose photos instead."
@@ -108,7 +128,8 @@ enum CameraError: Error, LocalizedError {
   }
 }
 
-@MainActor @Observable
+@MainActor
+@Observable
 final class CameraController {
   let engine: any PhotoCapturing
   private let location: any CameraLocationProviding
@@ -119,8 +140,10 @@ final class CameraController {
   var includeLocation = false
   var locationIncluded = false
   var flash = false
+
   init(
-    engine: any PhotoCapturing = CaptureEngine(), location: (any CameraLocationProviding)? = nil,
+    engine: any PhotoCapturing = CaptureEngine(),
+    location: (any CameraLocationProviding)? = nil,
     permission: @escaping @Sendable () async -> Bool = {
       await AVCaptureDevice.requestAccess(for: .video)
     }
@@ -129,6 +152,7 @@ final class CameraController {
     self.location = location ?? CameraLocation()
     self.permission = permission
   }
+
   func start() async {
     guard await permission() else {
       error = CameraError.permission.localizedDescription
@@ -139,6 +163,7 @@ final class CameraController {
       await engine.start()
     } catch { self.error = error.localizedDescription }
   }
+
   func updateLocation() {
     if includeLocation {
       location.start()
@@ -146,13 +171,16 @@ final class CameraController {
       location.stop()
     }
   }
+
   func stop() async {
     location.stop()
     await engine.stop()
   }
+
   func flip() async {
     do { try await engine.flip() } catch { self.error = error.localizedDescription }
   }
+
   func takePhoto() async {
     guard !working else { return }
     working = true
@@ -165,13 +193,16 @@ final class CameraController {
           abs(location.timestamp.timeIntervalSinceNow) <= 30
         else { return nil }
         return Coordinate(
-          latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
+          latitude: location.coordinate.latitude,
+          longitude: location.coordinate.longitude
+        )
       }
       let bytes = try await engine.capture(flash: flash)
       photo = try await Task.detached { try Self.attachLocation(acceptable, to: bytes) }.value
       locationIncluded = acceptable != nil
     } catch { self.error = error.localizedDescription }
   }
+
   func save(using importPhoto: @MainActor (URL) async throws -> Void) async -> Bool {
     guard let data = photo, !working else { return false }
     working = true
@@ -179,14 +210,18 @@ final class CameraController {
     defer { working = false }
     do {
       let source = CGImageSourceCreateWithData(
-        data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        data as CFData,
+        [kCGImageSourceShouldCache: false] as CFDictionary
+      )
       let type = source.flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
       let suffix = type?.preferredFilenameExtension ?? "jpg"
       let url = URL.temporaryDirectory.appendingPathComponent("Capture-\(UUID()).\(suffix)")
       defer { try? FileManager.default.removeItem(at: url) }
       try await Task.detached {
         try data.write(
-          to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+          to: url,
+          options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
       }.value
       try await importPhoto(url)
       return true
@@ -195,6 +230,7 @@ final class CameraController {
       return false
     }
   }
+
   nonisolated static func attachLocation(_ coordinate: Coordinate?, to data: Data) throws -> Data {
     guard let coordinate else { return data }
     guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -220,23 +256,33 @@ final class CameraController {
 
 private struct CameraPreview: UIViewRepresentable {
   let box: CaptureSessionBox
+
   func makeUIView(context: Context) -> Preview {
     let view = Preview()
     view.layerView.session = box.session
     view.layerView.videoGravity = .resizeAspectFill
     return view
   }
+
   func updateUIView(_ uiView: Preview, context: Context) {}
+
   final class Preview: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+
     var layerView: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
   }
 }
 
-@MainActor struct CameraView: View {
-  @Environment(\.dismiss) private var dismiss
+@MainActor
+struct CameraView: View {
+  @Environment(\.dismiss)
+  private var dismiss
+
   let usePhoto: @MainActor (URL) async throws -> Void
-  @State private var controller: CameraController
+
+  @State
+  private var controller: CameraController
+
   init(
     controller: CameraController = CameraController(),
     usePhoto: @escaping @MainActor (URL) async throws -> Void
@@ -244,6 +290,7 @@ private struct CameraPreview: UIViewRepresentable {
     self.usePhoto = usePhoto
     _controller = State(initialValue: controller)
   }
+
   var body: some View {
     NavigationStack {
       VStack(spacing: 16) {

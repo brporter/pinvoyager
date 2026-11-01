@@ -12,6 +12,7 @@ public enum PhotoConflictChoice: Codable, Equatable, Sendable {
 
 public struct ConflictReview: Codable, Equatable, Identifiable, Sendable {
   public var id: UUID { voyageId }
+
   public let voyageId: UUID
   public var generation: Int
   public var mine: VoyageFields
@@ -23,9 +24,15 @@ public struct ConflictReview: Codable, Equatable, Identifiable, Sendable {
   public var photoChoice: PhotoConflictChoice?
   public var readded: Set<UUID> = []
   public var makePrivate: Bool?
+
   public init(
-    voyageId: UUID, generation: Int, mine: VoyageFields, website: VoyageFields,
-    revision: String, published: Bool, websitePhotos: [UUID]
+    voyageId: UUID,
+    generation: Int,
+    mine: VoyageFields,
+    website: VoyageFields,
+    revision: String,
+    published: Bool,
+    websitePhotos: [UUID]
   ) {
     self.voyageId = voyageId
     self.generation = generation
@@ -35,12 +42,15 @@ public struct ConflictReview: Codable, Equatable, Identifiable, Sendable {
     self.published = published
     self.websitePhotos = websitePhotos
   }
+
   public var resolvedFields: VoyageFields {
     VoyageFields(
       title: choices["title"] == .local ? mine.title : website.title,
       description: choices["description"] == .local ? mine.description : website.description,
-      granularity: choices["granularity"] == .local ? mine.granularity : website.granularity)
+      granularity: choices["granularity"] == .local ? mine.granularity : website.granularity
+    )
   }
+
   public var fieldsChosen: Bool {
     ["title", "description", "granularity"].allSatisfy {
       choices[$0] == .local || choices[$0] == .remote

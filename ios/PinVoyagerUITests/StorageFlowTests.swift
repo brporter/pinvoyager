@@ -2,12 +2,14 @@ import PinVoyagerDomain
 import UIKit
 import XCTest
 
-@MainActor final class StorageFlowTests: XCTestCase {
+@MainActor
+final class StorageFlowTests: XCTestCase {
   func testDownloadManagerSavesAndRemovesAnOwnerCopyAndExportListsMissingOriginals() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Offline download management", description: "A website voyage"))
+      fields: VoyageFields(title: "Offline download management", description: "A website voyage")
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     var photo = LocalPhoto(voyageId: voyage.id, filename: "Unavailable original.jpg")
@@ -29,13 +31,16 @@ import XCTest
     app.reveal(app.buttons["Manage downloads"])
     app.buttons["Manage downloads"].tap()
     XCTAssertTrue(
-      app.staticTexts["0 of 1 photos saved for offline use"].waitForExistence(timeout: 5))
+      app.staticTexts["0 of 1 photos saved for offline use"].waitForExistence(timeout: 5)
+    )
     app.buttons["Download or resume owner copy"].tap()
     XCTAssertTrue(
-      app.staticTexts["1 of 1 photos saved for offline use"].waitForExistence(timeout: 5))
+      app.staticTexts["1 of 1 photos saved for offline use"].waitForExistence(timeout: 5)
+    )
     XCTAssertTrue(
       app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Last saved")).firstMatch
-        .exists)
+        .exists
+    )
     app.buttons["Remove download"].tap()
     try XCTUnwrap(
       app.buttons.matching(identifier: "Remove download").allElementsBoundByIndex.last {
@@ -43,13 +48,15 @@ import XCTest
       }
     ).tap()
     XCTAssertTrue(
-      app.staticTexts["0 of 1 photos saved for offline use"].waitForExistence(timeout: 5))
+      app.staticTexts["0 of 1 photos saved for offline use"].waitForExistence(timeout: 5)
+    )
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.reveal(app.buttons["Export local draft"])
     app.buttons["Export local draft"].tap()
     app.staticTexts[voyage.fields.title].tap()
     XCTAssertTrue(
-      app.staticTexts["Originals unavailable on this device"].waitForExistence(timeout: 5))
+      app.staticTexts["Originals unavailable on this device"].waitForExistence(timeout: 5)
+    )
     XCTAssertTrue(app.staticTexts[photo.filename].exists)
     app.buttons["Prepare export of local work"].tap()
     XCTAssertTrue(app.buttons["Save export to Files"].waitForExistence(timeout: 5))

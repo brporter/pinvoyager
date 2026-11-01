@@ -1,6 +1,7 @@
 import XCTest
 
-@MainActor final class PublicBrowsingTests: XCTestCase {
+@MainActor
+final class PublicBrowsingTests: XCTestCase {
   func testPublicVoyageGalleryAndProfileUseTheCapturedAPIContract() throws {
     let app = try launchPublicApp()
     let card = app.staticTexts["Three weeks in Hokkaido"].firstMatch
@@ -23,6 +24,7 @@ import XCTest
     XCTAssertTrue(app.staticTexts["fixture-owner"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["Public profile"].exists)
   }
+
   private func launchPublicApp() throws -> XCUIApplication {
     let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent().deletingLastPathComponent()
@@ -45,7 +47,8 @@ import XCTest
     let profile = try JSONSerialization.data(withJSONObject: [
       "user": ["id": ownerId, "display_name": "fixture-owner"],
       "voyages": try XCTUnwrap(
-        (JSONSerialization.jsonObject(with: list) as? [String: Any])?["voyages"]),
+        (JSONSerialization.jsonObject(with: list) as? [String: Any])?["voyages"]
+      ),
       "next_before": NSNull(),
     ])
     reply("/api/profiles/" + ownerId, profile)
@@ -53,7 +56,8 @@ import XCTest
       Data(
         base64Encoded:
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLItAAAAABJRU5ErkJggg=="
-      ))
+      )
+    )
     for photo in photos {
       for key in ["thumbnail_url", "display_url", "full_url"] {
         reply(try XCTUnwrap(photo[key] as? String), image)
@@ -62,11 +66,12 @@ import XCTest
     let app = XCUIApplication()
     app.launchArguments = ["--ui-testing"]
     app.launchEnvironment["PINVOYAGER_TEST_RESPONSES"] = String(
-      decoding: try JSONSerialization.data(withJSONObject: replies), as: UTF8.self)
+      decoding: try JSONSerialization.data(withJSONObject: replies),
+      as: UTF8.self
+    )
     app.launch()
     return app
   }
-
 }
 
 extension PublicBrowsingTests {
@@ -85,7 +90,9 @@ extension PublicBrowsingTests {
     XCTAssertTrue(app.buttons["Fit voyage"].waitForExistence(timeout: 5))
     let pin = app.buttons.matching(
       NSPredicate(
-        format: "label BEGINSWITH %@ AND label ENDSWITH %@", "View ", "photographs at this location"
+        format: "label BEGINSWITH %@ AND label ENDSWITH %@",
+        "View ",
+        "photographs at this location"
       )
     ).firstMatch
     app.reveal(pin, swipeUp: false)

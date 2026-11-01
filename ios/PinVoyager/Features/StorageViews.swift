@@ -3,11 +3,20 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct StorageSettingsSections: View {
-  @Environment(AppModel.self) private var model
-  @State private var usage = StorageBreakdown()
-  @State private var confirmCleanup = false
-  @State private var changePreference = false
+  @Environment(AppModel.self)
+  private var model
+
+  @State
+  private var usage = StorageBreakdown()
+
+  @State
+  private var confirmCleanup = false
+
+  @State
+  private var changePreference = false
+
   private var keepOriginals: Bool { (model.workspace?.policy ?? model.guestPolicy).keepOriginals }
+
   var body: some View {
     Section("Storage") {
       LabeledContent("Unsynced photos", value: size(usage.unsyncedPhotos))
@@ -25,7 +34,9 @@ struct StorageSettingsSections: View {
               changePreference = true
               confirmCleanup = true
             }
-          }))
+          }
+        )
+      )
       Text(
         "Pending, failed and uncertain photos are kept. Cleanup requires a ready server photo and a verified local owner copy. The server cannot return your original uploads."
       )
@@ -70,13 +81,16 @@ struct StorageSettingsSections: View {
       )
     }
   }
+
   private func size(_ bytes: Int64) -> String {
     ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
+
   private func setKeepOriginals(_ keep: Bool) async {
     let account = model.activeAccountId
     await model.setPreference(.keepOriginals, value: keep, accountId: account)
   }
+
   private func refresh() async {
     do {
       if let account = model.activeAccountId, let storage = model.storage {
@@ -89,8 +103,12 @@ struct StorageSettingsSections: View {
 }
 
 struct ManageDownloadsView: View {
-  @Environment(AppModel.self) private var model
-  @State private var removing: LocalVoyage?
+  @Environment(AppModel.self)
+  private var model
+
+  @State
+  private var removing: LocalVoyage?
+
   var body: some View {
     List {
       ForEach(model.localVoyages.filter { $0.serverId != nil }) { voyage in
@@ -107,7 +125,8 @@ struct ManageDownloadsView: View {
           ) {
             Task { await model.downloadOwnerCopy(voyage.id) }
           }.disabled(
-            model.offline || !model.signedIn || model.downloadingVoyages.contains(voyage.id))
+            model.offline || !model.signedIn || model.downloadingVoyages.contains(voyage.id)
+          )
           if !copies.isEmpty { Button("Remove download", role: .destructive) { removing = voyage } }
         }
       }
@@ -119,7 +138,10 @@ struct ManageDownloadsView: View {
       .confirmationDialog(
         "Remove this voyage's offline download?",
         isPresented: Binding(
-          get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible
+          get: { removing != nil },
+          set: { if !$0 { removing = nil } }
+        ),
+        titleVisibility: .visible
       ) {
         Button("Remove download", role: .destructive) {
           if let voyage = removing { Task { await model.removeOwnerCopy(voyage.id) } }
@@ -134,7 +156,9 @@ struct ManageDownloadsView: View {
 }
 
 struct ExportVoyagePickerView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   var body: some View {
     List {
       ForEach((model.workspace?.voyages ?? []).sorted { $0.fields.title < $1.fields.title }) {
@@ -148,37 +172,57 @@ struct ExportVoyagePickerView: View {
 struct ExportFilesPicker: UIViewControllerRepresentable {
   let url: URL
   let completed: (URL?) -> Void
+
   func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
     let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
     picker.delegate = context.coordinator
     return picker
   }
+
   func updateUIViewController(_ picker: UIDocumentPickerViewController, context: Context) {}
+
   func makeCoordinator() -> Coordinator { Coordinator(completed: completed) }
+
   final class Coordinator: NSObject, UIDocumentPickerDelegate {
     let completed: (URL?) -> Void
+
     init(completed: @escaping (URL?) -> Void) { self.completed = completed }
+
     func documentPicker(
-      _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
+      _ controller: UIDocumentPickerViewController,
+      didPickDocumentsAt urls: [URL]
     ) { completed(urls.first) }
+
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { completed(nil) }
   }
 }
 
 struct ExportVoyageView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   let voyageId: UUID
-  @State private var preview: FileVault.ExportPreview?
-  @State private var export: URL?
-  @State private var exporting = false
-  @State private var preparing = false
+
+  @State
+  private var preview: FileVault.ExportPreview?
+
+  @State
+  private var export: URL?
+
+  @State
+  private var exporting = false
+
+  @State
+  private var preparing = false
+
   var body: some View {
     Form {
       if let preview {
         LabeledContent("Original files included", value: String(preview.includedFiles))
         LabeledContent(
           "Original bytes",
-          value: ByteCountFormatter.string(fromByteCount: preview.byteCount, countStyle: .file))
+          value: ByteCountFormatter.string(fromByteCount: preview.byteCount, countStyle: .file)
+        )
         Text(
           "Voyage metadata, private locations and retained sources for removed photos are included."
         )
@@ -218,9 +262,11 @@ struct ExportVoyageView: View {
     defer { preparing = false }
     do {
       let url = try await vault.exportArchive(
-        workspace, voyageId: voyageId,
+        workspace,
+        voyageId: voyageId,
         destination: URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-          .appendingPathComponent("PinVoyager-export"))
+          .appendingPathComponent("PinVoyager-export")
+      )
       export = url
     } catch { model.error = error.localizedDescription }
   }

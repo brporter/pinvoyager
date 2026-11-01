@@ -17,7 +17,8 @@ enum PublicationSignOutResult: Equatable, Sendable {
   case published(Set<UUID>)
 }
 
-@MainActor @Observable
+@MainActor
+@Observable
 final class AppModel {
   let store: any WorkspaceStore
   let repository: LocalRepository
@@ -27,14 +28,17 @@ final class AppModel {
   let accountDeletion: AccountDeletionService
   var pendingDeletions: [PendingAccountDeletion] = []
   let vault: FileVault?
+
   var storage: StorageManager? {
     vault.map { StorageManager(store: store, vault: $0, cache: client.imageCache) }
   }
+
   var localDiscard: LocalDiscardService? {
     guard let vault else { return nil }
     let cancel = cancelIneligibleTransfers
     return LocalDiscardService(store: store, vault: vault) { account in await cancel?(account) }
   }
+
   let webOrigin: TrustedOrigin
   let devicePreferences: any DevicePreferences
   var guestPolicy = SyncPolicy()
@@ -51,16 +55,21 @@ final class AppModel {
   var syncing = false
   private var activating = false
   private var publicValidation = UUID()
+
   var publicAccess: PublicAccess {
     PublicAccess(
       accountId: signedIn ? activeAccountId : nil,
       generation: signedIn ? workspace?.account.generation : nil,
-      validation: publicValidation, offline: offline, blocked: workspace?.blockedAccounts ?? [],
+      validation: publicValidation,
+      offline: offline,
+      blocked: workspace?.blockedAccounts ?? [],
       pendingBlocks: workspace?.operations.contains(where: {
         if case .block(_, true) = $0.kind { return ![.applied, .canceled].contains($0.state) }
         return false
-      }) == true)
+      }) == true
+    )
   }
+
   private var syncTask: Task<Void, Never>?
   private var syncRequested = false
   var downloadingVoyages: Set<UUID> = []
@@ -72,10 +81,15 @@ final class AppModel {
   var makeCamera: () -> CameraController = { CameraController() }
   var cancelPersistedTransfers: ((UUID) async -> Void)?
   var cancelIneligibleTransfers: (@MainActor @Sendable (UUID) async -> Void)?
+
   var signedIn: Bool { workspace?.account.access == .unlocked }
+
   var offline: Bool { network == .offline }
+
   var nativeSupported: Bool { capabilities?.supportsNativeSync == true }
+
   var nativeAuthenticationAvailable: Bool { capabilities?.supportsNativeAuthentication == true }
+
   var localVoyages: [LocalVoyage] {
     (workspace?.voyages ?? []).filter { !$0.deleted }.sorted {
       if ($0.serverId == nil) != ($1.serverId == nil) { return $0.serverId == nil }
@@ -84,8 +98,11 @@ final class AppModel {
   }
 
   init(
-    store: any WorkspaceStore, client: APIClient, credentials: any CredentialStore,
-    vault: FileVault? = nil, webOrigin: TrustedOrigin? = nil,
+    store: any WorkspaceStore,
+    client: APIClient,
+    credentials: any CredentialStore,
+    vault: FileVault? = nil,
+    webOrigin: TrustedOrigin? = nil,
     deletionRecovery: any DeletionRecoveryStore = KeychainDeletionRecoveryStore(),
     notifications: any PublicationNotifications = SystemPublicationNotifications(),
     devicePreferences: any DevicePreferences = UserDefaultsDevicePreferences()
@@ -250,8 +267,11 @@ final class AppModel {
     }
     let name = try DisplayName.normalize(value)
     _ = try await client.raw(
-      method: "PATCH", path: "/api/me", body: APIJSON.encode(["display_name": name]),
-      accountId: accountId)
+      method: "PATCH",
+      path: "/api/me",
+      body: APIJSON.encode(["display_name": name]),
+      accountId: accountId
+    )
     let account = try await client.me(accountId)
     guard activeAccountId == accountId, account.user.id == accountId,
       account.user.displayName != nil
@@ -277,7 +297,9 @@ final class AppModel {
     defer { loadingDiscover = false }
     do {
       let page = try await client.voyages(
-        before: refresh ? nil : discoverCursor, viewer: signedIn ? activeAccountId : nil)
+        before: refresh ? nil : discoverCursor,
+        viewer: signedIn ? activeAccountId : nil
+      )
       guard access == publicAccess, !Task.isCancelled else { return }
       let existing = refresh ? [] : discover
       var seen: Set<UUID> = []
@@ -307,16 +329,21 @@ final class AppModel {
             if let index = state.voyages.firstIndex(where: { $0.serverId == summary.id }) {
               if !pending {
                 state.voyages[index].fields = VoyageFields(
-                  title: summary.title, description: summary.description,
-                  granularity: summary.granularity)
+                  title: summary.title,
+                  description: summary.description,
+                  granularity: summary.granularity
+                )
                 state.voyages[index].confirmedPublished = summary.published
               }
             } else {
               var local = LocalVoyage(
                 ownerId: accountId,
                 fields: VoyageFields(
-                  title: summary.title, description: summary.description,
-                  granularity: summary.granularity))
+                  title: summary.title,
+                  description: summary.description,
+                  granularity: summary.granularity
+                )
+              )
               local.serverId = summary.id
               local.confirmedPublished = summary.published
               state.voyages.append(local)
@@ -342,7 +369,9 @@ final class AppModel {
       guard remote.ownerId == accountId else { throw WorkspaceError.wrongAccount }
       let privatePhotos = try await client.ownerPhotos(voyageId: serverId, accountId: accountId)
       let metadata = Dictionary(
-        privatePhotos.map { ($0.id, $0) }, uniquingKeysWith: { _, newest in newest })
+        privatePhotos.map { ($0.id, $0) },
+        uniquingKeysWith: { _, newest in newest }
+      )
       try await store.update(accountId: accountId) { state in
         guard state.account.access == .unlocked,
           let index = state.voyages.firstIndex(where: { $0.id == localId })
@@ -382,14 +411,20 @@ final class AppModel {
       if let vault, let revision = remote.revision {
         try await OwnerDownloads(client: client, store: store, vault: vault).purgeMissing(
           accountId: accountId,
-          voyageId: localId, keeping: Set(remote.photos.map(\.id)), revision: revision)
+          voyageId: localId,
+          keeping: Set(remote.photos.map(\.id)),
+          revision: revision
+        )
       }
       await reloadWorkspace()
     } catch let error as APIError where error.status == 404 {
       if let vault, let revision = voyage.revision {
         try? await OwnerDownloads(client: client, store: store, vault: vault).purgeMissing(
           accountId: accountId,
-          voyageId: localId, keeping: [], revision: revision)
+          voyageId: localId,
+          keeping: [],
+          revision: revision
+        )
       }
       await reloadWorkspace()
       self.error =
@@ -406,7 +441,9 @@ final class AppModel {
     defer { downloadingVoyages.remove(voyageId) }
     await perform {
       try await OwnerDownloads(client: client, store: store, vault: vault).download(
-        accountId: accountId, voyageId: voyageId)
+        accountId: accountId,
+        voyageId: voyageId
+      )
       try await removeEligibleOriginals(accountId: accountId)
     }
   }
@@ -418,7 +455,9 @@ final class AppModel {
     defer { downloadingPhotos.remove(photoId) }
     await perform(synchronize: false) {
       try await OwnerDownloads(client: client, store: store, vault: vault).downloadFull(
-        accountId: accountId, photoId: photoId)
+        accountId: accountId,
+        photoId: photoId
+      )
       try await removeEligibleOriginals(accountId: accountId)
     }
   }
@@ -433,7 +472,9 @@ final class AppModel {
     guard let accountId = activeAccountId, let vault else { return }
     await perform {
       try await OwnerDownloads(client: client, store: store, vault: vault).remove(
-        accountId: accountId, voyageId: voyageId)
+        accountId: accountId,
+        voyageId: voyageId
+      )
     }
   }
 
@@ -523,7 +564,10 @@ final class AppModel {
       if let accountId {
         let generation = workspace?.account.generation
         try await repository.setPreference(
-          accountId: accountId, preference: preference, value: value)
+          accountId: accountId,
+          preference: preference,
+          value: value
+        )
         guard activeAccountId == accountId else { return }
         await reloadWorkspace()
         if workspace?.account.generation != generation { await cancelAccountTransfers(accountId) }

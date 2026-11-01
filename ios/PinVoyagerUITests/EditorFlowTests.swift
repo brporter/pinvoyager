@@ -1,7 +1,8 @@
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class EditorFlowTests: XCTestCase {
+@MainActor
+final class EditorFlowTests: XCTestCase {
   func testExistingWorkingCopyCanBeDiscardedWithoutChangingTheCommittedVoyage() throws {
     var fixture = try FixtureLaunch()
     let fields = VoyageFields(title: "Committed voyage", description: nil)
@@ -10,7 +11,8 @@ import XCTest
     fixture.workspace.workingCopies = [
       VoyageWorkingCopy(
         voyage: voyage,
-        fields: VoyageFields(title: "Recovered working copy", description: "Uncommitted edits"))
+        fields: VoyageFields(title: "Recovered working copy", description: "Uncommitted edits")
+      )
     ]
     let app = try fixture.launch()
     app.buttons["My Voyages"].tap()
@@ -40,14 +42,17 @@ import XCTest
     var fixture = try FixtureLaunch()
     fixture.workspace.scratch = VoyageFields(
       title: String(repeating: "x", count: 201),
-      description: String(repeating: "y", count: 8_001))
+      description: String(repeating: "y", count: 8_001)
+    )
     let app = try fixture.launch()
     app.buttons["My Voyages"].tap()
     app.buttons["Continue unfinished draft"].tap()
     XCTAssertTrue(app.staticTexts["201 / 200 characters"].waitForExistence(timeout: 5))
     XCTAssertLessThanOrEqual(
-      app.textViews["Description"].frame.height, app.frame.height / 2,
-      "Long descriptions must scroll inside the editor without expanding the form across screens.")
+      app.textViews["Description"].frame.height,
+      app.frame.height / 2,
+      "Long descriptions must scroll inside the editor without expanding the form across screens."
+    )
     let descriptionCount = app.staticTexts.matching(
       NSPredicate(format: "label ENDSWITH %@", "/ 8,000 characters")
     ).firstMatch
@@ -59,7 +64,8 @@ import XCTest
     app.reveal(app.staticTexts["Use at most 200 characters for the voyage name."])
     XCTAssertTrue(
       app.staticTexts["Use at most 200 characters for the voyage name."].exists,
-      app.debugDescription)
+      app.debugDescription
+    )
     app.reveal(app.textFields["Voyage name"], swipeUp: false)
     XCTAssertEqual((app.textFields["Voyage name"].value as? String)?.count, 201)
     app.buttons["Close"].tap()
@@ -71,7 +77,8 @@ import XCTest
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Saved before editing", description: "Keep this description"))
+      fields: VoyageFields(title: "Saved before editing", description: "Keep this description")
+    )
     fixture.workspace.voyages = [voyage]
     let app = try fixture.launch()
     app.buttons["My Voyages"].tap()
@@ -94,7 +101,8 @@ extension EditorFlowTests {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Reviewed version", description: "The approved description"))
+      fields: VoyageFields(title: "Reviewed version", description: "The approved description")
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     var photo = LocalPhoto(voyageId: voyage.id, filename: "Reviewed photo")
@@ -136,7 +144,10 @@ extension EditorFlowTests {
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
       fields: VoyageFields(
-        title: "Unanswered publication", description: "The earlier review may be on the server"))
+        title: "Unanswered publication",
+        description: "The earlier review may be on the server"
+      )
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     var photo = LocalPhoto(voyageId: voyage.id, filename: "Reviewed photo")
@@ -145,8 +156,11 @@ extension EditorFlowTests {
     photo.variant = .ready
     let intent = try PublicationIntent.review(voyage: voyage, photos: [photo], at: Date())
     var publish = OutboxOperation(
-      accountId: fixture.workspace.account.id, generation: 0,
-      voyageId: voyage.id, kind: .publish(intentId: intent.id))
+      accountId: fixture.workspace.account.id,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .publish(intentId: intent.id)
+    )
     publish.state = .uncertain
     publish.request = MutationRequest(method: "POST", path: "/possibly-accepted-publication")
     fixture.workspace.voyages = [voyage]
@@ -160,7 +174,8 @@ extension EditorFlowTests {
     XCTAssertTrue(
       app.staticTexts[
         "Checking whether publication was scheduled. The reviewed version may publish while this device is offline."
-      ].waitForExistence(timeout: 5))
+      ].waitForExistence(timeout: 5)
+    )
     app.buttons["Edit details"].tap()
     let title = app.textFields["Voyage name"]
     title.tap()

@@ -5,31 +5,60 @@ import Testing
 @testable import PinVoyagerData
 
 func conflictSnapshot(
-  account: UUID, voyage: UUID, revision: String = "12", ids: [UUID], published: Bool = false
+  account: UUID,
+  voyage: UUID,
+  revision: String = "12",
+  ids: [UUID],
+  published: Bool = false
 )
   -> OwnerVoyageSnapshot
 {
   OwnerVoyageSnapshot(
     voyage: RemoteVoyage(
-      id: voyage, ownerId: account, title: "Website name",
-      description: "Website description", published: published, granularity: .km1,
+      id: voyage,
+      ownerId: account,
+      title: "Website name",
+      description: "Website description",
+      published: published,
+      granularity: .km1,
       granularityLabel: "1 km",
-      photoCount: ids.count, placedCount: 0, placeCount: 0, unplacedCount: ids.count,
+      photoCount: ids.count,
+      placedCount: 0,
+      placeCount: 0,
+      unplacedCount: ids.count,
       photos: ids.enumerated().map { position, id in
         RemotePhoto(
-          id: id, position: position, capturedAt: nil,
-          width: 2, height: 2, variantStatus: .ready, thumbnailUrl: "/thumb",
-          displayUrl: "/display", fullUrl: "/full",
-          coordinate: nil, placed: false)
-      }, revision: revision),
+          id: id,
+          position: position,
+          capturedAt: nil,
+          width: 2,
+          height: 2,
+          variantStatus: .ready,
+          thumbnailUrl: "/thumb",
+          displayUrl: "/display",
+          fullUrl: "/full",
+          coordinate: nil,
+          placed: false
+        )
+      },
+      revision: revision
+    ),
     photos: ids.map {
       OwnerPhoto(
-        id: $0, width: 2, height: 2, capturedAt: nil, latitude: 10, longitude: 20,
-        variantStatus: .ready)
-    })
+        id: $0,
+        width: 2,
+        height: 2,
+        capturedAt: nil,
+        latitude: 10,
+        longitude: 20,
+        variantStatus: .ready
+      )
+    }
+  )
 }
 
-@Test func ownerSnapshotRejectsChangesDuringPaginationAndUsesOnlyPrivateMetadata() async throws {
+@Test
+func ownerSnapshotRejectsChangesDuringPaginationAndUsesOnlyPrivateMetadata() async throws {
   let account = UUID()
   let voyage = UUID()
   let first = UUID()
@@ -41,8 +70,12 @@ func conflictSnapshot(
   for changed in [false, true] {
     let after = try APIJSON.encode(
       conflictSnapshot(
-        account: account, voyage: voyage, revision: changed ? "13" : "12", ids: [first, second]
-      ).voyage)
+        account: account,
+        voyage: voyage,
+        revision: changed ? "13" : "12",
+        ids: [first, second]
+      ).voyage
+    )
     let transport = StubHTTP([
       HTTPResponse(status: 200, body: before),
       response(
@@ -69,13 +102,17 @@ func conflictSnapshot(
   }
 }
 
-@Test func combinedPhotoResolutionRequiresEveryReviewedItemAndWaitsForUncertainWrites() async throws
-{
+@Test
+func combinedPhotoResolutionRequiresEveryReviewedItemAndWaitsForUncertainWrites() async throws {
   var initial = workspaceWithPhotos(remote: true)
   let voyage = initial.voyages[0]
   var conflict = OutboxOperation(
-    accountId: initial.account.id, generation: 0, voyageId: voyage.id,
-    kind: .order(initial.photos.map(\.id)), expectedRevision: "7")
+    accountId: initial.account.id,
+    generation: 0,
+    voyageId: voyage.id,
+    kind: .order(initial.photos.map(\.id)),
+    expectedRevision: "7"
+  )
   conflict.state = .conflict
   initial.operations = [conflict]
   let ids = initial.photos.compactMap(\.serverId)
@@ -88,24 +125,34 @@ func conflictSnapshot(
     if invalid {
       await #expect(throws: WorkspaceError.invalidOrder) {
         try await repository.resolvePhotoConflict(
-          accountId: initial.account.id, operationId: conflict.id,
-          fields: snapshot.voyage.fields, snapshot: snapshot,
-          choice: .arranged([.website(ids[0]), .website(ids[0])]))
+          accountId: initial.account.id,
+          operationId: conflict.id,
+          fields: snapshot.voyage.fields,
+          snapshot: snapshot,
+          choice: .arranged([.website(ids[0]), .website(ids[0])])
+        )
       }
       #expect(try await store.read(accountId: initial.account.id) == before)
     } else {
       try await store.update(accountId: initial.account.id) { state in
         var other = OutboxOperation(
-          accountId: state.account.id, generation: 0, voyageId: voyage.id,
-          kind: .edit(voyage.fields))
+          accountId: state.account.id,
+          generation: 0,
+          voyageId: voyage.id,
+          kind: .edit(voyage.fields)
+        )
         other.request = MutationRequest(method: "PATCH", path: "/submitted", revision: "7")
         other.state = .uncertain
         state.operations.append(other)
       }
       await #expect(throws: ValidationError.self) {
         try await repository.resolvePhotoConflict(
-          accountId: initial.account.id, operationId: conflict.id,
-          fields: snapshot.voyage.fields, snapshot: snapshot, choice: .website)
+          accountId: initial.account.id,
+          operationId: conflict.id,
+          fields: snapshot.voyage.fields,
+          snapshot: snapshot,
+          choice: .website
+        )
       }
       try await store.update(accountId: initial.account.id) { state in
         state.operations.removeAll {
@@ -114,16 +161,20 @@ func conflictSnapshot(
         }
       }
       try await repository.resolvePhotoConflict(
-        accountId: initial.account.id, operationId: conflict.id,
-        fields: voyage.fields, snapshot: snapshot,
-        choice: .arranged(ids.reversed().map(PhotoConflictItem.website)))
+        accountId: initial.account.id,
+        operationId: conflict.id,
+        fields: voyage.fields,
+        snapshot: snapshot,
+        choice: .arranged(ids.reversed().map(PhotoConflictItem.website))
+      )
       let saved = try await store.read(accountId: initial.account.id)
       #expect(saved.photos(for: voyage.id).compactMap(\.serverId) == ids.reversed())
       #expect(
         saved.operations.contains {
           if case .edit = $0.kind { return $0.expectedRevision == "12" }
           return false
-        })
+        }
+      )
       let order = saved.operations.first {
         if case .order = $0.kind { return $0.state == .waiting }
         return false
@@ -133,14 +184,17 @@ func conflictSnapshot(
   }
 }
 
-@Test func explicitlyAddingAWebsiteDeletedPhotoCreatesFreshPhotoAndUploadIdentities() async throws {
+@Test
+func explicitlyAddingAWebsiteDeletedPhotoCreatesFreshPhotoAndUploadIdentities() async throws {
   var state = workspaceWithPhotos(remote: true)
   state.photos[0].deleted = true
   let original = state.photos[0]
   let store = try CoreDataWorkspaceStore(url: nil)
   try await store.insert(state)
   let id = try await LocalRepository(store: store).addAgain(
-    accountId: state.account.id, photoId: original.id)
+    accountId: state.account.id,
+    photoId: original.id
+  )
   let saved = try await store.read(accountId: state.account.id)
   let copy = try #require(saved.photos.first { $0.id == id })
   #expect(copy.uploadKey != original.uploadKey)

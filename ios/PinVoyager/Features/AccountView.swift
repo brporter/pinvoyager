@@ -4,15 +4,26 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct AccountView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @State private var signOut = false
-  @State private var signingOut = false
-  @State private var publishedBeforeSignOut: Set<UUID> = []
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @State
+  private var signOut = false
+
+  @State
+  private var signingOut = false
+
+  @State
+  private var publishedBeforeSignOut: Set<UUID> = []
+
   private var armedPublicationIds: Set<UUID> {
     guard let state = model.workspace else { return [] }
     return Set(state.publicationIntents.filter { state.publicationMayProceed($0) }.map(\.id))
   }
+
   private func beginSignOut(_ action: @escaping @MainActor () async -> Void) {
     guard !signingOut else { return }
     signingOut = true
@@ -21,6 +32,7 @@ struct AccountView: View {
       await action()
     }
   }
+
   var body: some View {
     Form {
       if let account = model.workspace?.account, account.access == .unlocked {
@@ -39,7 +51,7 @@ struct AccountView: View {
         }
         if signingOut { ProgressView("Confirming sign out") }
         Section {
-          Image("HorizonPin").resizable().scaledToFit().frame(width: 64, height: 64)
+          Image("BrandIcon").resizable().scaledToFit().frame(width: 64, height: 64)
             .accessibilityHidden(true)
           Text(account.profile.displayName ?? "Choose your display name").font(.title2.bold())
           if model.offline {
@@ -59,7 +71,8 @@ struct AccountView: View {
           }
           Button("Sign out", role: .destructive) { signOut = true }.disabled(signingOut)
           NavigationLink("Delete account", value: SceneDestination.deletion).disabled(
-            model.offline)
+            model.offline
+          )
         }
       } else {
         Section {
@@ -90,7 +103,9 @@ struct AccountView: View {
     .navigationTitle("Account")
     .task { if !AppBootstrap.isUITesting { await model.reloadDeletionRecovery() } }
     .confirmationDialog(
-      "Sign out of this account?", isPresented: $signOut, titleVisibility: .visible
+      "Sign out of this account?",
+      isPresented: $signOut,
+      titleVisibility: .visible
     ) {
       if !armedPublicationIds.isEmpty {
         if !model.offline {
@@ -98,8 +113,8 @@ struct AccountView: View {
             let ids = armedPublicationIds
             beginSignOut {
               if case .published(let voyages) = await model.cancelPublicationAndSignOut(
-                intentIds: ids)
-              {
+                intentIds: ids
+              ) {
                 publishedBeforeSignOut = voyages
               }
             }
@@ -128,20 +143,35 @@ struct AccountView: View {
 }
 
 struct SignInView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   var linking = false
-  @State private var ephemeral = false
+
+  @State
+  private var ephemeral = false
+
   private var busy: Bool { presentation?.busy == true }
+
   private var error: String? { presentation?.error }
-  @Environment(WindowContext.self) private var window
-  @State private var presentation: AuthenticationPresentation?
+
+  @Environment(WindowContext.self)
+  private var window
+
+  @State
+  private var presentation: AuthenticationPresentation?
+
   var body: some View {
     NavigationStack {
       Form {
         Section {
-          Image("HorizonPin").resizable().scaledToFit().frame(width: 80, height: 80).frame(
+          Image("BrandIcon").resizable().scaledToFit().frame(width: 80, height: 80).frame(
             maxWidth: .infinity
           ).accessibilityHidden(true)
           Text(linking ? "Link a sign-in method" : "Sign in to PinVoyager").font(.title2.bold())
@@ -154,7 +184,8 @@ struct SignInView: View {
           }
           ForEach(
             model.capabilities?.providers.filter { ["apple", "google", "microsoft"].contains($0) }
-              ?? [], id: \.self
+              ?? [],
+            id: \.self
           ) { provider in
             Button("Continue with \(provider.capitalized)") { signIn(provider) }.disabled(
               busy || model.offline || !model.nativeAuthenticationAvailable
@@ -164,7 +195,8 @@ struct SignInView: View {
           Toggle("Use another account", isOn: $ephemeral).disabled(busy)
           if let error { ErrorNotice(message: error) }
           Button("Refresh sign-in options") { Task { await model.checkCapabilities() } }.disabled(
-            busy || model.offline)
+            busy || model.offline
+          )
         }
         Section {
           Link("Terms", destination: model.webOrigin.url(path: ["terms"]))
@@ -178,39 +210,52 @@ struct SignInView: View {
       }
     }.task { await model.checkCapabilities() }.interactiveDismissDisabled(busy)
   }
+
   private func signIn(_ provider: String) {
     let presentation =
       self.presentation
       ?? AuthenticationPresentation(
         authentication: model.authentication,
-        browser: BrowserAuthentication(anchor: { window.anchor() }))
+        browser: BrowserAuthentication(anchor: { window.anchor() })
+      )
     self.presentation = presentation
     let account = model.activeAccountId
     let generation = model.workspace?.account.generation
     Task {
       if await presentation.signIn(
-        provider: provider, linkingAccountId: linking ? account : nil,
+        provider: provider,
+        linkingAccountId: linking ? account : nil,
         ephemeral: ephemeral,
         accept: { session in
           guard model.activeAccountId == account, model.workspace?.account.generation == generation
           else { throw AuthenticationError.canceled }
           try await model.acceptSession(session)
-        })
-      {
+        }
+      ) {
         dismiss()
       }
     }
   }
-
 }
 
 struct DisplayNameView: View {
   var initialSetup = false
-  @Environment(AppModel.self) private var model
-  @Environment(\.dismiss) private var dismiss
-  @State private var value = ""
-  @State private var error: String?
-  @State private var saving = false
+
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(\.dismiss)
+  private var dismiss
+
+  @State
+  private var value = ""
+
+  @State
+  private var error: String?
+
+  @State
+  private var saving = false
+
   var body: some View {
     Form {
       Section {
@@ -222,7 +267,8 @@ struct DisplayNameView: View {
         Text("Previous names continue to resolve to your profile.").font(.footnote)
         if let name = try? DisplayName.normalize(value) {
           Text(model.webOrigin.url(path: ["u", name]).absoluteString).font(.caption).textSelection(
-            .enabled)
+            .enabled
+          )
         }
         if let error { ErrorNotice(message: error) }
         Button(initialSetup ? "Continue" : "Save") { save() }.disabled(model.offline || saving)
@@ -233,6 +279,7 @@ struct DisplayNameView: View {
         value = model.workspace?.account.profile.displayName ?? ""
       }
   }
+
   private func save() {
     saving = true
     Task {
@@ -248,8 +295,12 @@ struct DisplayNameView: View {
 }
 
 struct SignInMethodsView: View {
-  @Environment(AppModel.self) private var model
-  @State private var linking = false
+  @Environment(AppModel.self)
+  private var model
+
+  @State
+  private var linking = false
+
   var body: some View {
     List(["apple", "google", "microsoft"], id: \.self) { provider in
       HStack {
@@ -259,7 +310,8 @@ struct SignInMethodsView: View {
           Label("Linked", systemImage: "checkmark")
         } else {
           Button("Link") { linking = true }.disabled(
-            model.offline || !model.nativeAuthenticationAvailable)
+            model.offline || !model.nativeAuthenticationAvailable
+          )
         }
       }
     }.navigationTitle("Sign-in methods").sheet(isPresented: $linking) { SignInView(linking: true) }
@@ -267,7 +319,9 @@ struct SignInMethodsView: View {
 }
 
 struct BlockedAccountsView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   var body: some View {
     List {
       if model.workspace?.blockedAccounts.isEmpty != false { Text("No blocked travelers") }
@@ -283,7 +337,10 @@ struct BlockedAccountsView: View {
               Task {
                 await model.perform {
                   try await model.repository.setBlocked(
-                    accountId: accountId, userId: id, blocked: false)
+                    accountId: accountId,
+                    userId: id,
+                    blocked: false
+                  )
                 }
                 await model.sync()
               }
@@ -296,14 +353,29 @@ struct BlockedAccountsView: View {
 }
 
 struct DeleteAccountView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(WindowContext.self) private var window
-  @State private var presentation: AuthenticationPresentation?
-  @State private var performing = false
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(WindowContext.self)
+  private var window
+
+  @State
+  private var presentation: AuthenticationPresentation?
+
+  @State
+  private var performing = false
+
   private var busy: Bool { performing || presentation?.busy == true }
-  @State private var error: String?
-  @State private var confirming = false
-  @State private var prepared: PendingAccountDeletion?
+
+  @State
+  private var error: String?
+
+  @State
+  private var confirming = false
+
+  @State
+  private var prepared: PendingAccountDeletion?
+
   var body: some View {
     Form {
       Section {
@@ -322,13 +394,16 @@ struct DeleteAccountView: View {
         } else if let prepared, prepared.status == .preparing, prepared.expiresAt > Date() {
           Text(prepared.status.message)
           Button("Retry preparation") { Task { await retryPreparation() } }.disabled(
-            busy || model.offline)
+            busy || model.offline
+          )
           Button("Check preparation status") { Task { await checkPreparation() } }.disabled(
-            busy || model.offline)
+            busy || model.offline
+          )
         } else if let prepared, prepared.expiresAt > Date(), prepared.status == .prepared {
           Text("Your account is ready for deletion. It has not been deleted yet.")
           Button("Confirm account deletion", role: .destructive) { confirming = true }.disabled(
-            busy || model.offline)
+            busy || model.offline
+          )
         } else {
           if model.identities.contains(where: { $0.provider == "apple" }) {
             Text(
@@ -339,7 +414,8 @@ struct DeleteAccountView: View {
           }
           ForEach(providers, id: \.self) { provider in
             Button("Verify with \(provider.capitalized)") { authenticate(provider) }.disabled(
-              busy || model.offline)
+              busy || model.offline
+            )
           }
         }
         if busy { ProgressView("Verifying account deletion") }
@@ -348,7 +424,9 @@ struct DeleteAccountView: View {
       }
     }.navigationTitle("Delete account")
       .confirmationDialog(
-        "Permanently delete this account?", isPresented: $confirming, titleVisibility: .visible
+        "Permanently delete this account?",
+        isPresented: $confirming,
+        titleVisibility: .visible
       ) {
         Button("Delete my account", role: .destructive) {
           performing = true
@@ -366,6 +444,7 @@ struct DeleteAccountView: View {
         }
       }.interactiveDismissDisabled(busy)
   }
+
   private func retryPreparation() async {
     guard let accountId = model.activeAccountId, !busy else { return }
     performing = true
@@ -375,6 +454,7 @@ struct DeleteAccountView: View {
       await model.reloadDeletionRecovery()
     } catch { self.error = error.localizedDescription }
   }
+
   private func checkPreparation() async {
     guard let accountId = model.activeAccountId, !busy else { return }
     performing = true
@@ -382,17 +462,20 @@ struct DeleteAccountView: View {
     await model.refreshDeletion(accountId: accountId)
     prepared = try? await model.accountDeletion.recovery.read(accountId: accountId)
   }
+
   private var providers: [String] {
     let linked = model.identities.map(\.provider)
     return linked.contains("apple") ? ["apple"] : linked
   }
+
   private func authenticate(_ provider: String) {
     guard let account = model.activeAccountId else { return }
     let presentation =
       self.presentation
       ?? AuthenticationPresentation(
         authentication: model.authentication,
-        browser: BrowserAuthentication(anchor: { window.anchor() }))
+        browser: BrowserAuthentication(anchor: { window.anchor() })
+      )
     self.presentation = presentation
     error = nil
     let generation = model.workspace?.account.generation
@@ -401,16 +484,19 @@ struct DeleteAccountView: View {
         guard model.activeAccountId == account, model.workspace?.account.generation == generation
         else { throw AuthenticationError.canceled }
         prepared = try await model.accountDeletion.prepare(
-          accountId: account, proofToken: proof.proofToken)
+          accountId: account,
+          proofToken: proof.proofToken
+        )
         await model.reloadDeletionRecovery()
       }
     }
   }
-
 }
 
 struct DeletionRecoveryView: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   var body: some View {
     List {
       ForEach(model.pendingDeletions) { record in
@@ -438,6 +524,7 @@ struct DeletionRecoveryView: View {
     }.navigationTitle("Account deletion status")
   }
 }
+
 extension AccountDeletionStatus {
   var message: String {
     switch self {

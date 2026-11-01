@@ -3,21 +3,28 @@ import Observation
 import PinVoyagerData
 import PinVoyagerDomain
 
-@MainActor protocol BrowserAuthenticating {
+@MainActor
+protocol BrowserAuthenticating {
   func open(_ url: URL, ephemeral: Bool) async throws -> URL
 }
 
-@MainActor @Observable final class AuthenticationPresentation {
+@MainActor
+@Observable
+final class AuthenticationPresentation {
   private let authentication: NativeAuthentication
   private let browser: any BrowserAuthenticating
   private(set) var busy = false
   private(set) var error: String?
+
   init(authentication: NativeAuthentication, browser: any BrowserAuthenticating) {
     self.authentication = authentication
     self.browser = browser
   }
+
   func signIn(
-    provider: String, linkingAccountId: UUID? = nil, ephemeral: Bool,
+    provider: String,
+    linkingAccountId: UUID? = nil,
+    ephemeral: Bool,
     accept: @MainActor (SessionExchange) async throws -> Void
   ) async -> Bool {
     await perform(
@@ -27,10 +34,13 @@ import PinVoyagerDomain
       },
       finish: { callback, pending in
         try await accept(authentication.complete(callback, pending: pending))
-      })
+      }
+    )
   }
+
   func reauthenticate(
-    provider: String, accountId: UUID,
+    provider: String,
+    accountId: UUID,
     accept: @MainActor (DeletionProof) async throws -> Void
   ) async -> Bool {
     await perform(
@@ -40,10 +50,13 @@ import PinVoyagerDomain
       },
       finish: { callback, pending in
         try await accept(authentication.completeReauthentication(callback, pending: pending))
-      })
+      }
+    )
   }
+
   private func perform(
-    ephemeral: Bool, begin: () async throws -> PendingAuthentication,
+    ephemeral: Bool,
+    begin: () async throws -> PendingAuthentication,
     finish: (URL, PendingAuthentication) async throws -> Void
   ) async -> Bool {
     guard !busy else { return false }
@@ -66,8 +79,10 @@ import PinVoyagerDomain
   }
 }
 
-@MainActor protocol AuthenticationBrowserSession: AnyObject {
+@MainActor
+protocol AuthenticationBrowserSession: AnyObject {
   var prefersEphemeralWebBrowserSession: Bool { get set }
+
   func start() -> Bool
 }
 
@@ -76,7 +91,9 @@ extension ASWebAuthenticationSession: AuthenticationBrowserSession {}
 private final class BrowserCallback: @unchecked Sendable {
   private let lock = NSLock()
   private var continuation: CheckedContinuation<URL, any Error>?
+
   init(_ continuation: CheckedContinuation<URL, any Error>) { self.continuation = continuation }
+
   func finish(_ result: Result<URL, any Error>) {
     let continuation = lock.withLock {
       let saved = self.continuation
@@ -88,21 +105,27 @@ private final class BrowserCallback: @unchecked Sendable {
 }
 
 @MainActor
-final class BrowserAuthentication: NSObject, BrowserAuthenticating,
+final class BrowserAuthentication: NSObject,
+  BrowserAuthenticating,
   ASWebAuthenticationPresentationContextProviding
 {
   typealias Factory = (
     URL, any ASWebAuthenticationPresentationContextProviding,
     @escaping @Sendable (URL?, (any Error)?) -> Void
   ) -> any AuthenticationBrowserSession
+
   private let anchor: () -> ASPresentationAnchor
   private let factory: Factory
   private var session: (any AuthenticationBrowserSession)?
+
   init(
     anchor: @escaping () -> ASPresentationAnchor,
     factory: @escaping Factory = { url, provider, complete in
       let session = ASWebAuthenticationSession(
-        url: url, callbackURLScheme: "pinvoyager", completionHandler: complete)
+        url: url,
+        callbackURLScheme: "pinvoyager",
+        completionHandler: complete
+      )
       session.presentationContextProvider = provider
       return session
     }
@@ -110,6 +133,7 @@ final class BrowserAuthentication: NSObject, BrowserAuthenticating,
     self.anchor = anchor
     self.factory = factory
   }
+
   func open(_ url: URL, ephemeral: Bool) async throws -> URL {
     guard session == nil else { throw AuthenticationError.invalidAttempt }
     defer { session = nil }
@@ -127,6 +151,7 @@ final class BrowserAuthentication: NSObject, BrowserAuthenticating,
       if !session.start() { callback.finish(.failure(AuthenticationError.invalidAttempt)) }
     }
   }
+
   func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
     anchor()
   }

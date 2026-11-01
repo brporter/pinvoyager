@@ -6,8 +6,15 @@ import PinVoyagerDomain
 public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
   private let coordinator: NSPersistentStoreCoordinator
   private let context: NSManagedObjectContext
+
   private static let collections = [
-    "Account", "Voyage", "Photo", "Operation", "WorkingCopy", "Publication", "Transfer",
+    "Account",
+    "Voyage",
+    "Photo",
+    "Operation",
+    "WorkingCopy",
+    "Publication",
+    "Transfer",
     "Preferences",
   ]
 
@@ -19,7 +26,8 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
       entity.name = name
       entity.managedObjectClassName = "NSManagedObject"
       entity.properties = [
-        ("id", NSAttributeType.UUIDAttributeType), ("accountId", .UUIDAttributeType),
+        ("id", NSAttributeType.UUIDAttributeType),
+        ("accountId", .UUIDAttributeType),
         ("payload", .binaryDataAttributeType),
       ].map { name, type in
         let attribute = NSAttributeDescription()
@@ -48,8 +56,11 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
       #endif
     }
     try coordinator.addPersistentStore(
-      ofType: url == nil ? NSInMemoryStoreType : NSSQLiteStoreType, configurationName: nil, at: url,
-      options: options)
+      ofType: url == nil ? NSInMemoryStoreType : NSSQLiteStoreType,
+      configurationName: nil,
+      at: url,
+      options: options
+    )
     context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
     context.persistentStoreCoordinator = coordinator
     context.mergePolicy = NSMergePolicy(merge: .errorMergePolicyType)
@@ -76,7 +87,8 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
   }
 
   public func update(
-    accountId: UUID, _ change: @escaping @Sendable (inout Workspace) throws -> Void
+    accountId: UUID,
+    _ change: @escaping @Sendable (inout Workspace) throws -> Void
   ) async throws {
     try await context.perform {
       do {
@@ -116,7 +128,11 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
     return try context.fetch(request)
   }
 
-  private func decode<T: Decodable>(_ entity: String, accountId: UUID, as type: T.Type) throws
+  private func decode<T: Decodable>(
+    _ entity: String,
+    accountId: UUID,
+    as type: T.Type
+  ) throws
     -> [T]
   {
     try rows(entity, accountId: accountId).map { row in
@@ -143,9 +159,15 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
     workspace.photos = try decode("Photo", accountId: accountId, as: LocalPhoto.self)
     workspace.operations = try decode("Operation", accountId: accountId, as: OutboxOperation.self)
     workspace.workingCopies = try decode(
-      "WorkingCopy", accountId: accountId, as: VoyageWorkingCopy.self)
+      "WorkingCopy",
+      accountId: accountId,
+      as: VoyageWorkingCopy.self
+    )
     workspace.publicationIntents = try decode(
-      "Publication", accountId: accountId, as: PublicationIntent.self)
+      "Publication",
+      accountId: accountId,
+      as: PublicationIntent.self
+    )
     workspace.transfers = try decode("Transfer", accountId: accountId, as: BackgroundTransfer.self)
     if let preferences = try decode("Preferences", accountId: accountId, as: Preferences.self).first
     {
@@ -158,12 +180,17 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
     return workspace
   }
 
-  private func replace<T: Encodable & Identifiable>(_ entity: String, values: [T], accountId: UUID)
+  private func replace<T: Encodable & Identifiable>(
+    _ entity: String,
+    values: [T],
+    accountId: UUID
+  )
     throws where T.ID == UUID
   {
     let existing = try rows(entity, accountId: accountId)
     var byId = Dictionary(
-      uniqueKeysWithValues: existing.map { ($0.value(forKey: "id") as! UUID, $0) })
+      uniqueKeysWithValues: existing.map { ($0.value(forKey: "id") as! UUID, $0) }
+    )
     for value in values {
       let row =
         byId.removeValue(forKey: value.id)
@@ -196,10 +223,16 @@ public final class CoreDataWorkspaceStore: WorkspaceStore, @unchecked Sendable {
       "Preferences",
       values: [
         Row(
-          id: accountId, policy: workspace.policy, blockedAccounts: workspace.blockedAccounts,
-          scratch: workspace.scratch, conflictReviews: workspace.conflictReviews,
-          pendingFileRemovals: workspace.pendingFileRemovals)
-      ], accountId: accountId)
+          id: accountId,
+          policy: workspace.policy,
+          blockedAccounts: workspace.blockedAccounts,
+          scratch: workspace.scratch,
+          conflictReviews: workspace.conflictReviews,
+          pendingFileRemovals: workspace.pendingFileRemovals
+        )
+      ],
+      accountId: accountId
+    )
     do { try context.save() } catch {
       context.rollback()
       throw error

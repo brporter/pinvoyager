@@ -4,6 +4,7 @@ public enum OriginError: Error, Sendable { case invalid, untrusted }
 
 public struct TrustedOrigin: Equatable, Sendable {
   public let url: URL
+
   public init(_ url: URL, allowsLocalHTTP: Bool = false) throws {
     let local = ["localhost", "127.0.0.1", "::1"].contains(url.host ?? "")
     guard url.host != nil, url.user == nil, url.password == nil,
@@ -12,17 +13,20 @@ public struct TrustedOrigin: Equatable, Sendable {
     else { throw OriginError.invalid }
     self.url = url
   }
+
   public func contains(_ candidate: URL) -> Bool {
     func port(_ url: URL) -> Int { url.port ?? (url.scheme == "https" ? 443 : 80) }
     return candidate.scheme == url.scheme && candidate.host?.lowercased() == url.host?.lowercased()
       && port(candidate) == port(url) && candidate.user == nil && candidate.password == nil
   }
+
   public func url(path: [String], query: [URLQueryItem] = []) -> URL {
     var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
     components.path = "/" + path.joined(separator: "/")
     components.queryItems = query.isEmpty ? nil : query
     return components.url!
   }
+
   public func resolve(_ path: String) throws -> URL {
     guard let candidate = URL(string: path, relativeTo: url)?.absoluteURL, contains(candidate),
       !candidate.path.contains("..")

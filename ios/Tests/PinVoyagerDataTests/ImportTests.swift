@@ -7,6 +7,7 @@ import Testing
 private struct FixturePhotoSource: PhotoAcquiring {
   let filename: String
   let fails: Bool
+
   func acquire() async throws -> URL {
     if fails { throw FileVaultError.missingSource }
     let file = Fixtures.directory("images").appendingPathComponent("quadrants-rgb.heic")
@@ -17,7 +18,8 @@ private struct FixturePhotoSource: PhotoAcquiring {
   }
 }
 
-@Test func photoBatchKeepsEveryPlaceholderAndContinuesAfterProviderFailure() async throws {
+@Test
+func photoBatchKeepsEveryPlaceholderAndContinuesAfterProviderFailure() async throws {
   let directory = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: directory) }
   let store = try CoreDataWorkspaceStore(url: nil)
@@ -29,7 +31,11 @@ private struct FixturePhotoSource: PhotoAcquiring {
       FixturePhotoSource(filename: "First.heic", fails: false),
       FixturePhotoSource(filename: "From iCloud.heic", fails: true),
       FixturePhotoSource(filename: "Last.heic", fails: false),
-    ], accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 25_000_000)
+    ],
+    accountId: state.account.id,
+    voyageId: state.voyages[0].id,
+    maxBytes: 25_000_000
+  )
   #expect(result.saved.count == 2)
   #expect(result.failed.count == 1)
   let saved = try await store.read(accountId: state.account.id)
@@ -44,7 +50,8 @@ private struct FixturePhotoSource: PhotoAcquiring {
   }
 }
 
-@Test func stoppingAnImportKeepsTheCurrentSavedPhotoAndMarksRemainingSources() async throws {
+@Test
+func stoppingAnImportKeepsTheCurrentSavedPhotoAndMarksRemainingSources() async throws {
   let directory = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: directory) }
   let store = try CoreDataWorkspaceStore(url: nil)
@@ -53,7 +60,9 @@ private struct FixturePhotoSource: PhotoAcquiring {
   let importer = PhotoImportService(store: store, vault: try FileVault(root: directory))
   let result = try await importer.importBatch(
     (0..<3).map { FixturePhotoSource(filename: "Photo \($0)", fails: false) },
-    accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 25_000_000
+    accountId: state.account.id,
+    voyageId: state.voyages[0].id,
+    maxBytes: 25_000_000
   ) { event in
     if case .saved = event { await importer.cancel() }
   }
@@ -66,7 +75,8 @@ private struct FixturePhotoSource: PhotoAcquiring {
   )
 }
 
-@Test func importBatchRequiresPublicConsentAndEnforcesItsSelectionLimitBeforeAcquisition()
+@Test
+func importBatchRequiresPublicConsentAndEnforcesItsSelectionLimitBeforeAcquisition()
   async throws
 {
   let directory = try temporaryDirectory()
@@ -79,16 +89,28 @@ private struct FixturePhotoSource: PhotoAcquiring {
   let source = FixturePhotoSource(filename: "Public.heic", fails: false)
   await #expect(throws: ValidationError.self) {
     try await importer.importBatch(
-      [source], accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 25_000_000)
+      [source],
+      accountId: state.account.id,
+      voyageId: state.voyages[0].id,
+      maxBytes: 25_000_000
+    )
   }
   await #expect(throws: ValidationError.self) {
     try await importer.importBatch(
-      Array(repeating: source, count: 101), accountId: state.account.id,
-      voyageId: state.voyages[0].id, maxBytes: 25_000_000, publicConsent: true)
+      Array(repeating: source, count: 101),
+      accountId: state.account.id,
+      voyageId: state.voyages[0].id,
+      maxBytes: 25_000_000,
+      publicConsent: true
+    )
   }
   let result = try await importer.importBatch(
-    [source], accountId: state.account.id, voyageId: state.voyages[0].id, maxBytes: 25_000_000,
-    publicConsent: true)
+    [source],
+    accountId: state.account.id,
+    voyageId: state.voyages[0].id,
+    maxBytes: 25_000_000,
+    publicConsent: true
+  )
   #expect(result.saved.count == 1)
   let saved = try await store.read(accountId: state.account.id)
   if case .upload(_, let consent) = try #require(saved.operations.first).kind {
@@ -98,7 +120,8 @@ private struct FixturePhotoSource: PhotoAcquiring {
   }
 }
 
-@Test func explicitSourceReplacementUsesFreshKeysAndKeepsTheOriginalUntilTheCopyIsDurable()
+@Test
+func explicitSourceReplacementUsesFreshKeysAndKeepsTheOriginalUntilTheCopyIsDurable()
   async throws
 {
   let directory = try temporaryDirectory()
@@ -109,15 +132,22 @@ private struct FixturePhotoSource: PhotoAcquiring {
   let importer = PhotoImportService(store: store, vault: try FileVault(root: directory))
   await #expect(throws: FileVaultError.self) {
     try await importer.replace(
-      FixturePhotoSource(filename: "Unavailable", fails: true), accountId: state.account.id,
-      photoId: state.photos[0].id, maxBytes: 25_000_000)
+      FixturePhotoSource(filename: "Unavailable", fails: true),
+      accountId: state.account.id,
+      photoId: state.photos[0].id,
+      maxBytes: 25_000_000
+    )
   }
   #expect(
     try await store.read(accountId: state.account.id).photos.first { $0.id == state.photos[0].id }?
-      .deleted == false)
+      .deleted == false
+  )
   let replacement = try await importer.replace(
-    FixturePhotoSource(filename: "Replacement.heic", fails: false), accountId: state.account.id,
-    photoId: state.photos[0].id, maxBytes: 25_000_000)
+    FixturePhotoSource(filename: "Replacement.heic", fails: false),
+    accountId: state.account.id,
+    photoId: state.photos[0].id,
+    maxBytes: 25_000_000
+  )
   let saved = try await store.read(accountId: state.account.id)
   let newPhoto = try #require(saved.photos.first { $0.id == replacement })
   #expect(newPhoto.uploadKey != state.photos[0].uploadKey)
@@ -129,10 +159,12 @@ private struct FixturePhotoSource: PhotoAcquiring {
     saved.operations.contains {
       if case .removePhoto(let id, _) = $0.kind { return id == state.photos[0].id }
       return false
-    })
+    }
+  )
   #expect(
     saved.operations.contains {
       if case .order = $0.kind { return true }
       return false
-    })
+    }
+  )
 }

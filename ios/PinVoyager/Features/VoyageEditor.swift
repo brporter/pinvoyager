@@ -3,13 +3,26 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct VoyageEditor: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @Environment(\.dismiss) private var dismiss
-  @Environment(\.scenePhase) private var scenePhase
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @Environment(\.dismiss)
+  private var dismiss
+
+  @Environment(\.scenePhase)
+  private var scenePhase
+
   var voyage: LocalVoyage?
-  @State private var fields = VoyageFields()
-  @State private var session: VoyageEditSession?
+
+  @State
+  private var fields = VoyageFields()
+
+  @State
+  private var session: VoyageEditSession?
+
   private var publicationArmed: Bool {
     guard let state = model.workspace else { return false }
     return state.publicationIntents.contains {
@@ -17,13 +30,26 @@ struct VoyageEditor: View {
     }
   }
 
-  @State private var precision = false
-  @State private var fieldError: String?
-  @State private var saving = false
-  @State private var closeConfirmation = false
-  @State private var loaded = false
-  @State private var persistenceTask: Task<Void, Never>?
-  @State private var finished = false
+  @State
+  private var precision = false
+
+  @State
+  private var fieldError: String?
+
+  @State
+  private var saving = false
+
+  @State
+  private var closeConfirmation = false
+
+  @State
+  private var loaded = false
+
+  @State
+  private var persistenceTask: Task<Void, Never>?
+
+  @State
+  private var finished = false
 
   var body: some View {
     NavigationStack {
@@ -49,7 +75,8 @@ struct VoyageEditor: View {
           .frame(height: 180).accessibilityLabel("Description")
           if (fields.description?.unicodeScalars.count ?? 0) > 7_500 {
             Text("\(fields.description?.unicodeScalars.count ?? 0) / 8,000 characters").font(
-              .caption)
+              .caption
+            )
           }
         }
         Section {
@@ -79,7 +106,8 @@ struct VoyageEditor: View {
               : publicationArmed ? "Save working copy on this iPhone" : "Save changes"
           ) { save(workingCopyOnly: publicationArmed) }
           .disabled(saving).frame(maxWidth: .infinity, minHeight: 44).buttonStyle(
-            .borderedProminent)
+            .borderedProminent
+          )
           if voyage == nil {
             Text(
               "Your draft is saved on this iPhone before synchronization. Publication requires a separate review."
@@ -98,7 +126,8 @@ struct VoyageEditor: View {
       }
       .confirmationDialog(
         voyage == nil ? "Keep this draft?" : "Discard these edits?",
-        isPresented: $closeConfirmation, titleVisibility: .visible
+        isPresented: $closeConfirmation,
+        titleVisibility: .visible
       ) {
         if voyage == nil {
           Button("Keep draft") {
@@ -139,7 +168,10 @@ struct VoyageEditor: View {
     .onAppear {
       guard !loaded, let account = model.activeAccountId else { return }
       session = VoyageEditSession(
-        accountId: account, voyageId: voyage?.id, repository: model.repository)
+        accountId: account,
+        voyageId: voyage?.id,
+        repository: model.repository
+      )
       if let voyage {
         fields =
           model.workspace?.workingCopies.first(where: { $0.voyageId == voyage.id })?.fields
@@ -192,7 +224,9 @@ struct VoyageEditor: View {
     voyage.map { $0.fields != fields }
       ?? (!fields.title.isEmpty || !(fields.description ?? "").isEmpty)
   }
-  @discardableResult private func persist(_ value: VoyageFields) async -> Bool {
+
+  @discardableResult
+  private func persist(_ value: VoyageFields) async -> Bool {
     guard !finished, !Task.isCancelled, let session, model.activeAccountId == session.accountId
     else { return false }
     do {
@@ -204,6 +238,7 @@ struct VoyageEditor: View {
       return false
     }
   }
+
   private func save(workingCopyOnly: Bool, addPhotos: Bool = false) {
     guard let session, model.activeAccountId == session.accountId else { return }
     saving = true

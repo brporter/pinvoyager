@@ -1,12 +1,14 @@
 import PinVoyagerDomain
 import XCTest
 
-@MainActor final class NotificationFlowTests: XCTestCase {
+@MainActor
+final class NotificationFlowTests: XCTestCase {
   func testOptInAsksTheSystemAndConfirmedPublicationShowsAForegroundNotification() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Published notification check", description: "A reviewed voyage"))
+      fields: VoyageFields(title: "Published notification check", description: "A reviewed voyage")
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     var photo = LocalPhoto(voyageId: voyage.id, filename: "Reviewed photo")
@@ -21,7 +23,9 @@ import XCTest
     fixture.workspace.photos = [photo]
     fixture.workspace.publicationIntents = [intent]
     fixture.reply(
-      "/api/client-capabilities", body: try FixtureLaunch.fixture("native_capabilities"))
+      "/api/client-capabilities",
+      body: try FixtureLaunch.fixture("native_capabilities")
+    )
     let app = try fixture.launch()
     app.buttons["Account"].tap()
     app.buttons["Sync and storage"].tap()
@@ -36,6 +40,7 @@ import XCTest
     app.buttons["Sync now"].tap()
     XCTAssertTrue(
       springboard.staticTexts["Voyage published"].waitForExistence(timeout: 10),
-      springboard.debugDescription)
+      springboard.debugDescription
+    )
   }
 }

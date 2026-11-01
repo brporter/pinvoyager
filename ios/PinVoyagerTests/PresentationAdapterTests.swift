@@ -3,7 +3,8 @@ import XCTest
 
 @testable import PinVoyager
 
-@MainActor final class PresentationAdapterTests: XCTestCase {
+@MainActor
+final class PresentationAdapterTests: XCTestCase {
   func testAuthenticationAnchorTracksTheInvokingWindowAndReleasesItAfterRemoval() {
     let context = WindowContext()
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
@@ -51,7 +52,9 @@ import XCTest
     scroll.addGestureRecognizer(gesture)
     coordinator.reset(gesture)
     let reset = XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "zoomScale == 1"), object: scroll)
+      predicate: NSPredicate(format: "zoomScale == 1"),
+      object: scroll
+    )
     await fulfillment(of: [reset], timeout: 2)
     coordinator.scrollViewDidZoom(scroll)
     XCTAssertEqual(scroll.zoomScale, 1)

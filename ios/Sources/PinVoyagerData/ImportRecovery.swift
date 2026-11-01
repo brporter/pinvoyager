@@ -4,6 +4,7 @@ import PinVoyagerDomain
 public struct ImportRecovery: Sendable {
   private let store: any WorkspaceStore
   private let preparer: PhotoPreparer
+
   public init(store: any WorkspaceStore, vault: FileVault) {
     self.store = store
     self.preparer = PhotoPreparer(vault: vault)
@@ -20,15 +21,19 @@ public struct ImportRecovery: Sendable {
       do {
         let photo = try await preparer.recover(pending, accountId: accountId, maxBytes: maxBytes)
         try await repository.addPhoto(
-          accountId: accountId, photo: photo,
+          accountId: accountId,
+          photo: photo,
           publicConsent: pending.importPublicConsent == true,
-          expectedGeneration: state.account.generation)
+          expectedGeneration: state.account.generation
+        )
       } catch WorkspaceError.locked {
         return
       } catch {
         try await repository.markImportMissing(
-          accountId: accountId, photoId: pending.id,
-          message: "Choose this photo again. \(error.localizedDescription)")
+          accountId: accountId,
+          photoId: pending.id,
+          message: "Choose this photo again. \(error.localizedDescription)"
+        )
       }
     }
   }

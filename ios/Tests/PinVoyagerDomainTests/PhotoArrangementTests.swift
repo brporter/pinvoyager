@@ -3,7 +3,8 @@ import Testing
 
 @testable import PinVoyagerDomain
 
-@Test func photoArrangementKeepsMovesAndSelectionWhileAppendingArrivalsAndRemovingDepartures() {
+@Test
+func photoArrangementKeepsMovesAndSelectionWhileAppendingArrivalsAndRemovingDepartures() {
   let a = UUID()
   let b = UUID()
   let c = UUID()
@@ -28,7 +29,8 @@ import Testing
   #expect(arrangement.selected.isEmpty)
 }
 
-@Test func photoArrangementSupportsCompleteDragOrdersAndIgnoresInvalidPermutations() {
+@Test
+func photoArrangementSupportsCompleteDragOrdersAndIgnoresInvalidPermutations() {
   let ids = [UUID(), UUID(), UUID()]
   var arrangement = PhotoArrangement(ids: ids)
   arrangement.setOrder(Array(ids.reversed()))

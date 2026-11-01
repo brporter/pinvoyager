@@ -3,7 +3,8 @@ import Testing
 
 @testable import PinVoyagerDomain
 
-@Test func voyageValidationCountsUnicodeScalars() throws {
+@Test
+func voyageValidationCountsUnicodeScalars() throws {
   #expect(throws: ValidationError.self) {
     try VoyageFields(title: " ", description: "x").validated(isNew: true)
   }
@@ -12,11 +13,13 @@ import Testing
   }
   #expect(throws: ValidationError.self) {
     try VoyageFields(title: String(repeating: "e\u{301}", count: 101), description: "x").validated(
-      isNew: true)
+      isNew: true
+    )
   }
   #expect(throws: ValidationError.self) {
     try VoyageFields(title: "x", description: String(repeating: "x", count: 8_001)).validated(
-      isNew: false)
+      isNew: false
+    )
   }
   let fields = try VoyageFields(title: "  North  ", description: " trip ").validated(isNew: true)
   #expect(fields.title == "North")
@@ -25,14 +28,16 @@ import Testing
   #expect(try VoyageFields(title: "x", description: nil).validated(isNew: false).description == nil)
 }
 
-@Test func displayNamesMatchServerRules() throws {
+@Test
+func displayNamesMatchServerRules() throws {
   #expect(try DisplayName.normalize("  ALIce-9 ") == "alice-9")
   for value in ["ab", "1abc", "abc-", "ábc", "a_b", String(repeating: "a", count: 31)] {
     #expect(throws: ValidationError.self) { try DisplayName.normalize(value) }
   }
 }
 
-@Test func roundingMatchesRustAndFailsClosed() throws {
+@Test
+func roundingMatchesRustAndFailsClosed() throws {
   let coordinate = Coordinate(latitude: 43.07, longitude: 141.35)
   #expect(Granularity.exact.apply(coordinate) == coordinate)
   let coarse = Granularity.km10.apply(coordinate)
@@ -54,29 +59,39 @@ import Testing
   #expect(!unknown.canPublish)
 }
 
-@Test func linksAcceptOnlyTrustedStructuredDestinations() throws {
+@Test
+func linksAcceptOnlyTrustedStructuredDestinations() throws {
   let origin = try TrustedOrigin(URL(string: "https://pinvoyager.com")!)
   let id = UUID()
   #expect(
     AppRoute.parse(URL(string: "https://pinvoyager.com/voyages/\(id)")!, origin: origin)
-      == .voyage(id))
+      == .voyage(id)
+  )
   #expect(
     AppRoute.parse(URL(string: "https://pinvoyager.com/voyages/\(id)/edit")!, origin: origin)
-      == .editVoyage(id))
+      == .editVoyage(id)
+  )
   #expect(
     AppRoute.parse(URL(string: "https://pinvoyager.com/upload?voyage=\(id)")!, origin: origin)
-      == .addPhotos(id))
+      == .addPhotos(id)
+  )
   #expect(
     AppRoute.parse(URL(string: "https://pinvoyager.com/u/alice")!, origin: origin)
-      == .profile("alice"))
+      == .profile("alice")
+  )
   #expect(
-    AppRoute.parse(URL(string: "https://pinvoyager.com/settings")!, origin: origin) == .account)
+    AppRoute.parse(URL(string: "https://pinvoyager.com/settings")!, origin: origin) == .account
+  )
   #expect(
-    AppRoute.parse(URL(string: "https://pinvoyager.com/upload")!, origin: origin) == .createVoyage)
+    AppRoute.parse(URL(string: "https://pinvoyager.com/upload")!, origin: origin) == .createVoyage
+  )
   for url in [
-    "https://evil.test/voyages/\(id)", "http://pinvoyager.com/upload",
-    "https://user@pinvoyager.com/upload", "https://pinvoyager.com:444/upload",
-    "https://pinvoyager.com/voyages/no", "https://pinvoyager.com/upload?voyage=no",
+    "https://evil.test/voyages/\(id)",
+    "http://pinvoyager.com/upload",
+    "https://user@pinvoyager.com/upload",
+    "https://pinvoyager.com:444/upload",
+    "https://pinvoyager.com/voyages/no",
+    "https://pinvoyager.com/upload?voyage=no",
     "https://pinvoyager.com/u/../../auth",
     "https://pinvoyager.com/upload?voyage=\(id)&voyage=\(id)",
   ] {
@@ -89,14 +104,16 @@ import Testing
   #expect(origin.url(path: ["voyages", id.uuidString]).host == "pinvoyager.com")
 }
 
-@Test func threeWayMergeRequiresExplicitConflictingChoice() {
+@Test
+func threeWayMergeRequiresExplicitConflictingChoice() {
   #expect(FieldComparison(base: "a", local: "a", remote: "b").resolution == .remote)
   #expect(FieldComparison(base: "a", local: "b", remote: "a").resolution == .local)
   #expect(FieldComparison(base: "a", local: "b", remote: "b").resolution == .local)
   #expect(FieldComparison(base: "a", local: "b", remote: "c").resolution == .needsChoice)
 }
 
-@Test func policyWaitsWithoutConsumingAttempts() {
+@Test
+func policyWaitsWithoutConsumingAttempts() {
   var policy = SyncPolicy()
   #expect(policy.waitReason(network: .offline, authenticated: true) == .offline)
   #expect(policy.waitReason(network: .cellular(constrained: false), authenticated: true) == .wifi)
@@ -110,7 +127,8 @@ import Testing
   #expect(policy.waitReason(network: .wifi(constrained: false), authenticated: true) == .paused)
 }
 
-@Test func retryClassificationAndBackoff() {
+@Test
+func retryClassificationAndBackoff() {
   #expect(ResponseDisposition.classify(status: 401) == .signIn)
   #expect(ResponseDisposition.classify(status: 412) == .conflict)
   for status in [408, 429, 500, 503, 599] {
@@ -127,9 +145,11 @@ import Testing
   #expect(RetrySchedule.delay(attempt: 1, randomUnit: 0.5, retryAfter: 60) == 60)
 }
 
-@Test func shortestLongitudeArcAndDiscoveryZoom() {
+@Test
+func shortestLongitudeArcAndDiscoveryZoom() {
   let bounds = MapGeometry.bounds([
-    Coordinate(latitude: 10, longitude: 179), Coordinate(latitude: 12, longitude: -179),
+    Coordinate(latitude: 10, longitude: 179),
+    Coordinate(latitude: 12, longitude: -179),
   ])!
   #expect(abs(bounds.longitudeSpan - 2) < 1e-8)
   #expect(abs(abs(bounds.longitude) - 180) < 1e-8)
@@ -141,7 +161,8 @@ import Testing
   #expect(MapGeometry.discoveryZoom(width: 512, worldFraction: 1e-12) == 20)
 }
 
-@Test func voyageClustersWrapAndKeepInputOrder() {
+@Test
+func voyageClustersWrapAndKeepInputOrder() {
   let first = MapPhotoPin(id: UUID(), coordinate: Coordinate(latitude: 0, longitude: 179.99))
   let second = MapPhotoPin(id: UUID(), coordinate: Coordinate(latitude: 0, longitude: -179.99))
   let far = MapPhotoPin(id: UUID(), coordinate: Coordinate(latitude: 45, longitude: 0))
@@ -152,10 +173,13 @@ import Testing
   #expect(MapGeometry.cluster([first, second], zoom: 20).count == 2)
 }
 
-@Test func publicationFreezesReviewedSnapshotAndExpires() throws {
+@Test
+func publicationFreezesReviewedSnapshotAndExpires() throws {
   let account = UUID()
   var voyage = LocalVoyage(
-    ownerId: account, fields: VoyageFields(title: "Trip", description: "Winter"))
+    ownerId: account,
+    fields: VoyageFields(title: "Trip", description: "Winter")
+  )
   var photo = LocalPhoto(voyageId: voyage.id, filename: "one.jpg")
   #expect(throws: ValidationError.self) {
     try PublicationIntent.review(voyage: voyage, photos: [], at: .distantPast)
@@ -164,7 +188,11 @@ import Testing
     try PublicationIntent.review(voyage: voyage, photos: [photo], at: .distantPast)
   }
   photo.source = SourceFile(
-    relativePath: "one.jpg", contentHash: "abc", byteCount: 10, mediaType: "image/jpeg")
+    relativePath: "one.jpg",
+    contentHash: "abc",
+    byteCount: 10,
+    mediaType: "image/jpeg"
+  )
   photo.transfer = .saved
   let now = Date(timeIntervalSince1970: 10)
   let intent = try PublicationIntent.review(voyage: voyage, photos: [photo], at: now)
@@ -183,7 +211,8 @@ import Testing
   }
 }
 
-@Test func processingFailureCannotBecomeAnUploadRetry() {
+@Test
+func processingFailureCannotBecomeAnUploadRetry() {
   var photo = LocalPhoto(voyageId: UUID(), filename: "one.jpg")
   #expect(!photo.canRetryUpload)
   photo.transfer = .needsAttention
@@ -192,15 +221,23 @@ import Testing
   #expect(!photo.canRetryUpload)
 }
 
-@Test func unknownStatesStayPrivateAndErrorsRemainActionable() throws {
+@Test
+func unknownStatesStayPrivateAndErrorsRemainActionable() throws {
   #expect(
-    try JSONDecoder().decode(VariantState.self, from: Data("\"new-state\"".utf8)) == .unsupported)
+    try JSONDecoder().decode(VariantState.self, from: Data("\"new-state\"".utf8)) == .unsupported
+  )
   #expect(!Coordinate(latitude: .nan, longitude: 0).isValid)
   #expect(MapGeometry.bounds([Coordinate(latitude: 100, longitude: 0)]) == nil)
   #expect(MapGeometry.cluster([], zoom: .infinity).isEmpty)
   for error in [
-    WorkspaceError.missing, .locked, .wrongAccount, .missingVoyage, .invalidOrder,
-    .publicationArmed, .unsupportedProtocol, .malformedReceipt,
+    WorkspaceError.missing,
+    .locked,
+    .wrongAccount,
+    .missingVoyage,
+    .invalidOrder,
+    .publicationArmed,
+    .unsupportedProtocol,
+    .malformedReceipt,
   ] { #expect(error.errorDescription?.isEmpty == false) }
   let validation = ValidationError(field: "title", message: "Enter a name")
   #expect(validation.errorDescription == "Enter a name")
@@ -212,18 +249,25 @@ import Testing
   photo.transfer = .needsSource
   workspace.photos.append(photo)
   var operation = OutboxOperation(
-    accountId: profile.id, generation: 0, voyageId: photo.voyageId, kind: .deleteVoyage)
+    accountId: profile.id,
+    generation: 0,
+    voyageId: photo.voyageId,
+    kind: .deleteVoyage
+  )
   operation.state = .conflict
   workspace.operations.append(operation)
   #expect(workspace.attentionCount == 2)
   #expect(workspace.transfers.isEmpty)
   #expect(
     VoyageWorkingCopy(
-      voyage: LocalVoyage(ownerId: profile.id, fields: VoyageFields()), fields: VoyageFields()
-    ).id != profile.id)
+      voyage: LocalVoyage(ownerId: profile.id, fields: VoyageFields()),
+      fields: VoyageFields()
+    ).id != profile.id
+  )
 }
 
-@Test func attentionBadgesIncludeRetainedSourcesWithoutCountingTheirUploadTwice() {
+@Test
+func attentionBadgesIncludeRetainedSourcesWithoutCountingTheirUploadTwice() {
   let account = UUID()
   let voyage = UUID()
   var workspace = Workspace(account: LocalAccount(profile: UserProfile(id: account)))
@@ -232,8 +276,11 @@ import Testing
   workspace.photos = [photo]
   #expect(workspace.attentionCount == 1)
   var upload = OutboxOperation(
-    accountId: account, generation: 0, voyageId: voyage,
-    kind: .upload(photoId: photo.id, publicConsent: false))
+    accountId: account,
+    generation: 0,
+    voyageId: voyage,
+    kind: .upload(photoId: photo.id, publicConsent: false)
+  )
   upload.state = .attention
   workspace.operations = [upload]
   #expect(workspace.attentionCount == 1)

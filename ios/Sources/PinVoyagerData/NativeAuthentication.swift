@@ -5,6 +5,7 @@ import Security
 
 public enum AuthenticationError: Error, LocalizedError, Sendable {
   case invalidCallback, invalidAttempt, signInRequired, canceled
+
   public var errorDescription: String? {
     switch self {
     case .invalidCallback, .invalidAttempt:
@@ -36,24 +37,35 @@ public actor NativeAuthentication {
   private let client: APIClient
   private let credentials: any CredentialStore
   private var pendingIds: Set<UUID> = []
+
   public init(client: APIClient, credentials: any CredentialStore) {
     self.client = client
     self.credentials = credentials
   }
 
-  public func begin(provider: String, linkingAccountId: UUID? = nil) async throws
+  public func begin(
+    provider: String,
+    linkingAccountId: UUID? = nil
+  ) async throws
     -> PendingAuthentication
   {
     try await begin(provider: provider, linkingAccountId: linkingAccountId, deletionAccountId: nil)
   }
 
-  public func beginReauthentication(provider: String, accountId: UUID) async throws
+  public func beginReauthentication(
+    provider: String,
+    accountId: UUID
+  ) async throws
     -> PendingAuthentication
   {
     try await begin(provider: provider, linkingAccountId: nil, deletionAccountId: accountId)
   }
 
-  private func begin(provider: String, linkingAccountId: UUID?, deletionAccountId: UUID?)
+  private func begin(
+    provider: String,
+    linkingAccountId: UUID?,
+    deletionAccountId: UUID?
+  )
     async throws -> PendingAuthentication
   {
     guard ["apple", "google", "microsoft"].contains(provider) else {
@@ -81,8 +93,13 @@ public actor NativeAuthentication {
         Body(
           provider: provider,
           mode: deletionAccountId == nil ? (linkingAccountId == nil ? "sign_in" : "link") : nil,
-          purpose: deletionAccountId == nil ? nil : "account_deletion", state: state,
-          challenge: challenge)), accountId: linkingAccountId ?? deletionAccountId)
+          purpose: deletionAccountId == nil ? nil : "account_deletion",
+          state: state,
+          challenge: challenge
+        )
+      ),
+      accountId: linkingAccountId ?? deletionAccountId
+    )
     let path = reply.browserStartUrl.path.split(separator: "/")
     guard client.origin.contains(reply.browserStartUrl), path.count == 5,
       path[0] == "auth", path[1] == "native", path[2] == "attempts", path[4] == "start",
@@ -91,18 +108,28 @@ public actor NativeAuthentication {
     else { throw AuthenticationError.invalidAttempt }
     pendingIds.insert(reply.attemptId)
     return PendingAuthentication(
-      id: reply.attemptId, state: state, verifier: verifier, browserStartUrl: reply.browserStartUrl,
-      linkingAccountId: linkingAccountId, deletionAccountId: deletionAccountId)
+      id: reply.attemptId,
+      state: state,
+      verifier: verifier,
+      browserStartUrl: reply.browserStartUrl,
+      linkingAccountId: linkingAccountId,
+      deletionAccountId: deletionAccountId
+    )
   }
 
-  public func complete(_ callback: URL, pending: PendingAuthentication) async throws
+  public func complete(
+    _ callback: URL,
+    pending: PendingAuthentication
+  ) async throws
     -> SessionExchange
   {
     guard pending.deletionAccountId == nil else { throw AuthenticationError.invalidAttempt }
     let body = try exchangeBody(callback, pending: pending)
     let reply: SessionExchange = try await client.send(
-      method: "POST", path: "/auth/native/exchange",
-      body: APIJSON.encode(body))
+      method: "POST",
+      path: "/auth/native/exchange",
+      body: APIJSON.encode(body)
+    )
     guard !reply.sessionToken.isEmpty,
       pending.linkingAccountId == nil || pending.linkingAccountId == reply.user.id
     else { throw WorkspaceError.wrongAccount }
@@ -113,7 +140,10 @@ public actor NativeAuthentication {
     return reply
   }
 
-  public func completeReauthentication(_ callback: URL, pending: PendingAuthentication) async throws
+  public func completeReauthentication(
+    _ callback: URL,
+    pending: PendingAuthentication
+  ) async throws
     -> DeletionProof
   {
     guard let accountId = pending.deletionAccountId else {
@@ -121,17 +151,22 @@ public actor NativeAuthentication {
     }
     let body = try exchangeBody(callback, pending: pending)
     let proof: DeletionProof = try await client.send(
-      method: "POST", path: "/auth/native/exchange", body: APIJSON.encode(body))
+      method: "POST",
+      path: "/auth/native/exchange",
+      body: APIJSON.encode(body)
+    )
     guard proof.accountId == accountId, proof.purpose == "account_deletion",
       !proof.proofToken.isEmpty
     else { throw WorkspaceError.wrongAccount }
     return proof
   }
+
   private struct ExchangeBody: Encodable {
     let attemptId: UUID
     let code: String
     let verifier: String
   }
+
   private func exchangeBody(_ callback: URL, pending: PendingAuthentication) throws -> ExchangeBody
   {
     guard pendingIds.contains(pending.id), callback.scheme == "pinvoyager", callback.host == "auth",
@@ -158,9 +193,11 @@ public actor NativeAuthentication {
 
   static func base64URL(_ bytes: Data) -> String {
     bytes.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(
-      of: "/", with: "_"
+      of: "/",
+      with: "_"
     ).replacingOccurrences(of: "=", with: "")
   }
+
   static func randomToken() throws -> String {
     var bytes = [UInt8](repeating: 0, count: 32)
     let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)

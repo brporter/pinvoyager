@@ -3,15 +3,21 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct PrecisionPickerView: View {
-  @Environment(\.dismiss) private var dismiss
-  @State private var choice: Granularity
+  @Environment(\.dismiss)
+  private var dismiss
+
+  @State
+  private var choice: Granularity
+
   let coordinate: Coordinate?
   let confirm: (Granularity) -> Void
+
   init(initial: Granularity, coordinate: Coordinate?, confirm: @escaping (Granularity) -> Void) {
     _choice = State(initialValue: initial)
     self.coordinate = coordinate
     self.confirm = confirm
   }
+
   var body: some View {
     NavigationStack {
       List {
@@ -26,7 +32,8 @@ struct PrecisionPickerView: View {
                 if value == choice { Image(systemName: "checkmark").accessibilityLabel("Selected") }
               }
             }.accessibilityLabel(value.label).accessibilityAddTraits(
-              value == choice ? .isSelected : [])
+              value == choice ? .isSelected : []
+            )
           }
         }
         Section("Public location example") {
@@ -55,12 +62,16 @@ struct PrecisionPickerView: View {
 }
 
 struct PrecisionPreview: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   let granularity: Granularity
   var coordinate: Coordinate?
+
   private var example: Coordinate {
     granularity.apply(coordinate ?? Coordinate(latitude: 37.7749, longitude: -122.4194))
   }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text(coordinate == nil ? "Example location" : "Example using a saved photo").font(.caption)
@@ -78,12 +89,16 @@ struct PrecisionPreview: View {
               center: example.mapCoordinate,
               span: MKCoordinateSpan(
                 latitudeDelta: latitudeSpan,
-                longitudeDelta: latitudeSpan / max(0.087, cos(example.latitude * .pi / 180))))),
+                longitudeDelta: latitudeSpan / max(0.087, cos(example.latitude * .pi / 180))
+              )
+            )
+          ),
           interactionModes: []
         ) {
           if let halfCell = granularity.halfCellM {
             MapCircle(center: example.mapCoordinate, radius: sqrt(2) * halfCell).foregroundStyle(
-              Design.pin.opacity(0.25))
+              Design.pin.opacity(0.25)
+            )
           } else {
             Marker("Example exact location", coordinate: example.mapCoordinate).tint(Design.pin)
           }

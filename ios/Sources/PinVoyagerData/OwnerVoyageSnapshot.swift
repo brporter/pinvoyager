@@ -19,7 +19,8 @@ extension APIClient: OwnerSnapshotLoading {
       let page: OwnerPhotoPage = try await get(
         path: "/api/voyages/\(voyageId)/photos",
         query: cursor.map { [URLQueryItem(name: "before", value: $0)] } ?? [],
-        accountId: accountId)
+        accountId: accountId
+      )
       photos.append(contentsOf: page.photos)
       cursor = page.nextBefore
       if let cursor, !visited.insert(cursor).inserted { throw URLError(.badServerResponse) }
@@ -41,7 +42,8 @@ extension APIClient: OwnerSnapshotLoading {
       throw ValidationError(
         field: "conflict",
         message:
-          "The website changed during review. Reload its latest version before resolving changes.")
+          "The website changed during review. Reload its latest version before resolving changes."
+      )
     }
     return OwnerVoyageSnapshot(voyage: after, photos: photos)
   }

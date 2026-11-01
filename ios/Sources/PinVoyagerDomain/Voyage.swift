@@ -3,7 +3,9 @@ import Foundation
 public struct ValidationError: Error, Equatable, LocalizedError, Sendable {
   public let field: String
   public let message: String
+
   public var errorDescription: String? { message }
+
   public init(field: String, message: String) {
     self.field = field
     self.message = message
@@ -30,11 +32,15 @@ public struct VoyageFields: Codable, Equatable, Sendable {
     }
     guard fields.title.unicodeScalars.count <= 200 else {
       throw ValidationError(
-        field: "title", message: "Use at most 200 characters for the voyage name.")
+        field: "title",
+        message: "Use at most 200 characters for the voyage name."
+      )
     }
     guard (fields.description?.unicodeScalars.count ?? 0) <= 8_000 else {
       throw ValidationError(
-        field: "description", message: "Use at most 8,000 characters for the description.")
+        field: "description",
+        message: "Use at most 8,000 characters for the description."
+      )
     }
     if isNew && (fields.description ?? "").isEmpty {
       throw ValidationError(field: "description", message: "Enter a description.")
@@ -61,6 +67,7 @@ public enum DisplayName {
 public struct VoyageDeletionUndo: Codable, Equatable, Sendable {
   public let photoIds: Set<UUID>
   public let operationStates: [UUID: OperationState]
+
   public init(photoIds: Set<UUID>, operationStates: [UUID: OperationState]) {
     self.photoIds = photoIds
     self.operationStates = operationStates
@@ -91,10 +98,12 @@ public struct LocalVoyage: Codable, Equatable, Identifiable, Sendable {
 
 public struct VoyageWorkingCopy: Codable, Equatable, Identifiable, Sendable {
   public var id: UUID { voyageId }
+
   public let voyageId: UUID
   public let base: VoyageFields
   public let baseRevision: String?
   public var fields: VoyageFields
+
   public init(voyage: LocalVoyage, fields: VoyageFields) {
     voyageId = voyage.id
     base = voyage.fields
@@ -109,9 +118,11 @@ public struct FieldComparison<Value: Equatable & Sendable>: Sendable {
   public let base: Value
   public let local: Value
   public let remote: Value
+
   public var resolution: FieldResolution {
     local == remote || remote == base ? .local : local == base ? .remote : .needsChoice
   }
+
   public init(base: Value, local: Value, remote: Value) {
     self.base = base
     self.local = local

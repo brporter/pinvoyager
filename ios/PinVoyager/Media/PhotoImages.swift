@@ -9,12 +9,21 @@ private struct RemoteImageRequest: Hashable {
 }
 
 struct RemoteImage: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   let path: String?
   var accountId: UUID?
-  @State private var image: UIImage?
-  @State private var failed = false
-  @State private var loadedAccess: PublicAccess?
+
+  @State
+  private var image: UIImage?
+
+  @State
+  private var failed = false
+
+  @State
+  private var loadedAccess: PublicAccess?
+
   var body: some View {
     Group {
       if let image, loadedAccess == model.publicAccess, !model.offline {
@@ -41,13 +50,20 @@ struct RemoteImage: View {
 }
 
 struct LocalPhotoImage: View {
-  @Environment(AppModel.self) private var model
+  @Environment(AppModel.self)
+  private var model
+
   let photo: LocalPhoto
   var fullSize = false
   var selected = true
   var onZoomChanged: ((Bool) -> Void)?
-  @State private var image: UIImage?
-  @State private var loadedAccount: UUID?
+
+  @State
+  private var image: UIImage?
+
+  @State
+  private var loadedAccount: UUID?
+
   var body: some View {
     Group {
       if let image, model.workspace != nil, loadedAccount == model.activeAccountId {
@@ -96,6 +112,7 @@ struct ZoomablePhoto: UIViewRepresentable {
   var resetZoom = false
   var onZoomChanged: ((Bool) -> Void)?
   var onZoom: (() -> Void)?
+
   func makeUIView(context: Context) -> UIScrollView {
     let scroll = PhotoScrollView()
     scroll.minimumZoomScale = 1
@@ -109,24 +126,30 @@ struct ZoomablePhoto: UIViewRepresentable {
     context.coordinator.onZoomChanged = onZoomChanged
     context.coordinator.onZoom = onZoom
     let tap = UITapGestureRecognizer(
-      target: context.coordinator, action: #selector(Coordinator.reset(_:)))
+      target: context.coordinator,
+      action: #selector(Coordinator.reset(_:))
+    )
     tap.numberOfTapsRequired = 2
     scroll.addGestureRecognizer(tap)
     return scroll
   }
+
   func updateUIView(_ scroll: UIScrollView, context: Context) {
     context.coordinator.imageView?.image = image
     context.coordinator.onZoomChanged = onZoomChanged
     context.coordinator.onZoom = onZoom
     if resetZoom && scroll.zoomScale != 1 { scroll.setZoomScale(1, animated: false) }
   }
+
   func makeCoordinator() -> Coordinator { Coordinator() }
+
   final class Coordinator: NSObject, UIScrollViewDelegate {
     weak var imageView: UIImageView?
     var onZoom: (() -> Void)?
     var onZoomChanged: ((Bool) -> Void)?
     private var zoomed = false
     private var requestedFull = false
+
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
       let active = scrollView.zoomScale > 1.01
       if active != zoomed {
@@ -137,24 +160,32 @@ struct ZoomablePhoto: UIViewRepresentable {
       requestedFull = true
       onZoom?()
     }
+
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
-    @objc func reset(_ gesture: UITapGestureRecognizer) {
+
+    @objc
+    func reset(_ gesture: UITapGestureRecognizer) {
       (gesture.view as? UIScrollView)?.setZoomScale(
-        1, animated: !UIAccessibility.isReduceMotionEnabled)
+        1,
+        animated: !UIAccessibility.isReduceMotionEnabled
+      )
     }
   }
 }
 
 private final class PhotoScrollView: UIScrollView {
   let photo = UIImageView()
+
   override init(frame: CGRect) {
     super.init(frame: frame)
     addSubview(photo)
   }
+
   required init?(coder: NSCoder) {
     super.init(coder: coder)
     addSubview(photo)
   }
+
   override func layoutSubviews() {
     super.layoutSubviews()
     if zoomScale == 1 {

@@ -11,18 +11,28 @@ private actor NotificationCenterStub: PublicationNotificationCenter {
   var delivered: [String] = []
   var requests: [PublicationNotice] = []
   var removed: [String] = []
+
   func requestPermission() -> Bool { permission }
+
   func pendingIds() -> [String] { pending }
+
   func deliveredIds() -> [String] { delivered }
+
   func status() -> UNAuthorizationStatus { authorization }
+
   func add(_ request: PublicationNotice) { requests.append(request) }
+
   func remove(_ id: String) {
     removed.append(id)
     pending.removeAll { $0 == id }
     delivered.removeAll { $0 == id }
   }
+
   func configure(
-    permission: Bool, authorization: UNAuthorizationStatus, pending: [String], delivered: [String]
+    permission: Bool,
+    authorization: UNAuthorizationStatus,
+    pending: [String],
+    delivered: [String]
   ) {
     self.permission = permission
     self.authorization = authorization
@@ -31,7 +41,8 @@ private actor NotificationCenterStub: PublicationNotificationCenter {
   }
 }
 
-@MainActor final class PublicationNotificationAdapterTests: XCTestCase {
+@MainActor
+final class PublicationNotificationAdapterTests: XCTestCase {
   func testSystemAdapterChecksPendingAndDeliveredIdentifiersAndUsesReviewedPublicTitles()
     async throws
   {
@@ -40,7 +51,10 @@ private actor NotificationCenterStub: PublicationNotificationCenter {
     let permission = try await notifications.requestPermission()
     XCTAssertTrue(permission)
     await center.configure(
-      permission: false, authorization: .provisional, pending: ["pending"], delivered: ["delivered"]
+      permission: false,
+      authorization: .provisional,
+      pending: ["pending"],
+      delivered: ["delivered"]
     )
     let pending = await notifications.contains(id: "pending")
     let delivered = await notifications.contains(id: "delivered")

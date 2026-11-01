@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "lineLength": 100,
+  "indentation": { "spaces": 2 },
+  "maximumBlankLines": 1,
+  "respectsExistingLineBreaks": true,
+  "lineBreakBeforeEachArgument": true,
+  "lineBreakBeforeEachGenericRequirement": true,
+  "lineBreakBetweenDeclarationAttributes": true,
+  "prioritizeKeepingFunctionOutputTogether": true,
+  "indentSwitchCaseLabels": false,
+  "spacesAroundRangeFormationOperators": false,
+  "spacesBeforeEndOfLineComments": 2,
+  "multiElementCollectionTrailingCommas": true,
+  "reflowMultilineStringLiterals": "never",
+  "orderedImports": {
+    "includeConditionalImports": true,
+    "shouldGroupImports": true
+  },
+  "rules": {
+    "NoEmptyLinesOpeningClosingBraces": true,
+    "OneCasePerLine": true,
+    "OrderedImports": true
+  }
+}

@@ -10,6 +10,7 @@ public struct OfflineManifest: Decodable, Equatable, Sendable {
       public let byteCount: Int64
       public let sha256: String
     }
+
     public let id: UUID
     public let position: Int
     public let width: Int
@@ -19,6 +20,7 @@ public struct OfflineManifest: Decodable, Equatable, Sendable {
     public let longitude: Double?
     public let variants: [Variant]
   }
+
   public let voyageId: UUID
   public let ownerId: UUID
   public let revision: String
@@ -35,11 +37,13 @@ public actor OwnerDownloads {
   private let client: APIClient
   private let store: any WorkspaceStore
   private let vault: FileVault
+
   public init(client: APIClient, store: any WorkspaceStore, vault: FileVault) {
     self.client = client
     self.store = store
     self.vault = vault
   }
+
   public func downloadFull(accountId: UUID, photoId: UUID) async throws {
     let state = try await store.read(accountId: accountId)
     guard let photo = state.photos.first(where: { $0.id == photoId && !$0.deleted }),
@@ -47,9 +51,11 @@ public actor OwnerDownloads {
     else { throw FileVaultError.missingSource }
     try await download(accountId: accountId, voyageId: photo.voyageId, fullPhotoId: remoteId)
   }
+
   public func download(accountId: UUID, voyageId: UUID) async throws {
     try await download(accountId: accountId, voyageId: voyageId, fullPhotoId: nil)
   }
+
   private func download(accountId: UUID, voyageId: UUID, fullPhotoId: UUID?) async throws {
     let initial = try await store.read(accountId: accountId)
     guard initial.account.access == .unlocked else { throw WorkspaceError.locked }
@@ -63,7 +69,8 @@ public actor OwnerDownloads {
     else {
       throw ValidationError(
         field: "download",
-        message: "Synchronize this voyage before downloading its website version.")
+        message: "Synchronize this voyage before downloading its website version."
+      )
     }
     let path = "/api/voyages/\(remoteId)/offline-manifest"
     let manifest: OfflineManifest = try await client.get(path: path, accountId: accountId)
@@ -106,7 +113,10 @@ public actor OwnerDownloads {
         size += variant.byteCount
       }
       copies[photo.id] = OfflinePhotoCopy(
-        revision: manifest.revision, variants: files, byteCount: size)
+        revision: manifest.revision,
+        variants: files,
+        byteCount: size
+      )
     }
     let current: OfflineManifest = try await client.get(path: path, accountId: accountId)
     guard current == manifest else { throw WorkspaceError.malformedReceipt }
@@ -120,7 +130,10 @@ public actor OwnerDownloads {
         })
       else { throw WorkspaceError.locked }
       state.voyages[index].fields = VoyageFields(
-        title: manifest.title, description: manifest.description, granularity: manifest.granularity)
+        title: manifest.title,
+        description: manifest.description,
+        granularity: manifest.granularity
+      )
       state.voyages[index].serverFields = state.voyages[index].fields
       state.voyages[index].revision = manifest.revision
       state.voyages[index].confirmedPublished = manifest.published
@@ -150,11 +163,18 @@ public actor OwnerDownloads {
       }
     }
     try await purgeMissing(
-      accountId: accountId, voyageId: voyageId, keeping: Set(manifest.photos.map(\.id)),
-      revision: manifest.revision)
+      accountId: accountId,
+      voyageId: voyageId,
+      keeping: Set(manifest.photos.map(\.id)),
+      revision: manifest.revision
+    )
   }
+
   public func purgeMissing(
-    accountId: UUID, voyageId: UUID, keeping remoteIds: Set<UUID>, revision: String
+    accountId: UUID,
+    voyageId: UUID,
+    keeping remoteIds: Set<UUID>,
+    revision: String
   ) async throws {
     let initial = try await store.read(accountId: accountId)
     guard initial.account.access == .unlocked,
@@ -203,6 +223,7 @@ public actor OwnerDownloads {
     }
     for path in paths { try await vault.remove(path, accountId: accountId) }
   }
+
   private static func matches(_ bytes: Data, _ variant: OfflineManifest.Photo.Variant) -> Bool {
     Int64(bytes.count) == variant.byteCount
       && SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() == variant.sha256

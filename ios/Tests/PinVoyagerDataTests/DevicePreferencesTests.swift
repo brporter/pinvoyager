@@ -4,7 +4,8 @@ import Testing
 
 @testable import PinVoyagerData
 
-@Test func signedOutDevicePreferencesSurviveRestartWithoutSharingAnotherNamespace() async throws {
+@Test
+func signedOutDevicePreferencesSurviveRestartWithoutSharingAnotherNamespace() async throws {
   let suite = "pinvoyager.preferences.test.\(UUID())"
   let other = "pinvoyager.preferences.test.\(UUID())"
   defer {
@@ -23,7 +24,8 @@ import Testing
   #expect(try await UserDefaultsDevicePreferences(suiteName: other).load() == SyncPolicy())
 }
 
-@Test func damagedDevicePreferencesRemainRecoverableAndDoNotInventMorePermissiveDefaults()
+@Test
+func damagedDevicePreferencesRemainRecoverableAndDoNotInventMorePermissiveDefaults()
   async throws
 {
   let suite = "pinvoyager.preferences.test.\(UUID())"
@@ -38,21 +40,37 @@ import Testing
   #expect(try await UserDefaultsDevicePreferences(suiteName: suite).load().wifiOnly)
 }
 
-@Test func concurrentAccountPreferencesNeverRestoreAnOlderToggleSnapshot() async throws {
+@Test
+func concurrentAccountPreferencesNeverRestoreAnOlderToggleSnapshot() async throws {
   let state = unlockedWorkspace()
   let store = try CoreDataWorkspaceStore(url: nil)
   try await store.insert(state)
   let repository = LocalRepository(store: store)
   async let wifi: Void = repository.setPreference(
-    accountId: state.account.id, preference: .wifiOnly, value: false)
+    accountId: state.account.id,
+    preference: .wifiOnly,
+    value: false
+  )
   async let constrained: Void = repository.setPreference(
-    accountId: state.account.id, preference: .allowsConstrained, value: true)
+    accountId: state.account.id,
+    preference: .allowsConstrained,
+    value: true
+  )
   async let background: Void = repository.setPreference(
-    accountId: state.account.id, preference: .backgroundPreparation, value: false)
+    accountId: state.account.id,
+    preference: .backgroundPreparation,
+    value: false
+  )
   async let paused: Void = repository.setPreference(
-    accountId: state.account.id, preference: .paused, value: true)
+    accountId: state.account.id,
+    preference: .paused,
+    value: true
+  )
   async let originals: Void = repository.setPreference(
-    accountId: state.account.id, preference: .keepOriginals, value: false)
+    accountId: state.account.id,
+    preference: .keepOriginals,
+    value: false
+  )
   _ = try await (wifi, constrained, background, paused, originals)
   let saved = try await store.read(accountId: state.account.id)
   #expect(!saved.policy.wifiOnly)

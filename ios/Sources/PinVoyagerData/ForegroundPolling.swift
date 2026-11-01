@@ -2,7 +2,8 @@ import Foundation
 
 /// View tasks own this loop; cancellation stops waits and prevents another refresh.
 public enum ForegroundPolling {
-  @MainActor public static func run(
+  @MainActor
+  public static func run(
     refresh: @MainActor () async -> Bool,
     sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
   ) async throws {
@@ -10,7 +11,8 @@ public enum ForegroundPolling {
   }
 
   /// Return nil when work is finished. A meaningful status change resets the delay.
-  @MainActor public static func observe<Snapshot: Equatable>(
+  @MainActor
+  public static func observe<Snapshot: Equatable>(
     refresh: @MainActor () async -> Snapshot?,
     sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
   ) async throws {

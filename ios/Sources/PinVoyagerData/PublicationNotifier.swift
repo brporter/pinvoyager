@@ -3,8 +3,11 @@ import PinVoyagerDomain
 
 public protocol PublicationNotifications: Sendable {
   func requestPermission() async throws -> Bool
+
   func contains(id: String) async throws -> Bool
+
   func send(id: String, title: String) async throws
+
   func remove(id: String) async
 }
 
@@ -13,6 +16,7 @@ public actor PublicationNotifier {
   private let store: any WorkspaceStore
   private let notifications: any PublicationNotifications
   private var notifying: Set<UUID> = []
+
   public init(store: any WorkspaceStore, notifications: any PublicationNotifications) {
     self.store = store
     self.notifications = notifications

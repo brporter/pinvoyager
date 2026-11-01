@@ -3,13 +3,18 @@ import PinVoyagerDomain
 import UIKit
 import XCTest
 
-@MainActor final class LocalVoyageFlowTests: XCTestCase {
+@MainActor
+final class LocalVoyageFlowTests: XCTestCase {
   func testOwnerDownloadsGalleryRemovalAndUnpublicationUseConfirmedStates() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
       fields: VoyageFields(
-        title: "Owned public voyage", description: "A saved website copy", granularity: .km1))
+        title: "Owned public voyage",
+        description: "A saved website copy",
+        granularity: .km1
+      )
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     voyage.serverFields = voyage.fields
@@ -50,7 +55,8 @@ import XCTest
     XCTAssertTrue(
       app.staticTexts.matching(
         NSPredicate(format: "label BEGINSWITH %@", "Private recorded location:")
-      ).firstMatch.exists)
+      ).firstMatch.exists
+    )
     app.buttons["Close"].tap()
     let remove = app.buttons["Remove downloaded copy"]
     app.reveal(remove)
@@ -91,8 +97,11 @@ extension LocalVoyageFlowTests {
     intent.status = .processing
     fixture.workspace.publicationIntents = [intent]
     var operation = OutboxOperation(
-      accountId: fixture.workspace.account.id, generation: 0, voyageId: voyage.id,
-      kind: .publish(intentId: intent.id))
+      accountId: fixture.workspace.account.id,
+      generation: 0,
+      voyageId: voyage.id,
+      kind: .publish(intentId: intent.id)
+    )
     operation.state = .applied
     fixture.workspace.operations = [operation]
     let app = try fixture.launch()
@@ -101,7 +110,8 @@ extension LocalVoyageFlowTests {
     XCTAssertTrue(
       app.staticTexts[
         "Publication scheduled. The reviewed version may publish while this device is offline."
-      ].waitForExistence(timeout: 5))
+      ].waitForExistence(timeout: 5)
+    )
     XCTAssertTrue(app.buttons["Edit details"].isEnabled)
     let add = app.buttons["Add photos"]
     app.reveal(add)
@@ -116,7 +126,8 @@ extension LocalVoyageFlowTests {
     app.buttons["Cancel publication"].tap()
     XCTAssertTrue(
       app.staticTexts["Cancellation is waiting for a connection. This voyage may still publish."]
-        .waitForExistence(timeout: 5))
+        .waitForExistence(timeout: 5)
+    )
     XCTAssertTrue(app.staticTexts["Processing"].exists)
   }
 
@@ -124,7 +135,8 @@ extension LocalVoyageFlowTests {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Public photos need consent", description: "A public voyage"))
+      fields: VoyageFields(title: "Public photos need consent", description: "A public voyage")
+    )
     voyage.serverId = UUID()
     voyage.revision = "1"
     voyage.confirmedPublished = true
@@ -151,7 +163,8 @@ extension LocalVoyageFlowTests {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
-      fields: VoyageFields(title: "Owner gallery details", description: "Two website photos"))
+      fields: VoyageFields(title: "Owner gallery details", description: "Two website photos")
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     voyage.confirmedPublished = true
@@ -199,9 +212,13 @@ extension LocalVoyageFlowTests {
     XCTAssertTrue(
       app.descendants(matching: .any).matching(
         NSPredicate(
-          format: "label CONTAINS %@ OR value CONTAINS %@", "2026:10:01 12:30:00",
-          "2026:10:01 12:30:00")
-      ).firstMatch.exists, app.debugDescription)
+          format: "label CONTAINS %@ OR value CONTAINS %@",
+          "2026:10:01 12:30:00",
+          "2026:10:01 12:30:00"
+        )
+      ).firstMatch.exists,
+      app.debugDescription
+    )
     app.buttons["Done"].tap()
     app.buttons["Thumbnail 2"].tap()
     XCTAssertTrue(app.navigationBars["2 of 2"].waitForExistence(timeout: 5))
@@ -230,7 +247,10 @@ extension LocalVoyageFlowTests {
     var voyage = LocalVoyage(
       ownerId: fixture.workspace.account.id,
       fields: VoyageFields(
-        title: "Undo remote deletion", description: "Website deletion has not been submitted"))
+        title: "Undo remote deletion",
+        description: "Website deletion has not been submitted"
+      )
+    )
     voyage.serverId = UUID()
     voyage.revision = "7"
     fixture.workspace.voyages = [voyage]

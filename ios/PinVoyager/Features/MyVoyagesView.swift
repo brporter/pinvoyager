@@ -3,11 +3,21 @@ import PinVoyagerDomain
 import SwiftUI
 
 struct MyVoyagesView: View {
-  @Environment(AppModel.self) private var model
-  @Environment(SceneRouter.self) private var router
-  @State private var search = ""
-  @State private var filter = "All"
-  @State private var deleting: LocalVoyage?
+  @Environment(AppModel.self)
+  private var model
+
+  @Environment(SceneRouter.self)
+  private var router
+
+  @State
+  private var search = ""
+
+  @State
+  private var filter = "All"
+
+  @State
+  private var deleting: LocalVoyage?
+
   var body: some View {
     Group {
       if model.workspace == nil {
@@ -30,7 +40,8 @@ struct MyVoyagesView: View {
             ContentUnavailableView {
               Label(
                 search.isEmpty ? "No saved voyages" : "No matching saved voyages",
-                systemImage: "suitcase")
+                systemImage: "suitcase"
+              )
             } actions: {
               Button("Create a voyage") { router.showingCreation = true }
             }
@@ -46,7 +57,9 @@ struct MyVoyagesView: View {
                       Task {
                         await model.perform {
                           try await model.repository.undoVoyageDeletion(
-                            accountId: workspace.account.id, voyageId: voyage.id)
+                            accountId: workspace.account.id,
+                            voyageId: voyage.id
+                          )
                         }
                       }
                     }.accessibilityIdentifier("voyage.undo.\(voyage.id)")
@@ -130,6 +143,7 @@ struct MyVoyagesView: View {
         && (filter == "All" || (filter == "Public") == voyage.confirmedPublished)
     }
   }
+
   private func status(_ voyage: LocalVoyage) -> String {
     if model.workspace?.operations.contains(where: {
       $0.voyageId == voyage.id && ![.applied, .canceled].contains($0.state)
