@@ -127,6 +127,10 @@ signing off: the real Keychain test returns `errSecMissingEntitlement` in an
 unsigned test host. Generated `.xcresult` bundles and JSON coverage reports go
 under the ignored `ios/TestResults/` directory.
 
+`AccountFlowTests.testStorageControlsRequireCleanupConsentAndOfferVoyageExportsAndDownloads`
+waits up to 30 seconds for the system Files export picker's Cancel control. The
+picker can take longer than five seconds to become accessible on a fresh CI simulator.
+
 `ios/Scripts/coverage.py` retains the `xccov` report and checks production Swift
 with Xcode's `llvm-cov` and recorded simulator counters. The installed Xcode
 omits local Swift package files from its `xccov` report despite instrumenting

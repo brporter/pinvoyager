@@ -25,6 +25,11 @@ bearer tokens fail with 401. Native logout is idempotent and cannot revoke a bro
 session. Handoff/exchange/capability responses use `no-store`; URLs and logs never
 carry session tokens. Provider tokens are not retained.
 
+`crates/api/tests/native_session_guards.rs` exercises expired and suspended native
+sessions against both public and account routes. An invalid bearer credential
+returns 401 even where anonymous reads are allowed. Idle and absolute expiry
+remove the session; enabling an account permits its still-valid session again.
+
 `crates/api/tests/native_auth.rs` drives the real router against the loopback mock
 OIDC provider, including single-use exchange, wrong verifier/attempt, expiry,
 callback/binding checks, and transport isolation. Its initial run returned 404 for

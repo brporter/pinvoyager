@@ -154,7 +154,7 @@ extension AccountFlowTests {
     let cancelExport = app.descendants(matching: .any).matching(
       NSPredicate(format: "label == %@", "Cancel")
     ).firstMatch
-    XCTAssertTrue(cancelExport.waitForExistence(timeout: 5), app.debugDescription)
+    XCTAssertTrue(cancelExport.waitForExistence(timeout: 30), app.debugDescription)
     cancelExport.tap()
     XCTAssertTrue(app.buttons["Save export to Files"].waitForExistence(timeout: 5))
   }

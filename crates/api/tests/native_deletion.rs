@@ -44,6 +44,76 @@ async fn status(client: &Client, receipt: Uuid) -> serde_json::Value {
     )
     .await
 }
+
+#[sqlx::test]
+async fn a_non_apple_proof_cannot_replace_apple_revocation_or_consume_valid_proofs(pool: PgPool) {
+    let client = Client::new(pool).await;
+    let google = proof(&client, Provider::Google, "primary-google").await;
+    let microsoft = proof(&client, Provider::Microsoft, "substitute-microsoft").await;
+    let apple = proof(&client, Provider::Apple, "linked-apple").await;
+    let key = Uuid::now_v7();
+    let response = client
+        .request(
+            "POST",
+            "/api/me/deletion-requests",
+            Some(
+                json!({"proof_token":google,"apple_proof_token":microsoft,"status_capability":CAP}),
+            ),
+            Some(key),
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let used: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM deletion_proofs WHERE account_id=$1 AND used")
+            .bind(client.user_id)
+            .fetch_one(&client.pool)
+            .await
+            .expect("proof consumption");
+    assert_eq!(
+        used, 0,
+        "a rejected preparation rolls back both proof consumptions"
+    );
+    let receipts: i64 = sqlx::query_scalar("SELECT count(*) FROM account_deletions WHERE id=$1")
+        .bind(key)
+        .fetch_one(&client.pool)
+        .await
+        .expect("deletion receipt");
+    assert_eq!(receipts, 0);
+    assert_eq!(
+        client
+            .request("GET", "/api/me", None, None, None)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+
+    // A corrected retry can retain the original proof and preparation key.
+    let response = client
+        .request(
+            "POST",
+            "/api/me/deletion-requests",
+            Some(json!({"proof_token":google,"apple_proof_token":apple,"status_capability":CAP})),
+            Some(key),
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let used: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM deletion_proofs WHERE account_id=$1 AND used")
+            .bind(client.user_id)
+            .fetch_one(&client.pool)
+            .await
+            .expect("accepted proof consumption");
+    assert_eq!(used, 2);
+    assert_eq!(
+        client
+            .request("GET", "/api/me", None, None, None)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+}
 #[sqlx::test]
 async fn deletion_waits_for_durable_file_cleanup_and_keeps_names_reserved(pool: PgPool) {
     let client = Client::new(pool).await;
