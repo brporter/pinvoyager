@@ -302,10 +302,13 @@ with the system Photos picker and the shared `PhotoImportService`.
 The native job in `.github/workflows/checks.yml` checks Swift formatting and bundled
 policy drift, runs the complete Simulator suite with the 95% aggregate Swift line
 requirement, builds Release for Simulator, and retains `.xcresult`/coverage artifacts.
-It selects the macOS 26 image and Xcode 26.6 documented in the
-[GitHub runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md).
-The hosted job has not been run from this workspace; local results remain the
-verification evidence until that job executes on a pushed branch.
+It selects the `xcode-27` runner and Xcode 27.1 documented in the
+[GitHub runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
+That image includes iOS 27 simulators. `ios/Scripts/test.sh::choose_device` selects
+the first available iPhone and iPad when simulator IDs are not supplied.
+The updated hosted job has not been run from this workspace; local results remain
+the verification evidence until that job executes on a pushed branch. Older iOS
+runtime compatibility still requires separate checks.
 
 Universal links use the `applinks:pinvoyager.com` entitlement and the trusted web
 origin. `ios/Scripts/generate_association.py` generates the HTTPS association body
