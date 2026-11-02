@@ -5,7 +5,13 @@ final class ProfileFlowTests: XCTestCase {
   func testProfilePaginationReportingAndBlockingKeepTheirScope() throws {
     let fixture = try fixture()
     let app = try fixture.launch()
-    app.buttons["View traveler"].firstMatch.tap()
+    // Cover launches that restore a tab other than Discover.
+    app.buttons["My Voyages"].tap()
+    XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
+    app.buttons["Discover"].tap()
+    let traveler = app.buttons["View traveler"].firstMatch
+    XCTAssertTrue(traveler.waitForExistence(timeout: 10))
+    traveler.tap()
     XCTAssertTrue(app.staticTexts["fixture-traveler"].waitForExistence(timeout: 5))
     app.reveal(app.buttons["Load more"])
     app.buttons["Load more"].tap()
@@ -31,7 +37,13 @@ final class ProfileFlowTests: XCTestCase {
       as: UTF8.self
     )
     app.launch()
-    app.buttons["View traveler"].firstMatch.tap()
+    // Cover launches that restore a tab other than Discover.
+    app.buttons["My Voyages"].tap()
+    XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
+    app.buttons["Discover"].tap()
+    let traveler = app.buttons["View traveler"].firstMatch
+    XCTAssertTrue(traveler.waitForExistence(timeout: 10))
+    traveler.tap()
     XCTAssertTrue(app.staticTexts["fixture-traveler"].waitForExistence(timeout: 5))
     app.buttons["More"].tap()
     app.buttons["Block traveler"].tap()

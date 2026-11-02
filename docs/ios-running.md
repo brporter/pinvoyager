@@ -131,6 +131,16 @@ under the ignored `ios/TestResults/` directory.
 waits up to 30 seconds for the system Files export picker's Cancel control. The
 picker can take longer than five seconds to become accessible on a fresh CI simulator.
 
+`NavigationTests.testNewOfflineDraftCanAdvanceDirectlyToPhotoImportWithoutAServerIdentifier`
+selects My Voyages and uses its navigation bar's Create a voyage button. The empty
+list also offers a button with that label, so an app-wide query is ambiguous.
+Both tests in `ios/PinVoyagerUITests/ProfileFlowTests.swift` start on My Voyages,
+then select Discover and wait for View traveler before opening the profile. This
+checks the navigation from a non-Discover tab instead of assuming the app launches
+on Discover. `ios/PinVoyager/App/RootView.swift::RootView` and
+`ios/PinVoyager/App/SceneRouter.swift::SceneRouter.restore` preserve the selected
+tab between launches; UI-test fixture data does not reset that scene state.
+
 `ios/Scripts/coverage.py` retains the `xccov` report and checks production Swift
 with Xcode's `llvm-cov` and recorded simulator counters. The installed Xcode
 omits local Swift package files from its `xccov` report despite instrumenting
@@ -310,9 +320,8 @@ It selects the `xcode-27` runner and Xcode 27.1 documented in the
 [GitHub runner image inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
 That image includes iOS 27 simulators. `ios/Scripts/test.sh::choose_device` selects
 the first available iPhone and iPad when simulator IDs are not supplied.
-The updated hosted job has not been run from this workspace; local results remain
-the verification evidence until that job executes on a pushed branch. Older iOS
-runtime compatibility still requires separate checks.
+Inspect the `checks / ios` job for the pushed commit to verify hosted results.
+Older iOS runtime compatibility still requires separate checks.
 
 Universal links use the `applinks:pinvoyager.com` entitlement and the trusted web
 origin. `ios/Scripts/generate_association.py` generates the HTTPS association body

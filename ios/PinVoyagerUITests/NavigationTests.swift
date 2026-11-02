@@ -7,7 +7,9 @@ final class NavigationTests: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["--ui-testing", "--signed-in-fixture", "--offline-fixture"]
     app.launch()
-    app.buttons["Create a voyage"].tap()
+    app.buttons["My Voyages"].tap()
+    XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
+    app.navigationBars["My Voyages"].buttons["Create a voyage"].tap()
     let title = app.textFields["Voyage name"]
     XCTAssertTrue(title.waitForExistence(timeout: 5))
     title.tap()
