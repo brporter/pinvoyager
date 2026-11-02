@@ -109,7 +109,13 @@ continue to use the map substitute for DOM and interaction checks.
 
 `.github/workflows/checks.yml` runs web formatting, types, lint, coverage, and
 build, plus Rust formatting, Clippy, and database/native-image coverage on stable
-Rust. CI retains coverage reports as workflow artifacts. Generated reports are
+Rust. CI also runs non-UI Swift package and application tests through
+`IOS_UI_TESTS=0 ios/Scripts/test.sh`. iOS UI tests are temporarily local-only
+because hosted simulator runs are unreliable. This reduced iOS suite publishes
+coverage without enforcing the app-wide 95% Swift threshold; the complete local
+iOS suite retains that requirement. No production sources are excluded. See
+[iOS test commands](ios-running.md) for both modes. CI retains coverage reports
+as workflow artifacts. Generated reports are
 ignored and are not maintained documentation.
 
 Checks runs directly for pull requests and pushes to branches other than `main`.

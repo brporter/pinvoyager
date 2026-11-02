@@ -112,7 +112,35 @@ local authoring. The real Keychain test runs on iOS; macOS tests inject the
 Security interface to check credential errors without relying on a logged-in
 desktop Keychain.
 
-Run the complete suite and the 95% executable-line coverage check:
+GitHub Actions temporarily runs only the non-UI Swift tests: the Swift package
+and `PinVoyagerTests` application-model/adapter tests. The workflow sets
+`IOS_UI_TESTS=0` when invoking `ios/Scripts/test.sh`, which passes
+`-skip-testing:PinVoyagerUITests`, runs on one phone simulator without cloning or
+seeding Photos, and skips the iPad UI check. CI continues formatting, script
+checks, the Release simulator build, and test/coverage artifact uploads.
+
+Reproduce the CI test selection locally:
+
+```sh
+IOS_UI_TESTS=0 ios/Scripts/test.sh YOUR_IPHONE_UDID
+```
+
+This mode generates coverage reports for every production Swift file, with
+`threshold_enforced: false` in the Swift summary. Its reduced coverage does not
+enforce the app-wide 95% requirement because UI journeys are deliberately absent.
+No production files are excluded. The full local suite still enforces 95%; web
+and API coverage checks are unchanged. `test_runner.py::TestRunnerTests` verifies
+that CI mode skips the UI target, avoids simulator cloning/media seeding and iPad
+discovery, and uses only newly generated coverage counters. The local CI-mode
+validation passed all 258 non-UI tests with zero skipped tests
+(`ios/TestResults/20261102-162721.xcresult`). Its measured app-wide Swift coverage
+was 8,709 / 19,672 lines (44.27%); report-only mode succeeded, while the default
+95% coverage check rejected the same profiles as expected. The new runner
+regression failed before CI-mode support and passed afterward; all 12 Python
+script tests passed.
+
+Run the complete suite locally, including all UI tests and the 95%
+executable-line coverage check:
 
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer

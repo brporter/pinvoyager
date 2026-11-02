@@ -34,6 +34,8 @@ def main():
     parser.add_argument("--device", action="append", default=[])
     parser.add_argument("--profile", type=Path, action="append", default=[])
     parser.add_argument("--profile-directory", type=Path, action="append", default=[])
+    parser.add_argument("--report-only", action="store_true",
+                        help="Report reduced-suite coverage without enforcing the full-suite 95% threshold.")
     args = parser.parse_args()
     try:
         profiles = collect_profiles(args.derived_data, args.device, args.profile, args.profile_directory)
@@ -89,10 +91,11 @@ def main():
     covered = sum(value["covered"] for value in measured.values())
     count = sum(value["count"] for value in measured.values())
     percentage = 100 * covered / count if count else 0
-    summary = {"covered_lines": covered, "executable_lines": count, "percentage": percentage, "required_percentage": 95, "profiles": [str(profile) for profile in profiles], "files": {str(path.relative_to(root)): value for path, value in sorted(measured.items())}}
+    summary = {"covered_lines": covered, "executable_lines": count, "percentage": percentage, "required_percentage": 95, "threshold_enforced": not args.report_only, "profiles": [str(profile) for profile in profiles], "files": {str(path.relative_to(root)): value for path, value in sorted(measured.items())}}
     output.with_name(output.stem + "-swift.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"Production Swift executable lines: {covered}/{count} ({percentage:.2f}%), required 95%")
-    return 0 if percentage >= 95 else 1
+    requirement = "report only; full local suite requires 95%" if args.report_only else "required 95%"
+    print(f"Production Swift executable lines: {covered}/{count} ({percentage:.2f}%), {requirement}")
+    return 0 if args.report_only or percentage >= 95 else 1
 
 
 if __name__ == "__main__":

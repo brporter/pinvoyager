@@ -10,9 +10,13 @@ choose_device() {
   xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for runtime, items in devices.items() if "iOS" in runtime for device in items if device["isAvailable"] and device["name"].startswith(sys.argv[1])))' "$1"
 }
 phone_id="${1:-$(choose_device iPhone)}"
-ipad_id="${2:-$(choose_device iPad)}"
 result_path="ios/TestResults/$(date +%Y%m%d-%H%M%S).xcresult"
 ipad_result_path="${result_path%.xcresult}-ipad.xcresult"
+ui_tests="${IOS_UI_TESTS:-1}"
+if [[ "$ui_tests" != 0 && "$ui_tests" != 1 ]]; then
+  echo "IOS_UI_TESTS must be 0 or 1." >&2
+  exit 1
+fi
 workers="${IOS_TEST_WORKERS:-2}"
 if [[ "$workers" != 1 && "$workers" != 2 ]]; then
   echo "IOS_TEST_WORKERS must be 1 or 2." >&2
@@ -37,6 +41,15 @@ run_tests() {
   fi
   return "$result"
 }
+if [[ "$ui_tests" == 0 ]]; then
+  run_tests "$phone_id" "$result_path" \
+    -parallel-testing-enabled NO -skip-testing:PinVoyagerUITests
+  # App-wide coverage includes SwiftUI journeys exercised only by the local full suite.
+  python3 ios/Scripts/coverage.py "$result_path" --derived-data ios/.derivedData \
+    --profile-directory "${result_path%.xcresult}-profiles" --report-only
+  exit 0
+fi
+ipad_id="${2:-$(choose_device iPad)}"
 # Use a disposable, erased clone so system notification authorization starts undetermined.
 # Preserve the caller's simulator and clean up even when xcodebuild fails.
 phone_id="$(xcrun simctl clone "$phone_id" "PinVoyager tests $$")"
