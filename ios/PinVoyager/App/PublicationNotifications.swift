@@ -1,3 +1,4 @@
+import OSLog
 import PinVoyagerData
 import PinVoyagerDomain
 import UserNotifications
@@ -26,7 +27,22 @@ private actor SystemNotificationCenter: PublicationNotificationCenter {
   private let center = UNUserNotificationCenter.current()
 
   func requestPermission() async throws -> Bool {
-    try await center.requestAuthorization(options: [.alert, .sound])
+    let logger = Logger(subsystem: "com.pinvoyager.app", category: "NotificationPermission")
+    let initialStatus = await center.notificationSettings().authorizationStatus.rawValue
+    logger.notice("Notification authorization requested; initial status \(initialStatus)")
+    do {
+      let allowed = try await center.requestAuthorization(options: [.alert, .sound])
+      let finalStatus = await center.notificationSettings().authorizationStatus.rawValue
+      logger.notice(
+        "Notification authorization completed; allowed \(allowed), status \(finalStatus)"
+      )
+      return allowed
+    } catch {
+      logger.error(
+        "Notification authorization failed: \(error.localizedDescription, privacy: .public)"
+      )
+      throw error
+    }
   }
 
   func pendingIds() async -> [String] {

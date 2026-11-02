@@ -1,5 +1,6 @@
 import PinVoyagerDomain
 import SwiftUI
+import UserNotifications
 
 struct SyncView: View {
   @Environment(AppModel.self)
@@ -199,6 +200,11 @@ struct SyncSettingsView: View {
   @Environment(AppModel.self)
   private var model
 
+  #if DEBUG
+    @State
+    private var initialNotificationAuthorization: UNAuthorizationStatus?
+  #endif
+
   var body: some View {
     Form {
       Section("Network") {
@@ -242,6 +248,25 @@ struct SyncSettingsView: View {
         }
       }
       Section("Notifications") {
+        #if DEBUG
+          if AppBootstrap.isUITesting,
+            ProcessInfo.processInfo.arguments.contains("--notification-permission-diagnostics")
+          {
+            Group {
+              if let status = initialNotificationAuthorization {
+                Text(
+                  "Notification authorization: \(status == .notDetermined ? "notDetermined" : String(status.rawValue))"
+                )
+                .accessibilityIdentifier("notifications.initial-authorization")
+              } else {
+                ProgressView("Checking notification authorization")
+              }
+            }.task {
+              initialNotificationAuthorization = await UNUserNotificationCenter.current()
+                .notificationSettings().authorizationStatus
+            }
+          }
+        #endif
         Toggle(
           "Notify when publication completes",
           isOn: Binding(

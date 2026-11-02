@@ -20,10 +20,22 @@ final class PhotoPickerTests: UITestCase {
     app.buttons["Choose photos"].tap()
     app.selectFirstSystemPhoto()
     XCTAssertTrue(app.staticTexts["Photo 1"].waitUntilExists(timeout: 10), app.debugDescription)
+    XCTAssertTrue(app.navigationBars["Photos"].waitForNonExistence(timeout: 10))
+    let reset = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "enabled == true AND value == %@", "0"),
+      object: cellular
+    )
     XCTAssertEqual(
-      cellular.value as? String,
-      "0",
-      "A later import must require fresh cellular permission"
+      XCTWaiter.wait(for: [reset], timeout: 30),
+      .completed,
+      "The import must finish and require fresh cellular permission for a later batch. \(app.debugDescription)"
+    )
+    XCTAssertTrue(
+      app.navigationBars["Add photos"].buttons["Close"].wait(
+        for: \.isEnabled,
+        toEqual: true,
+        timeout: 10
+      )
     )
     app.navigationBars["Add photos"].buttons["Close"].tap()
     app.buttons["Sync"].tap()

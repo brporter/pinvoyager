@@ -120,8 +120,11 @@ ios/Scripts/test.sh YOUR_IPHONE_UDID YOUR_IPAD_UDID
 # Omit the UDIDs to select the first available iPhone and iPad.
 ```
 
-The script boots the phone and seeds the shared HEIC fixture before Xcode clones it
-for the system Photos-picker journeys. It runs the complete phone suite with two
+The script creates and erases a disposable clone of the selected phone, then boots
+it and seeds the shared HEIC fixture before Xcode creates its worker clones.
+This gives notification authorization a clean initial state without erasing the
+selected device. An EXIT trap shuts down and deletes the disposable phone after
+success or failure. It runs the complete phone suite with two
 UI-test workers, followed by an iPad navigation check. Set `IOS_TEST_WORKERS=1`
 to limit the phone run to one worker. Each worker uses a separate simulator;
 the script never runs two UI drivers against the same device.
@@ -185,6 +188,37 @@ XCTest reported no hit point for a visibly unobstructed photo even after waiting
 the center tap completed selection and the test's existing import assertions
 passed. These helpers use UI state and geometry, with no OS-version conditions
 or fixed sleeps.
+
+`AccessibilityActions.selectFirstSystemPhoto` allows up to 30 seconds for a photo
+to appear in the system picker. A timeout attaches a screenshot, the accessibility
+hierarchy, and elapsed time. The wait returns immediately when a photo exists.
+`PhotoPickerTests.testSystemPickerCopiesTheSelectedPhotoAndKeepsItsBatchCellularPermission`
+waits for the picker to close, the cellular switch to be enabled and reset, and
+Close to be enabled. A saved photo row can appear while the batch is still being
+prepared; it does not establish batch completion.
+
+`NotificationFlowTests` enables the Debug-only
+`--notification-permission-diagnostics` launch argument and requires the initial
+system authorization status to be `notDetermined`. It requires Allow to appear
+within 30 seconds, then waits up to 15 seconds for the persisted opt-in to appear
+in the switch before checking real foreground notification delivery. The diagnostic
+label is omitted from ordinary launches and Release builds. `SystemNotificationCenter`
+logs request start, completion, authorization status, and errors under the
+`NotificationPermission` category. `PublicationNotificationAdapterTests.testDelayedPermissionUpdatesTheVisiblePreferenceOnlyAfterAuthorizationCompletes`
+holds the permission response pending and verifies that the model and saved policy
+change only after authorization completes.
+
+For this CI-failure follow-up, the notification UI test first failed because the
+initial-authorization diagnostic was absent (`permission-red-2.xcresult`). After
+implementation, `ios/Scripts/test.sh` passed all 314 phone tests (258 non-UI and
+56 UI), the iPad navigation test, and aggregate production Swift line coverage
+at 18,799 / 19,672 lines (95.56%). Results are in the ignored
+`ios/TestResults/20261102-152009.xcresult` and matching `-ipad.xcresult` bundles.
+The Release simulator build, Swift formatting, all 11 Python script tests,
+bundled-policy check, shell syntax, and `git diff --check` also passed. API and
+web source were unchanged; their suites and coverage were not rerun for this
+native-test follow-up. The three affected UI scenarios also passed on a freshly
+erased iOS 26.4.1 simulator (`ios/TestResults/ci-fixes-ios2641.xcresult`).
 
 `PinVoyager.xctestplan` enables execution timeouts: 120 seconds per test by
 default, with a maximum allowance of 180 seconds. These bounds help preserve a

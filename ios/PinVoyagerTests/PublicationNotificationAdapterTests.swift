@@ -1,3 +1,4 @@
+import PinVoyagerData
 import PinVoyagerDomain
 import UserNotifications
 import XCTest
@@ -12,7 +13,23 @@ private actor NotificationCenterStub: PublicationNotificationCenter {
   var requests: [PublicationNotice] = []
   var removed: [String] = []
 
-  func requestPermission() -> Bool { permission }
+  var permissionStarted: XCTestExpectation?
+  var permissionReply: CheckedContinuation<Bool, Never>?
+
+  func delayPermission(untilStarted started: XCTestExpectation) { permissionStarted = started }
+
+  func resolvePermission(_ allowed: Bool) {
+    permissionReply?.resume(returning: allowed)
+    permissionReply = nil
+  }
+
+  func requestPermission() async -> Bool {
+    guard let permissionStarted else { return permission }
+    return await withCheckedContinuation { reply in
+      permissionReply = reply
+      permissionStarted.fulfill()
+    }
+  }
 
   func pendingIds() -> [String] { pending }
 
@@ -80,5 +97,39 @@ final class PublicationNotificationAdapterTests: XCTestCase {
     } catch is ValidationError {} catch { XCTFail("Unexpected error: \(error)") }
     let requests = await center.requests
     XCTAssertEqual(requests.count, 1)
+  }
+}
+
+extension PublicationNotificationAdapterTests {
+  func testDelayedPermissionUpdatesTheVisiblePreferenceOnlyAfterAuthorizationCompletes()
+    async throws
+  {
+    let state = unlockedWorkspace()
+    let store = try CoreDataWorkspaceStore(url: nil)
+    try await store.insert(state)
+    let center = NotificationCenterStub()
+    let started = expectation(description: "System authorization is pending")
+    await center.delayPermission(untilStarted: started)
+    let credentials = TestCredentials()
+    let model = AppModel(
+      store: store,
+      client: APIClient(
+        origin: try testOrigin(),
+        transport: StubHTTP([]),
+        credentials: credentials
+      ),
+      credentials: credentials,
+      notifications: SystemPublicationNotifications(center: center)
+    )
+    await model.restore(accountId: state.account.id)
+    let enabling = Task { await model.setPublicationNotifications(true) }
+    await fulfillment(of: [started], timeout: 2)
+    XCTAssertNotEqual(model.workspace?.policy.notifyOnPublication, true)
+    await center.resolvePermission(true)
+    await enabling.value
+    XCTAssertEqual(model.workspace?.policy.notifyOnPublication, true)
+    XCTAssertNil(model.error)
+    let saved = try await store.read(accountId: state.account.id)
+    XCTAssertEqual(saved.policy.notifyOnPublication, true)
   }
 }

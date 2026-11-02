@@ -26,15 +26,26 @@ final class NotificationFlowTests: UITestCase {
       "/api/client-capabilities",
       body: try FixtureLaunch.fixture("native_capabilities")
     )
-    let app = try fixture.launch(tab: .account)
+    let app = try fixture.launch(
+      tab: .account,
+      arguments: ["--notification-permission-diagnostics"]
+    )
     app.buttons["Sync and storage"].tap()
     let optIn = app.switches["Notify when publication completes"]
     app.reveal(optIn)
+    let authorization = app.staticTexts["notifications.initial-authorization"]
+    XCTAssertTrue(authorization.waitUntilExists(timeout: 10), app.debugDescription)
+    XCTAssertEqual(authorization.label, "Notification authorization: notDetermined")
     optIn.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     let allow = springboard.alerts.buttons["Allow"]
-    if allow.waitUntilExists(timeout: 5) { allow.tap() }
-    XCTAssertEqual(optIn.value as? String, "1", app.debugDescription)
+    XCTAssertTrue(allow.waitUntilExists(timeout: 30), springboard.debugDescription)
+    allow.tap()
+    let enabled = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "value == %@", "1"),
+      object: optIn
+    )
+    XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed, app.debugDescription)
     app.buttons["Sync"].tap()
     app.buttons["Sync now"].tap()
     XCTAssertTrue(

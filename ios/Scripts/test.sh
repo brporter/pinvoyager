@@ -37,6 +37,15 @@ run_tests() {
   fi
   return "$result"
 }
+# Use a disposable, erased clone so system notification authorization starts undetermined.
+# Preserve the caller's simulator and clean up even when xcodebuild fails.
+phone_id="$(xcrun simctl clone "$phone_id" "PinVoyager tests $$")"
+cleanup_phone() {
+  xcrun simctl shutdown "$phone_id" >/dev/null 2>&1 || true
+  xcrun simctl delete "$phone_id"
+}
+trap cleanup_phone EXIT
+xcrun simctl erase "$phone_id"
 # Seeding requires a booted simulator. Reuse the shared image fixture.
 if ! xcrun simctl list devices booted --json | python3 -c 'import json,sys; ids=[d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds]; sys.exit(sys.argv[1] not in ids)' "$phone_id"; then
   xcrun simctl boot "$phone_id"

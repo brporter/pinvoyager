@@ -166,7 +166,21 @@ extension XCUIApplication {
   @MainActor
   func selectFirstSystemPhoto(requiresConfirmation: Bool = true) {
     let photo = images.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Photo,")).firstMatch
-    XCTAssertTrue(photo.waitUntilExists(timeout: 10), debugDescription)
+    let started = Date()
+    guard photo.waitUntilExists(timeout: 30) else {
+      let screenshot = XCTAttachment(screenshot: screenshot())
+      screenshot.name = "Photos picker not ready after \(Date().timeIntervalSince(started)) seconds"
+      screenshot.lifetime = .keepAlways
+      // Attach to the current test's activity so the failed run includes the remote picker state.
+      XCTContext.runActivity(named: screenshot.name ?? "Photos picker timeout") { activity in
+        activity.add(screenshot)
+        let hierarchy = XCTAttachment(string: debugDescription)
+        hierarchy.lifetime = .keepAlways
+        activity.add(hierarchy)
+      }
+      XCTFail("The Photos picker did not expose a selectable photo within 30 seconds.")
+      return
+    }
     let photoFrame = photo.frame
     XCTAssertFalse(photoFrame.isEmpty)
     XCTAssertTrue(windows.firstMatch.frame.contains(photoFrame))
