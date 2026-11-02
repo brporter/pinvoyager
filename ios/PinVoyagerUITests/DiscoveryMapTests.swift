@@ -1,7 +1,7 @@
 import XCTest
 
 @MainActor
-final class DiscoveryMapTests: XCTestCase {
+final class DiscoveryMapTests: UITestCase {
   func testSwitchingBetweenRecentAndMapPreservesTheRecentScrollPosition() throws {
     var fixture = try FixtureLaunch()
     let page = try XCTUnwrap(
@@ -23,14 +23,15 @@ final class DiscoveryMapTests: XCTestCase {
       ])
     )
     let app = try fixture.launch()
-    try app.showDiscover()
-    let target = app.staticTexts["Discovery voyage 6"]
-    app.reveal(target, maximumSwipes: 20)
+    let target = app.buttons.matching(
+      NSPredicate(format: "label CONTAINS %@", "Discovery voyage 6")
+    ).firstMatch
+    app.reveal(app.staticTexts["Discovery voyage 6"], maximumSwipes: 20)
     XCTAssertTrue(target.isHittable)
     app.buttons["Map"].tap()
     app.buttons["Recent"].tap()
     XCTAssertTrue(
-      target.isHittable,
+      target.waitUntilHittable(timeout: 5),
       "Discover must retain the position reached before switching modes."
     )
   }
@@ -50,19 +51,18 @@ final class DiscoveryMapTests: XCTestCase {
     let voyage = try XCTUnwrap(try JSONSerialization.jsonObject(with: detail) as? [String: Any])
     fixture.reply("/api/voyages/" + (try XCTUnwrap(voyage["id"] as? String)), body: detail)
     let app = try fixture.launch()
-    try app.showDiscover()
     app.buttons["Map"].tap()
-    XCTAssertTrue(app.staticTexts["Zoom in to see more photographs"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Zoom in to see more photographs"].waitUntilExists(timeout: 10))
     let pin = app.buttons["2 photographs in 1 voyages"]
     for _ in 0..<13 {
       if app.navigationBars["Voyages at this location"].exists { break }
-      XCTAssertTrue(pin.waitForExistence(timeout: 5))
+      XCTAssertTrue(pin.waitUntilExists(timeout: 5))
       pin.tap()
     }
-    XCTAssertTrue(app.navigationBars["Voyages at this location"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Voyages at this location"].waitUntilExists(timeout: 5))
     app.buttons.matching(
       NSPredicate(format: "identifier BEGINSWITH %@", "discovery.cluster-voyage.")
     ).firstMatch.tap()
-    XCTAssertTrue(app.buttons["View traveler"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["View traveler"].waitUntilExists(timeout: 5))
   }
 }

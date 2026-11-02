@@ -3,7 +3,7 @@ import PinVoyagerDomain
 import XCTest
 
 @MainActor
-final class SyncFlowTests: XCTestCase {
+final class SyncFlowTests: UITestCase {
   func testSyncSettingsAndExplicitMetadataConflictChoices() throws {
     var fixture = try FixtureLaunch()
     let account = fixture.workspace.account.id
@@ -53,9 +53,8 @@ final class SyncFlowTests: XCTestCase {
       "/api/voyages/\(voyage.serverId!)/photos",
       body: try JSONSerialization.data(withJSONObject: ["photos": photos, "next_before": NSNull()])
     )
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
-    XCTAssertTrue(app.staticTexts["Reference: conflict-reference"].waitForExistence(timeout: 5))
+    let app = try fixture.launch(tab: .sync)
+    XCTAssertTrue(app.staticTexts["Reference: conflict-reference"].waitUntilExists(timeout: 5))
     app.buttons["Sync and storage settings"].tap()
     app.switches["Upload photos on Wi-Fi only"].tap()
     app.switches["Use Low Data Mode connections"].tap()
@@ -63,17 +62,17 @@ final class SyncFlowTests: XCTestCase {
     app.switches["Pause synchronization"].tap()
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.buttons["Resolve changes"].tap()
-    XCTAssertTrue(app.staticTexts["Your saved version"].firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Your saved version"].firstMatch.waitUntilExists(timeout: 5))
     for field in ["Voyage name", "Description", "Public location precision"] {
       app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", field)).firstMatch.tap()
       app.buttons["Use mine"].tap()
     }
     app.reveal(app.buttons["Save resolution"])
     app.buttons["Save resolution"].tap()
-    XCTAssertTrue(app.navigationBars["Sync"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Sync"].waitUntilExists(timeout: 5))
     XCTAssertFalse(app.buttons["Resolve changes"].exists)
     app.buttons["My Voyages"].tap()
-    XCTAssertTrue(app.staticTexts["My retained title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["My retained title"].waitUntilExists(timeout: 5))
   }
 
   func testUnavailableConflictCanBecomeANewPrivateDraft() throws {
@@ -93,11 +92,10 @@ final class SyncFlowTests: XCTestCase {
     )
     edit.state = .conflict
     fixture.workspace.operations = [edit]
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
+    let app = try fixture.launch(tab: .sync)
     app.buttons["Resolve changes"].tap()
     let recovery = app.buttons["Keep as a new private voyage"]
-    XCTAssertTrue(recovery.waitForExistence(timeout: 5))
+    XCTAssertTrue(recovery.waitUntilExists(timeout: 5))
     recovery.tap()
     app.buttons["My Voyages"].tap()
     XCTAssertEqual(app.staticTexts.matching(identifier: "Recovered destination").count, 2)
@@ -141,8 +139,7 @@ extension SyncFlowTests {
       fixture.workspace.operations.append(operation)
     }
     let retryId = fixture.workspace.operations[0].id
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
+    let app = try fixture.launch(tab: .sync)
     var found: Set<String> = []
     for _ in 0..<10 {
       for (title, _) in kinds where app.staticTexts[title].exists { found.insert(title) }
@@ -235,8 +232,7 @@ extension SyncFlowTests {
         "next_before": NSNull(),
       ])
     )
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
+    let app = try fixture.launch(tab: .sync)
     app.buttons["Resolve changes"].tap()
     let selection = app.buttons.matching(
       NSPredicate(format: "label BEGINSWITH %@", "Photo resolution")
@@ -245,7 +241,7 @@ extension SyncFlowTests {
       if selection.exists { break }
       app.swipeUp()
     }
-    XCTAssertTrue(selection.waitForExistence(timeout: 5))
+    XCTAssertTrue(selection.waitUntilExists(timeout: 5))
     app.reveal(selection)
     selection.tap()
     app.buttons["Use website order and append my new photos"].tap()
@@ -257,11 +253,11 @@ extension SyncFlowTests {
     app.reveal(save)
     XCTAssertTrue(save.isEnabled)
     save.tap()
-    XCTAssertTrue(app.navigationBars["Sync"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Sync"].waitUntilExists(timeout: 5))
     app.buttons["My Voyages"].tap()
     app.staticTexts[remote.title].tap()
     app.reveal(app.staticTexts["Added on my iPhone.jpg"])
-    XCTAssertTrue(app.staticTexts["Added on my iPhone.jpg"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Added on my iPhone.jpg"].waitUntilExists(timeout: 5))
     XCTAssertFalse(app.staticTexts["Deleted while offline.jpg"].exists)
     let count = app.staticTexts["4 photos · 4 without location"]
     app.reveal(count, swipeUp: false)
@@ -287,15 +283,14 @@ extension SyncFlowTests {
     )
     operation.state = .conflict
     fixture.workspace.operations = [operation]
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
+    let app = try fixture.launch(tab: .sync)
     app.buttons["Resolve changes"].tap()
     let discard = app.buttons["Discard local work"]
-    XCTAssertTrue(discard.waitForExistence(timeout: 5))
+    XCTAssertTrue(discard.waitUntilExists(timeout: 5))
     guard discard.exists else { return }
     discard.tap()
     app.buttons["Discard files and edits"].tap()
-    XCTAssertTrue(app.navigationBars["Sync"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Sync"].waitUntilExists(timeout: 5))
     app.buttons["My Voyages"].tap()
     XCTAssertFalse(app.staticTexts[voyage.fields.title].exists)
   }
@@ -308,12 +303,11 @@ extension SyncFlowTests {
     )
     fixture.workspace.voyages = [voyage]
     fixture.workspace.photos = [LocalPhoto(voyageId: voyage.id, filename: "Not uploaded")]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].swipeLeft()
     app.buttons["Delete"].tap()
     let delete = app.buttons["Delete from this iPhone"]
-    XCTAssertTrue(delete.waitForExistence(timeout: 3))
+    XCTAssertTrue(delete.waitUntilExists(timeout: 3))
     guard delete.exists else { return }
     XCTAssertTrue(
       app.staticTexts[
@@ -375,8 +369,7 @@ extension SyncFlowTests {
     review.photoChoice = .arranged([.local(local.id), .website(website)])
     review.readded = [removed.id]
     fixture.workspace.conflictReviews = [review]
-    let app = try fixture.launch(arguments: ["--offline-fixture"])
-    app.buttons["Sync"].tap()
+    let app = try fixture.launch(tab: .sync, arguments: ["--offline-fixture"])
     app.buttons["Resolve changes"].tap()
     let selection = app.buttons.matching(
       NSPredicate(format: "label BEGINSWITH %@", "Photo resolution")
@@ -393,7 +386,7 @@ extension SyncFlowTests {
     XCTAssertFalse(added.isEnabled)
     app.reveal(app.buttons["Save resolution on this iPhone"], swipeUp: false)
     app.buttons["Save resolution on this iPhone"].tap()
-    XCTAssertTrue(app.staticTexts["Resolution saved on this iPhone"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Resolution saved on this iPhone"].waitUntilExists(timeout: 5))
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.buttons["Resolve changes"].tap()
     app.reveal(selection)
@@ -436,18 +429,17 @@ extension SyncFlowTests {
           "next_before": NSNull(),
         ])
       )
-      let app = try fixture.launch()
-      app.buttons["Sync"].tap()
+      let app = try fixture.launch(tab: .sync)
       app.buttons["Resolve changes"].tap()
       let selection = app.buttons.matching(
         NSPredicate(format: "label BEGINSWITH %@", "Visibility resolution")
       ).firstMatch
-      XCTAssertTrue(selection.waitForExistence(timeout: 5))
+      XCTAssertTrue(selection.waitUntilExists(timeout: 5))
       XCTAssertFalse(app.buttons["Save resolution"].isEnabled)
       selection.tap()
       app.buttons[choice].tap()
       app.buttons["Save resolution"].tap()
-      XCTAssertTrue(app.navigationBars["Sync"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.navigationBars["Sync"].waitUntilExists(timeout: 5))
       XCTAssertFalse(app.buttons["Resolve changes"].exists)
       app.buttons["My Voyages"].tap()
       XCTAssertTrue(app.staticTexts["Public"].exists)

@@ -1,7 +1,7 @@
 import XCTest
 
 @MainActor
-final class ReportingFlowTests: XCTestCase {
+final class ReportingFlowTests: UITestCase {
   func testReportReceiptAndBlockingHidePreviouslyLoadedTravelerContent() throws {
     var fixture = try FixtureLaunch()
     let peer = UUID()
@@ -42,7 +42,6 @@ final class ReportingFlowTests: XCTestCase {
       ])
     )
     let app = try fixture.launch()
-    try app.showDiscover()
     XCTAssertNotEqual(owner, peer)
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     app.buttons["More"].tap()
@@ -50,16 +49,16 @@ final class ReportingFlowTests: XCTestCase {
     app.textViews["Report details"].tap()
     app.textViews["Report details"].typeText("Please review this content.")
     app.buttons["Submit report"].tap()
-    XCTAssertTrue(app.staticTexts["Report received"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Report received"].waitUntilExists(timeout: 5))
     app.buttons["Done"].tap()
     app.buttons["More"].tap()
     app.buttons["Block traveler"].tap()
-    XCTAssertTrue(app.staticTexts["Traveler blocked"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Traveler blocked"].waitUntilExists(timeout: 5))
     app.navigationBars.buttons.element(boundBy: 0).tap()
     XCTAssertTrue(app.staticTexts["Three weeks in Hokkaido"].waitForNonExistence(timeout: 5))
     app.buttons["Map"].tap()
     XCTAssertTrue(
-      app.staticTexts["Map waiting for blocked-account changes"].waitForExistence(timeout: 5)
+      app.staticTexts["Map waiting for blocked-account changes"].waitUntilExists(timeout: 5)
     )
   }
 }

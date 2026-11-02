@@ -1,30 +1,26 @@
 import XCTest
 
 @MainActor
-final class ProfileFlowTests: XCTestCase {
+final class ProfileFlowTests: UITestCase {
   func testProfilePaginationReportingAndBlockingKeepTheirScope() throws {
     let fixture = try fixture()
     let app = try fixture.launch()
-    // Cover launches that restore a tab other than Discover.
-    app.buttons["My Voyages"].tap()
-    XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
-    try app.showDiscover()
     let traveler = app.buttons["View traveler"].firstMatch
-    XCTAssertTrue(traveler.waitForExistence(timeout: 10))
+    XCTAssertTrue(traveler.waitUntilExists(timeout: 10))
     traveler.tap()
-    XCTAssertTrue(app.staticTexts["fixture-traveler"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["fixture-traveler"].waitUntilExists(timeout: 5))
     app.reveal(app.buttons["Load more"])
     app.buttons["Load more"].tap()
     XCTAssertEqual(app.staticTexts.matching(identifier: "Three weeks in Hokkaido").count, 1)
     app.buttons["More"].tap()
     app.buttons["Report traveler"].tap()
-    XCTAssertTrue(app.staticTexts["fixture-traveler"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["fixture-traveler"].waitUntilExists(timeout: 5))
     app.buttons["Submit report"].tap()
-    XCTAssertTrue(app.staticTexts["Waiting to send"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Waiting to send"].waitUntilExists(timeout: 5))
     app.buttons["Done"].tap()
     app.buttons["More"].tap()
     app.buttons["Block traveler"].tap()
-    XCTAssertTrue(app.staticTexts["Traveler blocked"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Traveler blocked"].waitUntilExists(timeout: 5))
     XCTAssertFalse(app.staticTexts["Public profile"].exists)
   }
 
@@ -36,18 +32,14 @@ final class ProfileFlowTests: XCTestCase {
       decoding: try JSONSerialization.data(withJSONObject: fixture.replies),
       as: UTF8.self
     )
-    app.launch()
-    // Cover launches that restore a tab other than Discover.
-    app.buttons["My Voyages"].tap()
-    XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
-    try app.showDiscover()
+    app.launchFixture()
     let traveler = app.buttons["View traveler"].firstMatch
-    XCTAssertTrue(traveler.waitForExistence(timeout: 10))
+    XCTAssertTrue(traveler.waitUntilExists(timeout: 10))
     traveler.tap()
-    XCTAssertTrue(app.staticTexts["fixture-traveler"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["fixture-traveler"].waitUntilExists(timeout: 5))
     app.buttons["More"].tap()
     app.buttons["Block traveler"].tap()
-    XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Cancel"].waitUntilExists(timeout: 5))
     app.buttons["Cancel"].tap()
     XCTAssertTrue(app.staticTexts["fixture-traveler"].exists)
   }

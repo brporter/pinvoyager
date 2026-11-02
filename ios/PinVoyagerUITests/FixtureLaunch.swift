@@ -58,7 +58,7 @@ struct FixtureLaunch {
     )
   }
 
-  func launch(arguments: [String] = []) throws -> XCUIApplication {
+  func launch(tab: AppTab = .discover, arguments: [String] = []) throws -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["--ui-testing"] + arguments
     app.launchEnvironment["PINVOYAGER_TEST_WORKSPACE"] = String(
@@ -77,7 +77,7 @@ struct FixtureLaunch {
       decoding: try JSONSerialization.data(withJSONObject: replies),
       as: UTF8.self
     )
-    app.launch()
+    app.launchFixture(tab: tab)
     return app
   }
 }

@@ -1,55 +1,72 @@
 import XCTest
 
 @MainActor
-final class PublicBrowsingTests: XCTestCase {
+final class PublicBrowsingTests: UITestCase {
   func testPublicVoyageGalleryAndProfileUseTheCapturedAPIContract() throws {
     let app = try launchPublicApp()
     let card = app.staticTexts["Three weeks in Hokkaido"].firstMatch
-    XCTAssertTrue(card.waitForExistence(timeout: 10))
+    XCTAssertTrue(card.waitUntilExists(timeout: 10))
     card.tap()
-    XCTAssertTrue(app.buttons["View traveler"].waitForExistence(timeout: 10), app.debugDescription)
+    XCTAssertTrue(app.buttons["View traveler"].waitUntilExists(timeout: 10), app.debugDescription)
     app.buttons["Photos"].tap()
     let photo = app.buttons["Photo 2, no recorded location"].firstMatch
-    XCTAssertTrue(photo.waitForExistence(timeout: 5), app.debugDescription)
+    XCTAssertTrue(photo.waitUntilExists(timeout: 5), app.debugDescription)
     photo.tap()
-    XCTAssertTrue(app.buttons["Info"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Info"].waitUntilExists(timeout: 5))
     assertGalleryFillsWindow(app, context: "public photos")
     app.buttons["Info"].tap()
-    XCTAssertTrue(app.staticTexts["No recorded location"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No recorded location"].waitUntilExists(timeout: 5))
     app.buttons["Done"].tap()
     app.buttons["Next"].tap()
     app.buttons["Previous"].tap()
     app.buttons["Close"].tap()
     app.buttons["View traveler"].tap()
-    XCTAssertTrue(app.staticTexts["fixture-owner"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["fixture-owner"].waitUntilExists(timeout: 5))
     XCTAssertTrue(app.staticTexts["Public profile"].exists)
   }
 
   func testDiscoverSetupReturnsToRecentFromEveryTabAndANestedProfile() throws {
     let app = try launchPublicApp()
-    let card = app.staticTexts["Three weeks in Hokkaido"].firstMatch
+    let card = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH %@", "Three weeks in Hokkaido")
+    ).firstMatch
     for title in ["My Voyages", "Sync", "Account"] {
       app.tabBars.buttons[title].tap()
       try app.showDiscover()
       let root = app.navigationBars["Discover"]
-      XCTAssertTrue(root.waitForExistence(timeout: 5), "Discover setup must leave \(title).")
+      XCTAssertTrue(root.waitUntilExists(timeout: 5), "Discover setup must leave \(title).")
       guard root.exists else { return }
-      XCTAssertTrue(card.waitForExistence(timeout: 5))
-      XCTAssertTrue(card.isHittable)
+      XCTAssertTrue(card.waitUntilExists(timeout: 5))
+      XCTAssertTrue(card.waitUntilHittable(timeout: 5))
     }
 
     app.buttons["Map"].tap()
     try app.showDiscover()
-    XCTAssertTrue(card.isHittable, "Discover setup must select Recent.")
+    XCTAssertTrue(card.waitUntilHittable(timeout: 5), "Discover setup must select Recent.")
     card.tap()
     let traveler = app.buttons["View traveler"]
-    XCTAssertTrue(traveler.waitForExistence(timeout: 5))
+    XCTAssertTrue(traveler.waitUntilExists(timeout: 5))
     traveler.tap()
-    XCTAssertTrue(app.staticTexts["fixture-owner"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["fixture-owner"].waitUntilExists(timeout: 5))
     app.tabBars.buttons["My Voyages"].tap()
     try app.showDiscover()
-    XCTAssertTrue(app.navigationBars["Discover"].waitForExistence(timeout: 5))
-    XCTAssertTrue(card.isHittable, "Discover setup must leave the nested profile and voyage.")
+    XCTAssertTrue(app.navigationBars["Discover"].waitUntilExists(timeout: 5))
+    XCTAssertTrue(
+      card.waitUntilHittable(timeout: 5),
+      "Discover setup must leave the nested profile and voyage."
+    )
+
+    card.tap()
+    app.buttons["View traveler"].tap()
+    app.tabBars.buttons["Account"].tap()
+    app.terminate()
+    app.launchEnvironment["PINVOYAGER_TEST_TAB"] = "discover"
+    app.launch()
+    XCTAssertTrue(app.navigationBars["Discover"].waitUntilExists(timeout: 5))
+    XCTAssertTrue(
+      card.waitUntilHittable(timeout: 5),
+      "Fixture launches must ignore the previous tab and public path."
+    )
   }
 
   private func launchPublicApp() throws -> XCUIApplication {
@@ -96,8 +113,7 @@ final class PublicBrowsingTests: XCTestCase {
       decoding: try JSONSerialization.data(withJSONObject: replies),
       as: UTF8.self
     )
-    app.launch()
-    try app.showDiscover()
+    app.launchFixture()
     return app
   }
 }
@@ -112,10 +128,10 @@ extension PublicBrowsingTests {
     app.reveal(photo)
     photo.tap()
     app.buttons["Info"].tap()
-    XCTAssertTrue(app.staticTexts["Approximate location"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Approximate location"].waitUntilExists(timeout: 5))
     app.reveal(app.buttons["Show on map"])
     app.buttons["Show on map"].tap()
-    XCTAssertTrue(app.buttons["Fit voyage"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Fit voyage"].waitUntilExists(timeout: 5))
     let pin = app.buttons.matching(
       NSPredicate(
         format: "label BEGINSWITH %@ AND label ENDSWITH %@",
@@ -124,7 +140,7 @@ extension PublicBrowsingTests {
       )
     ).firstMatch
     app.reveal(pin, swipeUp: false)
-    XCTAssertTrue(pin.waitForExistence(timeout: 10))
+    XCTAssertTrue(pin.waitUntilExists(timeout: 10))
     pin.tap()
     assertGalleryFillsWindow(app, context: "public map")
     app.buttons["Close"].tap()
@@ -133,10 +149,10 @@ extension PublicBrowsingTests {
     app.buttons["Info"].tap()
     app.reveal(app.buttons["Report photo"])
     app.buttons["Report photo"].tap()
-    XCTAssertTrue(app.buttons["Sign in to submit"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Sign in to submit"].waitUntilExists(timeout: 5))
     app.buttons["Sign in to submit"].tap()
-    XCTAssertTrue(app.buttons["Refresh sign-in options"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Refresh sign-in options"].waitUntilExists(timeout: 5))
     app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.buttons["View traveler"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["View traveler"].waitUntilExists(timeout: 5))
   }
 }

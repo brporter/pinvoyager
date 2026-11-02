@@ -2,7 +2,7 @@ import PinVoyagerDomain
 import XCTest
 
 @MainActor
-final class PhotoManagementTests: XCTestCase {
+final class PhotoManagementTests: UITestCase {
   func testStagedOrderCanBeCanceledAndSavedBeforeBulkRemoval() throws {
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
@@ -15,8 +15,7 @@ final class PhotoManagementTests: XCTestCase {
       photo.order = index
       return photo
     }
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     let manage = app.buttons["Manage photos"]
     app.reveal(manage)
@@ -40,7 +39,7 @@ final class PhotoManagementTests: XCTestCase {
     app.buttons["Select Second"].tap()
     app.buttons["Select Third"].tap()
     app.buttons["Remove selected"].tap()
-    XCTAssertTrue(app.staticTexts["Remove 2 photographs?"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.staticTexts["Remove 2 photographs?"].waitUntilExists(timeout: 3))
     app.buttons["Remove 2 photographs"].tap()
     XCTAssertTrue(app.buttons["Select Second"].waitForNonExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Select First"].exists)
@@ -48,7 +47,7 @@ final class PhotoManagementTests: XCTestCase {
     try XCTUnwrap(
       app.buttons.matching(identifier: "Add photos").allElementsBoundByIndex.last { $0.isHittable }
     ).tap()
-    XCTAssertTrue(app.buttons["Choose photos"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Choose photos"].waitUntilExists(timeout: 5))
     app.navigationBars["Add photos"].buttons["Close"].tap()
     app.buttons["Done"].tap()
   }
@@ -70,8 +69,7 @@ extension PhotoManagementTests {
       photo.order = index
       return photo
     }
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     app.reveal(app.buttons["Manage photos"])
     app.buttons["Manage photos"].tap()
@@ -81,10 +79,10 @@ extension PhotoManagementTests {
     app.buttons["Remove selected"].tap()
     app.buttons["Remove 2 photographs"].tap()
     let undo = app.buttons["Undo removals"]
-    XCTAssertTrue(undo.waitForExistence(timeout: 5))
+    XCTAssertTrue(undo.waitUntilExists(timeout: 5))
     guard undo.exists else { return }
     undo.tap()
-    XCTAssertTrue(app.buttons["Select One"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Select One"].waitUntilExists(timeout: 5))
     XCTAssertTrue(app.buttons["Select Two"].exists)
   }
 }

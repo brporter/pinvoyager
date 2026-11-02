@@ -2,7 +2,7 @@ import PinVoyagerDomain
 import XCTest
 
 @MainActor
-final class NotificationFlowTests: XCTestCase {
+final class NotificationFlowTests: UITestCase {
   func testOptInAsksTheSystemAndConfirmedPublicationShowsAForegroundNotification() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
@@ -26,20 +26,19 @@ final class NotificationFlowTests: XCTestCase {
       "/api/client-capabilities",
       body: try FixtureLaunch.fixture("native_capabilities")
     )
-    let app = try fixture.launch()
-    app.buttons["Account"].tap()
+    let app = try fixture.launch(tab: .account)
     app.buttons["Sync and storage"].tap()
     let optIn = app.switches["Notify when publication completes"]
     app.reveal(optIn)
     optIn.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     let allow = springboard.alerts.buttons["Allow"]
-    if allow.waitForExistence(timeout: 5) { allow.tap() }
+    if allow.waitUntilExists(timeout: 5) { allow.tap() }
     XCTAssertEqual(optIn.value as? String, "1", app.debugDescription)
     app.buttons["Sync"].tap()
     app.buttons["Sync now"].tap()
     XCTAssertTrue(
-      springboard.staticTexts["Voyage published"].waitForExistence(timeout: 10),
+      springboard.staticTexts["Voyage published"].waitUntilExists(timeout: 10),
       springboard.debugDescription
     )
   }

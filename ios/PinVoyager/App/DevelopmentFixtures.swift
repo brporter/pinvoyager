@@ -39,6 +39,19 @@
 
   @MainActor
   enum DevelopmentFixtures {
+    static func restoreNavigation(
+      _ router: SceneRouter,
+      savedRoutes: Data,
+      workspace: Workspace?,
+      environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+      if let value = environment["PINVOYAGER_TEST_TAB"], let tab = AppTab(rawValue: value) {
+        router.selectedTab = tab
+      } else {
+        router.restore(savedRoutes, workspace: workspace)
+      }
+    }
+
     static func seed(_ model: AppModel) async throws {
       let args = ProcessInfo.processInfo.arguments
       await model.restore(accountId: nil)

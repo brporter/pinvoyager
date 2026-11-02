@@ -120,9 +120,23 @@ ios/Scripts/test.sh YOUR_IPHONE_UDID YOUR_IPAD_UDID
 # Omit the UDIDs to select the first available iPhone and iPad.
 ```
 
-The script boots the phone, seeds the shared HEIC fixture for the system Photos-picker
-journey, runs the complete phone suite and an iPad navigation check, snapshots both
-profiles, and merges them for the aggregate threshold. The script uses ad hoc simulator signing (`CODE_SIGN_IDENTITY=-`). Do not turn
+The script boots the phone and seeds the shared HEIC fixture before Xcode clones it
+for the system Photos-picker journeys. It runs the complete phone suite with two
+UI-test workers, followed by an iPad navigation check. Set `IOS_TEST_WORKERS=1`
+to limit the phone run to one worker. Each worker uses a separate simulator;
+the script never runs two UI drivers against the same device.
+
+Before each phone or iPad run, the script removes the generated
+`ios/.derivedData/Build/ProfileData` counters. Afterward, it snapshots every
+worker profile into a `*-profiles` directory beside the result bundle.
+Xcode 27.1 merges its workers under the requested simulator's UUID; the collector
+also accepts separate worker directories rather than assuming a single profile.
+`coverage.py --profile-directory` merges these snapshots from the same build,
+including the iPad counters, and rejects missing or empty snapshot directories.
+`ios/Scripts/test_coverage.py::CoverageProfilesTests` checks worker collection,
+stale-profile isolation, and compatibility with explicit profile arguments.
+
+The script uses ad hoc simulator signing (`CODE_SIGN_IDENTITY=-`). Do not turn
 signing off: the real Keychain test returns `errSecMissingEntitlement` in an
 unsigned test host. Generated `.xcresult` bundles and JSON coverage reports go
 under the ignored `ios/TestResults/` directory.
@@ -131,31 +145,98 @@ under the ignored `ios/TestResults/` directory.
 waits up to 30 seconds for the system Files export picker's Cancel control. The
 picker can take longer than five seconds to become accessible on a fresh CI simulator.
 
-`NavigationTests.testNewOfflineDraftCanAdvanceDirectlyToPhotoImportWithoutAServerIdentifier`
-selects My Voyages and uses its navigation bar's Create a voyage button. The empty
-list also offers a button with that label, so an app-wide query is ambiguous.
-Public browsing, public-state, discovery-map, profile, and reporting tests use
-`ios/PinVoyagerUITests/AccessibilityActions.swift::XCUIApplication.showDiscover`
-before reading the discovery list or map. The helper selects the Discover tab,
-returns through at most eight public destinations to its navigation root, and
-selects Recent. It waits for the tab, navigation controls, root, and Recent control;
-missing controls or a root that cannot be reached fail test setup. This makes the
-starting screen explicit while retaining the app's scene restoration behavior.
-`ios/PinVoyagerUITests/PublicBrowsingTests.swift::testDiscoverSetupReturnsToRecentFromEveryTabAndANestedProfile`
-checks returning from each other tab, Map mode, and a profile opened through a
-voyage. Both `ProfileFlowTests` also start on My Voyages before using the helper.
-These changes are exploratory while debugging the GitHub Actions UI failures;
-hosted results must confirm whether they resolve the suite's state dependency.
-`ios/PinVoyager/App/RootView.swift::RootView` and
-`ios/PinVoyager/App/SceneRouter.swift::SceneRouter.restore` preserve the selected
-tab between launches; UI-test fixture data does not reset that scene state.
+`ios/PinVoyagerUITests/AccessibilityActions.swift::XCUIApplication.launchFixture`
+and `FixtureLaunch.launch(tab:arguments:)` set `PINVOYAGER_TEST_TAB` to the tab
+needed by each test. `RootView` calls
+`DevelopmentFixtures.restoreNavigation` only in Debug UI testing. A valid
+starting tab skips saved scene routes; launches without that setting still use
+`SceneRouter.restore`. This prevents earlier tests' selected tabs and nested
+public destinations from determining the next test's starting screen. Ordinary
+app launches and Release behavior retain scene restoration.
+`BootstrapTests.testFixtureStartingTabsIgnoreSavedDestinationsButOrdinaryLaunchesRestoreThem`
+checks all four starting tabs and the restoration fallback.
+`PublicBrowsingTests.testDiscoverSetupReturnsToRecentFromEveryTabAndANestedProfile`
+checks tab switching, returning from nested destinations, and a fixture relaunch.
+`showDiscover` is used by that navigation regression, rather than repeated in
+unrelated browsing, profile, and reporting setup.
 
-On November 2, 2026, the new setup regression first failed because My Voyages
-remained selected, then passed after implementing the helper. The complete
-`ios/Scripts/test.sh` run on iOS 27.0 passed 256 non-UI tests, all 56 iPhone UI
-tests, and the iPad navigation check. Aggregate production Swift executable-line
-coverage was 18,703 of 19,565 lines (95.59%). This local result does not establish
-whether the exploratory changes resolve the hosted CI failures.
+`XCUIElement.waitUntilExists` first checks `exists`; it retains XCTest's polling
+wait and the original timeout if the element is absent. System pickers and
+asynchronous transitions still wait for their controls. Editor save/discard and
+precision-picker tests wait for their sheet's navigation bar to disappear
+before reopening it;
+an element behind a dismissing sheet is not evidence that dismissal finished.
+The publication editor test dismisses the keyboard before scrolling to Save.
+`XCUIElement.reveal` reads the container frame once per call and stops after its
+swipe limit or three
+swipes that leave a known target at the same position. It reports failure at the
+call site. If the keyboard is open, it keeps drags above the keyboard and updates
+the visible area if the keyboard dismisses. The invalid recovered draft test
+queries the editor's
+`voyage.description-count` identifier instead of matching every static text's
+label suffix. `UITestCase` stops a case after its first failure so subsequent
+actions do not run on an unexpected screen.
+
+The discovery setup and scroll-position regressions use `waitUntilHittable` on
+the voyage's navigation button rather than its static-text child. The system
+Photos picker helper selects the center of a matched photo after checking that
+its frame is nonempty and inside the window. On the local iOS 26.4.1 simulator,
+XCTest reported no hit point for a visibly unobstructed photo even after waiting;
+the center tap completed selection and the test's existing import assertions
+passed. These helpers use UI state and geometry, with no OS-version conditions
+or fixed sleeps.
+
+`PinVoyager.xctestplan` enables execution timeouts: 120 seconds per test by
+default, with a maximum allowance of 180 seconds. These bounds help preserve a
+completed result bundle when an accessibility query stalls; they do not make
+healthy tests faster. The separate GitHub Actions job timeout remains 45 minutes.
+
+On November 2, 2026, the same 56 UI scenarios passed before and after these changes
+on Xcode 27.1 with iOS 27.0 iPhone 18 Pro simulators. Elapsed UI time is measured
+from the first case's start to the last case's finish in the result bundles,
+including gaps between cases and overlapping workers:
+
+| Configuration | UI elapsed time | Change from baseline |
+| --- | --- | --- |
+| Original tests, serial | 1,191.5 seconds (19m 51s) | Baseline |
+| Initial optimization check, serial | 804.1 seconds (13m 24s) | 32.5% less |
+| Final implementation, two workers | 413.8 seconds (6m 54s) | 65.3% less |
+
+The initial serial check preceded the older-OS selector and keyboard refinements.
+It included an additional fixture relaunch assertion and made 19 polling waits
+instead of 248. No UI scenario was removed. The complete
+two-worker `ios/Scripts/test.sh` run, including the incremental build, 257 non-UI
+tests, 56 iPhone UI tests, the iPad navigation check, and coverage processing,
+took 484.9 seconds (8m 05s). Production Swift coverage was 18,722 / 19,588 executable
+lines (95.58%). These are local measurements; a fresh hosted build and simulator
+may have different timings.
+
+The regression for fixture starting tabs first failed by restoring Account and
+old destinations, then passed after implementing `restoreNavigation`. The editor
+regression first failed to find `voyage.description-count`, then passed after
+adding that identifier. The three coverage-collection tests passed after first
+demonstrating missing worker collection and acceptance of empty snapshots.
+Faster execution exposed an editor dismissal race and keyboard-obstructed
+scrolling; both corrected tests passed twice consecutively before the full runs.
+
+Focused compatibility checks also ran on the iOS 26.4.1 iPhone 17 Pro simulator
+(build 23E254a). Eleven of twelve cases passed together; the remaining
+scroll-position case passed three consecutive runs after its query was changed
+to the navigation button. The selection and scrolling corrections described
+above address the failures found during this check. This was a focused older-OS
+check, not the complete suite on every supported iOS version. The Release
+simulator build, all 11 Python script tests, bundled-policy validation, Swift
+formatting, and shell syntax checks passed. API and web checks were not rerun;
+their implementation and tests were unchanged.
+
+The local artifacts are under the ignored `ios/TestResults/ui-performance/`
+directory (`baseline.xcresult`, `serial.xcresult`, logs, and timing JSON).
+The complete parallel run is `ios/TestResults/20261102-132338.xcresult`, with
+the iPad bundle, profile snapshots, and aggregate coverage JSON beside it.
+For another serial UI measurement, use `xcodebuild test` with the project's
+PinVoyager scheme and test plan, `-only-testing:PinVoyagerUITests`,
+`-parallel-testing-enabled NO`, and a unique `-resultBundlePath`. Use
+`ios/Scripts/test.sh` for the complete two-worker and coverage check.
 
 `ios/Scripts/coverage.py` retains the `xccov` report and checks production Swift
 with Xcode's `llvm-cov` and recorded simulator counters. The installed Xcode
@@ -169,6 +250,7 @@ camera code, UI, or failure branches from measurement. See the dated results in
 For a test-only workspace, use launch arguments in a Debug scheme:
 
 - `--ui-testing`: ephemeral database and deterministic public transport. The UI tests can supply base64 response bodies and statuses keyed by lowercase URL path in the `PINVOYAGER_TEST_RESPONSES` JSON launch environment; this adapter exists only in Debug builds.
+- `PINVOYAGER_TEST_TAB`: optional launch environment value `discover`, `voyages`, `sync`, or `account` to start a Debug UI fixture at that tab without restoring old routes. Omit it when testing scene restoration.
 - Add `--signed-in-fixture` for a synthetic previously verified account.
 - Add `--populated-fixture` for a local voyage and synthetic JPEG.
 - Add `--offline-fixture` for offline authoring and publication-review checks.

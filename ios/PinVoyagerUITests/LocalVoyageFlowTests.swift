@@ -4,7 +4,7 @@ import UIKit
 import XCTest
 
 @MainActor
-final class LocalVoyageFlowTests: XCTestCase {
+final class LocalVoyageFlowTests: UITestCase {
   func testOwnerDownloadsGalleryRemovalAndUnpublicationUseConfirmedStates() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
@@ -33,11 +33,10 @@ final class LocalVoyageFlowTests: XCTestCase {
       $0.fill(CGRect(x: 0, y: 0, width: 120, height: 80))
     }
     try fixture.provideOwnerDownload(voyage: voyage, photo: photo, bytes: bytes)
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     let locations = app.switches["Private locations (only you)"]
-    XCTAssertTrue(locations.waitForExistence(timeout: 5))
+    XCTAssertTrue(locations.waitUntilExists(timeout: 5))
     locations.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
     app.reveal(app.staticTexts["Exact recorded locations — private metadata"])
     XCTAssertTrue(app.staticTexts["Exact recorded locations — private metadata"].exists)
@@ -46,12 +45,12 @@ final class LocalVoyageFlowTests: XCTestCase {
     XCTAssertTrue(download.isEnabled)
     download.tap()
     let downloaded = app.staticTexts["Website copy available offline"]
-    XCTAssertTrue(downloaded.waitForExistence(timeout: 10))
+    XCTAssertTrue(downloaded.waitUntilExists(timeout: 10))
     let photoRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", photo.filename))
       .firstMatch
     app.reveal(photoRow, swipeUp: false)
     photoRow.tap()
-    XCTAssertTrue(app.staticTexts["Downloaded owner copy"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Downloaded owner copy"].waitUntilExists(timeout: 5))
     XCTAssertTrue(
       app.staticTexts.matching(
         NSPredicate(format: "label BEGINSWITH %@", "Private recorded location:")
@@ -72,7 +71,7 @@ final class LocalVoyageFlowTests: XCTestCase {
       }
     ).tap()
     app.buttons["Sync"].tap()
-    XCTAssertTrue(app.staticTexts["Make voyage private"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Make voyage private"].waitUntilExists(timeout: 5))
     XCTAssertTrue(app.staticTexts["Waiting"].firstMatch.exists)
   }
 }
@@ -104,13 +103,12 @@ extension LocalVoyageFlowTests {
     )
     operation.state = .applied
     fixture.workspace.operations = [operation]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     XCTAssertTrue(
       app.staticTexts[
         "Publication scheduled. The reviewed version may publish while this device is offline."
-      ].waitForExistence(timeout: 5)
+      ].waitUntilExists(timeout: 5)
     )
     XCTAssertTrue(app.buttons["Edit details"].isEnabled)
     let add = app.buttons["Add photos"]
@@ -126,7 +124,7 @@ extension LocalVoyageFlowTests {
     app.buttons["Cancel publication"].tap()
     XCTAssertTrue(
       app.staticTexts["Cancellation is waiting for a connection. This voyage may still publish."]
-        .waitForExistence(timeout: 5)
+        .waitUntilExists(timeout: 5)
     )
     XCTAssertTrue(app.staticTexts["Processing"].exists)
   }
@@ -141,12 +139,11 @@ extension LocalVoyageFlowTests {
     voyage.revision = "1"
     voyage.confirmedPublished = true
     fixture.workspace.voyages = [voyage]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     app.reveal(app.buttons["Add photos"])
     app.buttons["Add photos"].tap()
-    XCTAssertTrue(app.buttons["Choose photos"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Choose photos"].waitUntilExists(timeout: 5))
     XCTAssertFalse(app.buttons["Choose photos"].isEnabled)
     XCTAssertFalse(app.buttons["Take photo"].isEnabled)
     app.switches["New photos will become public as they upload"].coordinate(
@@ -194,21 +191,20 @@ extension LocalVoyageFlowTests {
         fixture.reply("/api/photos/\(photo.serverId!)/\(kind)", body: bytes)
       }
     }
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Website photo 1"))
       .firstMatch
     app.reveal(row)
     row.tap()
-    XCTAssertTrue(app.navigationBars["1 of 2"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["1 of 2"].waitUntilExists(timeout: 5))
     assertGalleryFillsWindow(app, context: "owner photos")
     let image = app.images["Photograph. Pinch to zoom."].firstMatch
-    XCTAssertTrue(image.waitForExistence(timeout: 5))
+    XCTAssertTrue(image.waitUntilExists(timeout: 5))
     image.pinch(withScale: 2, velocity: 2)
     image.doubleTap()
     app.buttons["Info"].tap()
-    XCTAssertTrue(app.staticTexts["Exact location — private metadata"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Exact location — private metadata"].waitUntilExists(timeout: 5))
     XCTAssertTrue(
       app.descendants(matching: .any).matching(
         NSPredicate(
@@ -221,18 +217,18 @@ extension LocalVoyageFlowTests {
     )
     app.buttons["Done"].tap()
     app.buttons["Thumbnail 2"].tap()
-    XCTAssertTrue(app.navigationBars["2 of 2"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["2 of 2"].waitUntilExists(timeout: 5))
     app.buttons["Info"].tap()
-    XCTAssertTrue(app.staticTexts["No recorded location"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No recorded location"].waitUntilExists(timeout: 5))
     app.buttons["Done"].tap()
     app.buttons["Thumbnail 1"].tap()
     app.buttons["Info"].tap()
     app.reveal(app.buttons["Show on map"])
     app.buttons["Show on map"].tap()
-    XCTAssertTrue(app.buttons["Fit voyage"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Fit voyage"].waitUntilExists(timeout: 5))
     let pin = app.buttons["View 1 photographs at this location"]
     app.reveal(pin, swipeUp: false)
-    XCTAssertTrue(pin.waitForExistence(timeout: 10))
+    XCTAssertTrue(pin.waitUntilExists(timeout: 10))
     pin.tap()
     assertGalleryFillsWindow(app, context: "owner map")
     app.buttons["Close"].tap()
@@ -254,16 +250,15 @@ extension LocalVoyageFlowTests {
     voyage.serverId = UUID()
     voyage.revision = "7"
     fixture.workspace.voyages = [voyage]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].swipeLeft()
     app.buttons["Delete"].tap()
     app.buttons["Delete voyage and its photos"].tap()
     let undo = app.buttons["voyage.undo.\(voyage.id)"]
-    XCTAssertTrue(undo.waitForExistence(timeout: 5))
+    XCTAssertTrue(undo.waitUntilExists(timeout: 5))
     guard undo.exists else { return }
     undo.tap()
-    XCTAssertTrue(app.staticTexts[voyage.fields.title].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts[voyage.fields.title].waitUntilExists(timeout: 5))
     XCTAssertFalse(undo.exists)
   }
 }

@@ -2,7 +2,7 @@ import PinVoyagerDomain
 import XCTest
 
 @MainActor
-final class EditorFlowTests: XCTestCase {
+final class EditorFlowTests: UITestCase {
   func testExistingWorkingCopyCanBeDiscardedWithoutChangingTheCommittedVoyage() throws {
     var fixture = try FixtureLaunch()
     let fields = VoyageFields(title: "Committed voyage", description: nil)
@@ -14,12 +14,11 @@ final class EditorFlowTests: XCTestCase {
         fields: VoyageFields(title: "Recovered working copy", description: "Uncommitted edits")
       )
     ]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts["Committed voyage"].tap()
     app.buttons["Edit details"].tap()
     let title = app.textFields["Voyage name"]
-    XCTAssertTrue(title.waitForExistence(timeout: 5))
+    XCTAssertTrue(title.waitUntilExists(timeout: 5))
     XCTAssertEqual(title.value as? String, "Recovered working copy")
     app.buttons["Cancel"].tap()
     if app.buttons["Continue editing"].exists {
@@ -30,11 +29,12 @@ final class EditorFlowTests: XCTestCase {
     XCTAssertEqual(title.value as? String, "Recovered working copy")
     app.buttons["Cancel"].tap()
     app.buttons["Discard edits"].tap()
-    XCTAssertTrue(app.staticTexts["Committed voyage"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Edit voyage"].waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Committed voyage"].waitUntilExists(timeout: 5))
     app.buttons["Edit details"].tap()
     XCTAssertEqual(title.value as? String, "Committed voyage")
     app.buttons["Cancel"].tap()
-    XCTAssertTrue(app.buttons["Edit details"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Edit details"].waitUntilExists(timeout: 5))
   }
 
   func testInvalidRecoveredDraftShowsLimitsAndKeepsItsFieldsAfterFailedSaving() throws {
@@ -44,20 +44,18 @@ final class EditorFlowTests: XCTestCase {
       title: String(repeating: "x", count: 201),
       description: String(repeating: "y", count: 8_001)
     )
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.buttons["Continue unfinished draft"].tap()
-    XCTAssertTrue(app.staticTexts["201 / 200 characters"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["201 / 200 characters"].waitUntilExists(timeout: 5))
     XCTAssertLessThanOrEqual(
       app.textViews["Description"].frame.height,
       app.frame.height / 2,
       "Long descriptions must scroll inside the editor without expanding the form across screens."
     )
-    let descriptionCount = app.staticTexts.matching(
-      NSPredicate(format: "label ENDSWITH %@", "/ 8,000 characters")
-    ).firstMatch
+    let descriptionCount = app.staticTexts["voyage.description-count"].firstMatch
     app.reveal(descriptionCount)
     XCTAssertTrue(descriptionCount.exists, app.debugDescription)
+    XCTAssertTrue(descriptionCount.label.hasSuffix("/ 8,000 characters"))
     app.reveal(app.buttons["Save draft and close"])
     app.buttons["Save draft and close"].tap()
     XCTAssertTrue(app.navigationBars["New voyage"].exists)
@@ -80,8 +78,7 @@ final class EditorFlowTests: XCTestCase {
       fields: VoyageFields(title: "Saved before editing", description: "Keep this description")
     )
     fixture.workspace.voyages = [voyage]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     app.buttons["Edit details"].tap()
     let title = app.textFields["Voyage name"]
@@ -89,10 +86,10 @@ final class EditorFlowTests: XCTestCase {
     title.typeText(" locally")
     XCUIDevice.shared.press(.home)
     app.activate()
-    XCTAssertTrue(title.waitForExistence(timeout: 5))
+    XCTAssertTrue(title.waitUntilExists(timeout: 5))
     XCTAssertEqual(title.value as? String, "Saved before editing locally")
     app.buttons["Save changes"].tap()
-    XCTAssertTrue(app.staticTexts["Saved before editing locally"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Saved before editing locally"].waitUntilExists(timeout: 5))
   }
 }
 
@@ -115,8 +112,7 @@ extension EditorFlowTests {
     fixture.workspace.voyages = [voyage]
     fixture.workspace.photos = [photo]
     fixture.workspace.publicationIntents = [intent]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     let edit = app.buttons["Edit details"]
     XCTAssertTrue(edit.isEnabled)
@@ -128,9 +124,10 @@ extension EditorFlowTests {
     let save = app.buttons["Save working copy on this iPhone"]
     app.reveal(save)
     save.tap()
-    XCTAssertTrue(app.staticTexts["Reviewed version"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Edit voyage"].waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Reviewed version"].waitUntilExists(timeout: 5))
     app.buttons["Sync"].tap()
-    XCTAssertTrue(app.staticTexts["Processing"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Processing"].waitUntilExists(timeout: 5))
     XCTAssertFalse(app.staticTexts["Save voyage details"].exists)
     app.buttons["My Voyages"].tap()
     app.buttons["Edit details"].tap()
@@ -168,27 +165,27 @@ extension EditorFlowTests {
     fixture.workspace.publicationIntents = [intent]
     fixture.workspace.operations = [publish]
     fixture.reply("/auth/native/logout", body: Data(), status: 204)
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     XCTAssertTrue(
       app.staticTexts[
         "Checking whether publication was scheduled. The reviewed version may publish while this device is offline."
-      ].waitForExistence(timeout: 5)
+      ].waitUntilExists(timeout: 5)
     )
     app.buttons["Edit details"].tap()
     let title = app.textFields["Voyage name"]
     title.tap()
-    title.typeText(" locally")
+    title.typeText(" locally\n")
     let save = app.buttons["Save working copy on this iPhone"]
     app.reveal(save)
     save.tap()
-    XCTAssertTrue(app.staticTexts[voyage.fields.title].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Edit voyage"].waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts[voyage.fields.title].waitUntilExists(timeout: 5))
     app.reveal(app.buttons["Add photos"])
     XCTAssertFalse(app.buttons["Add photos"].isEnabled)
     app.buttons["Account"].tap()
     app.buttons["Sign out"].tap()
     app.buttons["Leave publication scheduled and sign out"].tap()
-    XCTAssertTrue(app.staticTexts["Sign in to your account"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Sign in to your account"].waitUntilExists(timeout: 5))
   }
 }

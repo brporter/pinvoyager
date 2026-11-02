@@ -13,19 +13,34 @@ def run_json(*arguments):
     return json.loads(subprocess.check_output(arguments, text=True))
 
 
+def collect_profiles(derived_data, devices, profiles, directories):
+    snapshots = []
+    for directory in directories:
+        workers = sorted(directory.glob("*/Coverage.profdata"))
+        if not workers:
+            raise ValueError(f"No simulator coverage profiles in snapshot: {directory}")
+        snapshots.extend(workers)
+    return list(dict.fromkeys(
+        [derived_data / "Build/ProfileData" / device / "Coverage.profdata" for device in devices]
+        + profiles
+        + snapshots
+    ))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("result_bundle", type=Path)
     parser.add_argument("--derived-data", type=Path, required=True)
     parser.add_argument("--device", action="append", default=[])
     parser.add_argument("--profile", type=Path, action="append", default=[])
+    parser.add_argument("--profile-directory", type=Path, action="append", default=[])
     args = parser.parse_args()
-    profiles = list(dict.fromkeys(
-        [args.derived_data / "Build/ProfileData" / device / "Coverage.profdata" for device in args.device]
-        + args.profile
-    ))
+    try:
+        profiles = collect_profiles(args.derived_data, args.device, args.profile, args.profile_directory)
+    except ValueError as error:
+        parser.error(str(error))
     if not profiles:
-        parser.error("Provide at least one --device or --profile.")
+        parser.error("Provide at least one --device, --profile, or --profile-directory.")
     for profile in profiles:
         if not profile.is_file():
             parser.error(f"Missing coverage profile: {profile}")

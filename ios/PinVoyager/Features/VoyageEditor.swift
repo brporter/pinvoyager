@@ -76,7 +76,7 @@ struct VoyageEditor: View {
           if (fields.description?.unicodeScalars.count ?? 0) > 7_500 {
             Text("\(fields.description?.unicodeScalars.count ?? 0) / 8,000 characters").font(
               .caption
-            )
+            ).accessibilityIdentifier("voyage.description-count")
           }
         }
         Section {

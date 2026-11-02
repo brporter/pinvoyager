@@ -2,7 +2,7 @@ import PinVoyagerDomain
 import XCTest
 
 @MainActor
-final class VoyageSyncTests: XCTestCase {
+final class VoyageSyncTests: UITestCase {
   func testVoyageUploadPauseIsIndependentOfTheAccountPolicy() throws {
     var fixture = try FixtureLaunch()
     let voyage = LocalVoyage(
@@ -10,16 +10,15 @@ final class VoyageSyncTests: XCTestCase {
       fields: VoyageFields(title: "Pause this voyage", description: "Keep other work running")
     )
     fixture.workspace.voyages = [voyage]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     app.reveal(app.buttons["Sync details"])
     app.buttons["Sync details"].tap()
     let pause = app.buttons["Pause uploads for voyage"]
-    XCTAssertTrue(pause.waitForExistence(timeout: 3))
+    XCTAssertTrue(pause.waitUntilExists(timeout: 3))
     guard pause.exists else { return }
     pause.tap()
-    XCTAssertTrue(app.buttons["Resume uploads for voyage"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Resume uploads for voyage"].waitUntilExists(timeout: 5))
     XCTAssertTrue(
       app.staticTexts[
         "Uploads paused for this voyage. Receipt checks and other changes can still synchronize."
@@ -29,7 +28,7 @@ final class VoyageSyncTests: XCTestCase {
     XCTAssertEqual(app.switches["Pause synchronization"].value as? String, "0")
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.buttons["Resume uploads for voyage"].tap()
-    XCTAssertTrue(pause.waitForExistence(timeout: 5))
+    XCTAssertTrue(pause.waitUntilExists(timeout: 5))
   }
 }
 
@@ -61,9 +60,8 @@ extension VoyageSyncTests {
       }
       fixture.workspace.operations.append(operation)
     }
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
-    XCTAssertTrue(app.staticTexts["Needs attention"].waitForExistence(timeout: 5))
+    let app = try fixture.launch(tab: .sync)
+    XCTAssertTrue(app.staticTexts["Needs attention"].waitUntilExists(timeout: 5))
     app.reveal(app.staticTexts["In progress"])
     XCTAssertTrue(app.staticTexts["In progress"].exists)
     app.reveal(app.staticTexts["Completed"])
@@ -73,22 +71,21 @@ extension VoyageSyncTests {
     let open = app.buttons["sync.voyage.\(voyage.id)"]
     app.reveal(open.firstMatch, swipeUp: false)
     open.firstMatch.tap()
-    XCTAssertTrue(app.navigationBars["Voyage sync details"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.navigationBars["Voyage sync details"].waitUntilExists(timeout: 5))
   }
 }
 
 extension VoyageSyncTests {
   func testGlobalUploadPauseKeepsSynchronizationEnabledAndCanBeResumed() throws {
     let fixture = try FixtureLaunch()
-    let app = try fixture.launch()
-    app.buttons["Sync"].tap()
+    let app = try fixture.launch(tab: .sync)
     app.buttons["Pause uploads"].tap()
-    XCTAssertTrue(app.buttons["Resume uploads"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Resume uploads"].waitUntilExists(timeout: 5))
     app.buttons["Sync and storage settings"].tap()
     XCTAssertEqual(app.switches["Pause photo uploads"].value as? String, "1")
     XCTAssertEqual(app.switches["Pause synchronization"].value as? String, "0")
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.buttons["Resume uploads"].tap()
-    XCTAssertTrue(app.buttons["Pause uploads"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Pause uploads"].waitUntilExists(timeout: 5))
   }
 }

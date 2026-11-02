@@ -7,7 +7,10 @@
     }
   ],
   "defaultOptions": {
-    "codeCoverage": true
+    "codeCoverage": true,
+    "testTimeoutsEnabled": true,
+    "defaultTestExecutionTimeAllowance": 120,
+    "maximumTestExecutionTimeAllowance": 180
   },
   "testTargets": [
     {
@@ -18,6 +21,7 @@
       }
     },
     {
+      "parallelizable": true,
       "target": {
         "containerPath": "container:PinVoyager.xcodeproj",
         "identifier": "02C39D37CED37712CBDD9283",

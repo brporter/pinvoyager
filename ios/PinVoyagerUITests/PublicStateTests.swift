@@ -2,7 +2,7 @@ import PinVoyagerData
 import XCTest
 
 @MainActor
-final class PublicStateTests: XCTestCase {
+final class PublicStateTests: UITestCase {
   func testCorruptImageShowsAnErrorAndProcessingAndFailedPhotosRemainDistinct() throws {
     var fixture = try FixtureLaunch()
     var detail = try Self.detail()
@@ -21,7 +21,6 @@ final class PublicStateTests: XCTestCase {
       body: Data("not an image".utf8)
     )
     let app = try fixture.launch()
-    try app.showDiscover()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     app.buttons["Photos"].tap()
     XCTAssertTrue(app.staticTexts["Processing"].exists)
@@ -31,12 +30,12 @@ final class PublicStateTests: XCTestCase {
     app.reveal(photo)
     photo.tap()
     XCTAssertTrue(
-      app.staticTexts["This photograph could not be decoded."].waitForExistence(timeout: 5)
+      app.staticTexts["This photograph could not be decoded."].waitUntilExists(timeout: 5)
     )
     app.buttons["Close"].tap()
     app.buttons["More"].tap()
     app.buttons["Report voyage"].tap()
-    XCTAssertTrue(app.buttons["Submit report"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Submit report"].waitUntilExists(timeout: 5))
     app.buttons["Cancel"].tap()
   }
 
@@ -60,16 +59,15 @@ final class PublicStateTests: XCTestCase {
       ])
     )
     let app = try fixture.launch()
-    try app.showDiscover()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["No photos"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No photos"].waitUntilExists(timeout: 5))
     app.buttons["View traveler"].tap()
-    XCTAssertTrue(app.staticTexts["No public voyages"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No public voyages"].waitUntilExists(timeout: 5))
     XCTAssertTrue(app.staticTexts["Traveler"].exists)
     try XCTUnwrap(
       app.buttons.matching(identifier: "My Voyages").allElementsBoundByIndex.first { $0.isHittable }
     ).tap()
-    XCTAssertTrue(app.staticTexts["No saved voyages"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No saved voyages"].waitUntilExists(timeout: 5))
   }
 
   func testUnavailableVoyageOffersRetryWithoutDisplayingItsOldMetadata() throws {
@@ -78,12 +76,11 @@ final class PublicStateTests: XCTestCase {
     fixture.reply("/api/voyages", body: try FixtureLaunch.fixture("voyage_list"))
     fixture.reply("/api/voyages/\(detail["id"]!)", body: Data("{}".utf8), status: 503)
     let app = try fixture.launch()
-    try app.showDiscover()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     let retry = app.buttons["Try again"]
-    XCTAssertTrue(retry.waitForExistence(timeout: 5))
+    XCTAssertTrue(retry.waitUntilExists(timeout: 5))
     retry.tap()
-    XCTAssertTrue(retry.waitForExistence(timeout: 5))
+    XCTAssertTrue(retry.waitUntilExists(timeout: 5))
     XCTAssertFalse(app.buttons["View traveler"].exists)
   }
 

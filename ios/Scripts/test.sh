@@ -13,9 +13,18 @@ phone_id="${1:-$(choose_device iPhone)}"
 ipad_id="${2:-$(choose_device iPad)}"
 result_path="ios/TestResults/$(date +%Y%m%d-%H%M%S).xcresult"
 ipad_result_path="${result_path%.xcresult}-ipad.xcresult"
+workers="${IOS_TEST_WORKERS:-2}"
+if [[ "$workers" != 1 && "$workers" != 2 ]]; then
+  echo "IOS_TEST_WORKERS must be 1 or 2." >&2
+  exit 1
+fi
 run_tests() {
   local device_id="$1" bundle="$2"
   shift 2
+  # Xcode may emit separate profiles for simulator workers. Remove earlier counters so a
+  # later run cannot pass coverage using tests that it did not execute.
+  local profile_root="ios/.derivedData/Build/ProfileData"
+  rm -rf "$profile_root"
   set +e
   xcodebuild test -project ios/PinVoyager.xcodeproj -scheme PinVoyager \
     -testPlan PinVoyager -destination "platform=iOS Simulator,id=$device_id" \
@@ -23,9 +32,8 @@ run_tests() {
     -resultBundlePath "$bundle" CODE_SIGN_IDENTITY=- "$@"
   local result=$?
   set -e
-  local profile="ios/.derivedData/Build/ProfileData/$device_id/Coverage.profdata"
-  if [[ -f "$profile" ]]; then
-    cp "$profile" "${bundle%.xcresult}.profdata"
+  if [[ -d "$profile_root" ]]; then
+    cp -R "$profile_root" "${bundle%.xcresult}-profiles"
   fi
   return "$result"
 }
@@ -35,9 +43,11 @@ if ! xcrun simctl list devices booted --json | python3 -c 'import json,sys; ids=
 fi
 xcrun simctl bootstatus "$phone_id" -b
 xcrun simctl addmedia "$phone_id" crates/api/tests/fixtures/quadrants-rgb.heic
-run_tests "$phone_id" "$result_path"
+run_tests "$phone_id" "$result_path" \
+  -parallel-testing-enabled YES -parallel-testing-worker-count "$workers"
 run_tests "$ipad_id" "$ipad_result_path" \
+  -parallel-testing-enabled NO \
   -only-testing:PinVoyagerUITests/NavigationTests/testGuestTabsAndExplicitSignIn
 python3 ios/Scripts/coverage.py "$result_path" --derived-data ios/.derivedData \
-  --profile "${result_path%.xcresult}.profdata" \
-  --profile "${ipad_result_path%.xcresult}.profdata"
+  --profile-directory "${result_path%.xcresult}-profiles" \
+  --profile-directory "${ipad_result_path%.xcresult}-profiles"

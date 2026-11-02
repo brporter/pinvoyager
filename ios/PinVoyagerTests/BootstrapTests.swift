@@ -35,6 +35,38 @@ private final class StartupMarker { var returned = false }
 
 @MainActor
 final class BootstrapTests: XCTestCase {
+  func testFixtureStartingTabsIgnoreSavedDestinationsButOrdinaryLaunchesRestoreThem() {
+    let source = SceneRouter()
+    source.selectedTab = .account
+    source.discoverPath = [.profile("traveler")]
+    source.accountPath = [.help]
+    let saved = source.restorationData(accountId: nil)
+    for tab in AppTab.allCases {
+      let router = SceneRouter()
+      DevelopmentFixtures.restoreNavigation(
+        router,
+        savedRoutes: saved,
+        workspace: nil,
+        environment: ["PINVOYAGER_TEST_TAB": tab.rawValue]
+      )
+      XCTAssertEqual(router.selectedTab, tab)
+      XCTAssertTrue(router.discoverPath.isEmpty)
+      XCTAssertTrue(router.accountPath.isEmpty)
+    }
+    for environment in [[:], ["PINVOYAGER_TEST_TAB": "unknown"]] {
+      let router = SceneRouter()
+      DevelopmentFixtures.restoreNavigation(
+        router,
+        savedRoutes: saved,
+        workspace: nil,
+        environment: environment
+      )
+      XCTAssertEqual(router.selectedTab, .account)
+      XCTAssertEqual(router.discoverPath, source.discoverPath)
+      XCTAssertEqual(router.accountPath, source.accountPath)
+    }
+  }
+
   func testConcurrentStartupCallersWaitForTheSameStoreBeforeProceeding() async throws {
     let started = expectation(description: "Workspace opening is in progress")
     let barrier = WorkspaceOpenBarrier(

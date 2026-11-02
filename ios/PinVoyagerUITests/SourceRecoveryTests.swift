@@ -2,7 +2,7 @@ import PinVoyagerDomain
 import XCTest
 
 @MainActor
-final class SourceRecoveryTests: XCTestCase {
+final class SourceRecoveryTests: UITestCase {
   func testReplacingAFailedPublicPhotoRequiresConsentAndKeepsExactlyOneActivePhoto() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
@@ -21,8 +21,7 @@ final class SourceRecoveryTests: XCTestCase {
     photo.variant = .failed
     fixture.workspace.voyages = [voyage]
     fixture.workspace.photos = [photo]
-    let app = try fixture.launch()
-    app.buttons["My Voyages"].tap()
+    let app = try fixture.launch(tab: .voyages)
     app.staticTexts[voyage.fields.title].tap()
     let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", photo.filename))
       .firstMatch
@@ -30,7 +29,7 @@ final class SourceRecoveryTests: XCTestCase {
     row.swipeLeft()
     app.buttons["Replace source"].tap()
     let choose = app.buttons["Choose a replacement source"]
-    XCTAssertTrue(choose.waitForExistence(timeout: 5))
+    XCTAssertTrue(choose.waitUntilExists(timeout: 5))
     XCTAssertFalse(choose.isEnabled)
     app.switches["The replacement will become public as it uploads"].coordinate(
       withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)
@@ -41,7 +40,7 @@ final class SourceRecoveryTests: XCTestCase {
       app.navigationBars["Recover photograph"].waitForNonExistence(timeout: 10),
       app.debugDescription
     )
-    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    XCTAssertTrue(row.waitUntilExists(timeout: 5))
     XCTAssertTrue(row.label.contains("Saved on this iPhone"), row.label)
     app.buttons["Sync"].tap()
     app.reveal(app.staticTexts["Upload photograph"])

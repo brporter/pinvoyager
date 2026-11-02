@@ -85,6 +85,7 @@ jobs:
         run: |
           python3 ios/Scripts/bundle-legal.py --check
           python3 -m unittest discover -s ios/Scripts -p 'test_association.py'
+          python3 -m unittest discover -s ios/Scripts -p 'test_coverage.py'
       - name: Check Google Swift formatting
         run: |
           python3 -m unittest discover -s ios/Scripts -p 'test_format.py'

@@ -3,7 +3,7 @@ import UIKit
 import XCTest
 
 @MainActor
-final class StorageFlowTests: XCTestCase {
+final class StorageFlowTests: UITestCase {
   func testDownloadManagerSavesAndRemovesAnOwnerCopyAndExportListsMissingOriginals() throws {
     var fixture = try FixtureLaunch()
     var voyage = LocalVoyage(
@@ -25,17 +25,16 @@ final class StorageFlowTests: XCTestCase {
       $0.fill(CGRect(x: 0, y: 0, width: 120, height: 80))
     }
     try fixture.provideOwnerDownload(voyage: voyage, photo: photo, bytes: bytes)
-    let app = try fixture.launch()
-    app.buttons["Account"].tap()
+    let app = try fixture.launch(tab: .account)
     app.buttons["Sync and storage"].tap()
     app.reveal(app.buttons["Manage downloads"])
     app.buttons["Manage downloads"].tap()
     XCTAssertTrue(
-      app.staticTexts["0 of 1 photos saved for offline use"].waitForExistence(timeout: 5)
+      app.staticTexts["0 of 1 photos saved for offline use"].waitUntilExists(timeout: 5)
     )
     app.buttons["Download or resume owner copy"].tap()
     XCTAssertTrue(
-      app.staticTexts["1 of 1 photos saved for offline use"].waitForExistence(timeout: 5)
+      app.staticTexts["1 of 1 photos saved for offline use"].waitUntilExists(timeout: 5)
     )
     XCTAssertTrue(
       app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Last saved")).firstMatch
@@ -48,17 +47,17 @@ final class StorageFlowTests: XCTestCase {
       }
     ).tap()
     XCTAssertTrue(
-      app.staticTexts["0 of 1 photos saved for offline use"].waitForExistence(timeout: 5)
+      app.staticTexts["0 of 1 photos saved for offline use"].waitUntilExists(timeout: 5)
     )
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.reveal(app.buttons["Export local draft"])
     app.buttons["Export local draft"].tap()
     app.staticTexts[voyage.fields.title].tap()
     XCTAssertTrue(
-      app.staticTexts["Originals unavailable on this device"].waitForExistence(timeout: 5)
+      app.staticTexts["Originals unavailable on this device"].waitUntilExists(timeout: 5)
     )
     XCTAssertTrue(app.staticTexts[photo.filename].exists)
     app.buttons["Prepare export of local work"].tap()
-    XCTAssertTrue(app.buttons["Save export to Files"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Save export to Files"].waitUntilExists(timeout: 5))
   }
 }

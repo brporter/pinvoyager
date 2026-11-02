@@ -95,7 +95,19 @@ struct RootView: View {
     }
     .onAppear {
       guard !restored else { return }
-      router.restore(savedRoutes, workspace: model.workspace)
+      #if DEBUG
+        if AppBootstrap.isUITesting {
+          DevelopmentFixtures.restoreNavigation(
+            router,
+            savedRoutes: savedRoutes,
+            workspace: model.workspace
+          )
+        } else {
+          router.restore(savedRoutes, workspace: model.workspace)
+        }
+      #else
+        router.restore(savedRoutes, workspace: model.workspace)
+      #endif
       restored = true
       if router.pendingRoute != nil, model.workspace != nil {
         Task { await router.resumePendingRoute(model: model) }
