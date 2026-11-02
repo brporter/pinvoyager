@@ -23,6 +23,7 @@ final class DiscoveryMapTests: XCTestCase {
       ])
     )
     let app = try fixture.launch()
+    try app.showDiscover()
     let target = app.staticTexts["Discovery voyage 6"]
     app.reveal(target, maximumSwipes: 20)
     XCTAssertTrue(target.isHittable)
@@ -49,6 +50,7 @@ final class DiscoveryMapTests: XCTestCase {
     let voyage = try XCTUnwrap(try JSONSerialization.jsonObject(with: detail) as? [String: Any])
     fixture.reply("/api/voyages/" + (try XCTUnwrap(voyage["id"] as? String)), body: detail)
     let app = try fixture.launch()
+    try app.showDiscover()
     app.buttons["Map"].tap()
     XCTAssertTrue(app.staticTexts["Zoom in to see more photographs"].waitForExistence(timeout: 10))
     let pin = app.buttons["2 photographs in 1 voyages"]

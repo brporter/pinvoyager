@@ -134,12 +134,28 @@ picker can take longer than five seconds to become accessible on a fresh CI simu
 `NavigationTests.testNewOfflineDraftCanAdvanceDirectlyToPhotoImportWithoutAServerIdentifier`
 selects My Voyages and uses its navigation bar's Create a voyage button. The empty
 list also offers a button with that label, so an app-wide query is ambiguous.
-Both tests in `ios/PinVoyagerUITests/ProfileFlowTests.swift` start on My Voyages,
-then select Discover and wait for View traveler before opening the profile. This
-checks the navigation from a non-Discover tab instead of assuming the app launches
-on Discover. `ios/PinVoyager/App/RootView.swift::RootView` and
+Public browsing, public-state, discovery-map, profile, and reporting tests use
+`ios/PinVoyagerUITests/AccessibilityActions.swift::XCUIApplication.showDiscover`
+before reading the discovery list or map. The helper selects the Discover tab,
+returns through at most eight public destinations to its navigation root, and
+selects Recent. It waits for the tab, navigation controls, root, and Recent control;
+missing controls or a root that cannot be reached fail test setup. This makes the
+starting screen explicit while retaining the app's scene restoration behavior.
+`ios/PinVoyagerUITests/PublicBrowsingTests.swift::testDiscoverSetupReturnsToRecentFromEveryTabAndANestedProfile`
+checks returning from each other tab, Map mode, and a profile opened through a
+voyage. Both `ProfileFlowTests` also start on My Voyages before using the helper.
+These changes are exploratory while debugging the GitHub Actions UI failures;
+hosted results must confirm whether they resolve the suite's state dependency.
+`ios/PinVoyager/App/RootView.swift::RootView` and
 `ios/PinVoyager/App/SceneRouter.swift::SceneRouter.restore` preserve the selected
 tab between launches; UI-test fixture data does not reset that scene state.
+
+On November 2, 2026, the new setup regression first failed because My Voyages
+remained selected, then passed after implementing the helper. The complete
+`ios/Scripts/test.sh` run on iOS 27.0 passed 256 non-UI tests, all 56 iPhone UI
+tests, and the iPad navigation check. Aggregate production Swift executable-line
+coverage was 18,703 of 19,565 lines (95.59%). This local result does not establish
+whether the exploratory changes resolve the hosted CI failures.
 
 `ios/Scripts/coverage.py` retains the `xccov` report and checks production Swift
 with Xcode's `llvm-cov` and recorded simulator counters. The installed Xcode

@@ -74,6 +74,42 @@ extension XCUIElement {
 
 extension XCUIApplication {
   @MainActor
+  func showDiscover(file: StaticString = #filePath, line: UInt = #line) throws {
+    let tab = tabBars.buttons["Discover"]
+    try XCTUnwrap(
+      tab.waitForExistence(timeout: 10) ? tab : nil,
+      "The Discover tab must be available.",
+      file: file,
+      line: line
+    ).tap()
+
+    let root = navigationBars["Discover"]
+    for _ in 0..<8 {
+      if root.exists { break }
+      let back = navigationBars.buttons.element(boundBy: 0)
+      try XCTUnwrap(
+        back.waitForExistence(timeout: 5) ? back : nil,
+        "A public destination must offer navigation back to Discover.",
+        file: file,
+        line: line
+      ).tap()
+    }
+    _ = try XCTUnwrap(
+      root.waitForExistence(timeout: 5) ? root : nil,
+      "Discover setup must return to the root navigation screen.",
+      file: file,
+      line: line
+    )
+    let recent = buttons["Recent"]
+    try XCTUnwrap(
+      recent.waitForExistence(timeout: 5) ? recent : nil,
+      "Discover must offer its Recent list.",
+      file: file,
+      line: line
+    ).tap()
+  }
+
+  @MainActor
   func selectFirstSystemPhoto(requiresConfirmation: Bool = true) {
     let photo = images.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Photo,")).firstMatch
     XCTAssertTrue(photo.waitForExistence(timeout: 10), debugDescription)

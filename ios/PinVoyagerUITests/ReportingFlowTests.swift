@@ -42,6 +42,7 @@ final class ReportingFlowTests: XCTestCase {
       ])
     )
     let app = try fixture.launch()
+    try app.showDiscover()
     XCTAssertNotEqual(owner, peer)
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     app.buttons["More"].tap()

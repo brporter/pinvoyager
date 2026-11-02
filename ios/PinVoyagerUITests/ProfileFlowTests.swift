@@ -8,7 +8,7 @@ final class ProfileFlowTests: XCTestCase {
     // Cover launches that restore a tab other than Discover.
     app.buttons["My Voyages"].tap()
     XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
-    app.buttons["Discover"].tap()
+    try app.showDiscover()
     let traveler = app.buttons["View traveler"].firstMatch
     XCTAssertTrue(traveler.waitForExistence(timeout: 10))
     traveler.tap()
@@ -40,7 +40,7 @@ final class ProfileFlowTests: XCTestCase {
     // Cover launches that restore a tab other than Discover.
     app.buttons["My Voyages"].tap()
     XCTAssertTrue(app.navigationBars["My Voyages"].waitForExistence(timeout: 5))
-    app.buttons["Discover"].tap()
+    try app.showDiscover()
     let traveler = app.buttons["View traveler"].firstMatch
     XCTAssertTrue(traveler.waitForExistence(timeout: 10))
     traveler.tap()

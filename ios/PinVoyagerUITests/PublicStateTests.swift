@@ -21,6 +21,7 @@ final class PublicStateTests: XCTestCase {
       body: Data("not an image".utf8)
     )
     let app = try fixture.launch()
+    try app.showDiscover()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     app.buttons["Photos"].tap()
     XCTAssertTrue(app.staticTexts["Processing"].exists)
@@ -59,6 +60,7 @@ final class PublicStateTests: XCTestCase {
       ])
     )
     let app = try fixture.launch()
+    try app.showDiscover()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     XCTAssertTrue(app.staticTexts["No photos"].waitForExistence(timeout: 5))
     app.buttons["View traveler"].tap()
@@ -76,6 +78,7 @@ final class PublicStateTests: XCTestCase {
     fixture.reply("/api/voyages", body: try FixtureLaunch.fixture("voyage_list"))
     fixture.reply("/api/voyages/\(detail["id"]!)", body: Data("{}".utf8), status: 503)
     let app = try fixture.launch()
+    try app.showDiscover()
     app.staticTexts["Three weeks in Hokkaido"].firstMatch.tap()
     let retry = app.buttons["Try again"]
     XCTAssertTrue(retry.waitForExistence(timeout: 5))

@@ -25,6 +25,33 @@ final class PublicBrowsingTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Public profile"].exists)
   }
 
+  func testDiscoverSetupReturnsToRecentFromEveryTabAndANestedProfile() throws {
+    let app = try launchPublicApp()
+    let card = app.staticTexts["Three weeks in Hokkaido"].firstMatch
+    for title in ["My Voyages", "Sync", "Account"] {
+      app.tabBars.buttons[title].tap()
+      try app.showDiscover()
+      let root = app.navigationBars["Discover"]
+      XCTAssertTrue(root.waitForExistence(timeout: 5), "Discover setup must leave \(title).")
+      guard root.exists else { return }
+      XCTAssertTrue(card.waitForExistence(timeout: 5))
+      XCTAssertTrue(card.isHittable)
+    }
+
+    app.buttons["Map"].tap()
+    try app.showDiscover()
+    XCTAssertTrue(card.isHittable, "Discover setup must select Recent.")
+    card.tap()
+    let traveler = app.buttons["View traveler"]
+    XCTAssertTrue(traveler.waitForExistence(timeout: 5))
+    traveler.tap()
+    XCTAssertTrue(app.staticTexts["fixture-owner"].waitForExistence(timeout: 5))
+    app.tabBars.buttons["My Voyages"].tap()
+    try app.showDiscover()
+    XCTAssertTrue(app.navigationBars["Discover"].waitForExistence(timeout: 5))
+    XCTAssertTrue(card.isHittable, "Discover setup must leave the nested profile and voyage.")
+  }
+
   private func launchPublicApp() throws -> XCUIApplication {
     let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent().deletingLastPathComponent()
@@ -70,6 +97,7 @@ final class PublicBrowsingTests: XCTestCase {
       as: UTF8.self
     )
     app.launch()
+    try app.showDiscover()
     return app
   }
 }
