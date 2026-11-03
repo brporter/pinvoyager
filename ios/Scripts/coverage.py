@@ -35,7 +35,7 @@ def main():
     parser.add_argument("--profile", type=Path, action="append", default=[])
     parser.add_argument("--profile-directory", type=Path, action="append", default=[])
     parser.add_argument("--report-only", action="store_true",
-                        help="Report reduced-suite coverage without enforcing the full-suite 95% threshold.")
+                        help="Report reduced-suite coverage without enforcing the full-suite 95%% threshold.")
     args = parser.parse_args()
     try:
         profiles = collect_profiles(args.derived_data, args.device, args.profile, args.profile_directory)

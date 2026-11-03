@@ -139,6 +139,14 @@ was 8,709 / 19,672 lines (44.27%); report-only mode succeeded, while the default
 regression failed before CI-mode support and passed afterward; all 12 Python
 script tests passed.
 
+`test_coverage.py::CoverageProfilesTests.test_help_formats_the_report_only_option_without_requiring_xcode`
+invokes the real coverage command with `--help`. It first reproduced the invalid
+percent formatting in the `--report-only` help string, then passed after escaping
+`95%%` for argparse (displayed as `95%`). Python 3.15 on the hosted runner rejects
+invalid help strings while registering arguments; local Python 3.9 otherwise
+reaches this validation only when formatting help. All 13 script tests pass with
+this regression included.
+
 Run the complete suite locally, including all UI tests and the 95%
 executable-line coverage check:
 

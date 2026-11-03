@@ -1,6 +1,8 @@
 """Check that parallel test runs cannot silently lose or reuse coverage counters."""
 
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -8,6 +10,15 @@ from coverage import collect_profiles
 
 
 class CoverageProfilesTests(unittest.TestCase):
+    def test_help_formats_the_report_only_option_without_requiring_xcode(self):
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("coverage.py")), "--help"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--report-only", result.stdout)
+        self.assertIn("95% threshold", result.stdout)
+
     def test_collects_every_worker_and_ipad_without_reusing_stale_derived_data(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
