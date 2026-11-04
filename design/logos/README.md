@@ -1,5 +1,21 @@
 # PinVoyager logo concepts
 
+The current iOS and website icon is the lens-and-push-pin artwork exported from
+`PinVoyager.icon` into `PinVoyager Exports/`. The native `AppIcon.appiconset` and
+`BrandIcon.imageset` in `ios/PinVoyager/DesignSystem/Assets.xcassets` contain the
+default and dark exports. Keep those copies aligned when replacing artwork.
+The website uses small PNG derivatives of `BrandIcon.imageset` for its header,
+favicons, and iPhone home-screen icon. Regenerate them from the repository root
+on macOS after changing the native artwork:
+
+```sh
+sips -z 64 64 'ios/PinVoyager/DesignSystem/Assets.xcassets/BrandIcon.imageset/PinVoyager-iOS-Default-1024@1x.png' --out web/public/brand/pinvoyager-light.png
+sips -z 64 64 'ios/PinVoyager/DesignSystem/Assets.xcassets/BrandIcon.imageset/PinVoyager-iOS-Dark-1024@1x.png' --out web/public/brand/pinvoyager-dark.png
+sips -z 180 180 'ios/PinVoyager/DesignSystem/Assets.xcassets/BrandIcon.imageset/PinVoyager-iOS-Default-1024@1x.png' --out web/public/apple-touch-icon.png
+```
+
+The following studies preserve the earlier design exploration.
+
 The [lens and push pin experiment](lens-pin/README.md) explores six separate
 SVG layers: sky, stars, background mountain, foreground mountain, camera lens,
 and a visible orange push pin. The [daytime/nighttime comparison](lens-pin/appearances.svg)
@@ -14,11 +30,11 @@ studies and separate vector source layers.
 
 Open [the comparison sheet](concepts.svg) to compare three original, single-color
 SVG concepts ([PNG preview](concepts-preview.png)), including 24 px samples and white-on-teal versions. These are
-proposals; the current site mark has not been replaced.
+earlier proposals; the lens-and-push-pin artwork now supplies the site mark.
 
 | Concept | Idea | Best use |
 | --- | --- | --- |
-| [Horizon pin](horizon-pin.svg) | A location pin containing mountains and a sun: photographs tied to places. | Recommended primary mark; the clearest connection to PinVoyager's purpose. |
+| [Horizon pin](horizon-pin.svg) | A location pin containing mountains and a sun: photographs tied to places. | Earlier website mark. |
 | [Voyager compass](voyager-compass.svg) | An open compass ring around a bold V-shaped direction marker. | Travel apparel and a broader exploration identity. |
 | [Waypoint P](waypoint-p.svg) | A continuous route draws a P, with a solid origin and a ring waypoint. | Compact app icons, sleeve prints, and an understated monogram. |
 

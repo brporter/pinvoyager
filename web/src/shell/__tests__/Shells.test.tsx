@@ -1,4 +1,3 @@
-import horizonPin from "../../../../design/logos/horizon-pin.svg";
 import "@testing-library/jest-dom/vitest";
 
 import type { ReactNode } from "react";
@@ -74,7 +73,7 @@ it.each([true, false])("provides legal footer links in both shells (desktop=%s)"
   }
 });
 
-it.each([true, false])("uses Horizon Pin in both shells (desktop=%s)", (desktop) => {
+it.each([true, false])("uses the iOS app icon in both shells (desktop=%s)", (desktop) => {
   mocks.isDesktop.mockReturnValue(desktop);
   mocks.useAuth.mockReturnValue({ status: "anonymous", user: null });
   for (const Shell of [AppShell, AuthShell]) {
@@ -82,7 +81,7 @@ it.each([true, false])("uses Horizon Pin in both shells (desktop=%s)", (desktop)
     const brand = screen.getByRole("link", { name: "PinVoyager" });
     expect(brand).toHaveAttribute("href", "/");
     const logo = brand.querySelector("img");
-    expect(logo).toHaveAttribute("src", horizonPin);
+    expect(logo).toHaveAttribute("src", "/brand/pinvoyager-light.png");
     expect(logo).toHaveAttribute("alt", "");
     unmount();
   }

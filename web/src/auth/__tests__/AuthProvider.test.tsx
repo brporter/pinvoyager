@@ -6,7 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import horizonPin from "../../../../design/logos/horizon-pin.svg";
 import { isApiError } from "../../api/client";
 import { AuthProvider } from "../AuthProvider";
 import { useAuth } from "../useAuth";
@@ -83,7 +82,7 @@ describe("AuthProvider", () => {
       await screen.findByRole("heading", { name: "Choose your display name" }),
     ).toBeInTheDocument();
     const brand = screen.getByRole("link", { name: "PinVoyager" });
-    expect(brand.querySelector("img")).toHaveAttribute("src", horizonPin);
+    expect(brand.querySelector("img")).toHaveAttribute("src", "/brand/pinvoyager-light.png");
     expect(screen.queryByTestId("status")).not.toBeInTheDocument();
     await user.type(screen.getByRole("textbox", { name: "Display name" }), "betaporter");
     expect(screen.getByText("Public profile: /u/betaporter")).toBeInTheDocument();
@@ -119,7 +118,7 @@ describe("AuthProvider", () => {
     expect(await screen.findByText("That name is unavailable.")).toBeInTheDocument();
     expect(name).toHaveValue("settings");
     const brand = screen.getByRole("link", { name: "PinVoyager" });
-    expect(brand.querySelector("img")).toHaveAttribute("src", horizonPin);
+    expect(brand.querySelector("img")).toHaveAttribute("src", "/brand/pinvoyager-light.png");
     expect(screen.queryByTestId("status")).not.toBeInTheDocument();
   });
   it("does not report a server failure as being signed out", async () => {

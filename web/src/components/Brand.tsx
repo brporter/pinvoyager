@@ -1,11 +1,19 @@
-/** Links to the site home with the Horizon Pin logo and site name. */
+/** Links to the site home with the iOS app artwork and site name. */
 import { Link } from "react-router";
-import horizonPin from "../../../design/logos/horizon-pin.svg";
+
+export function BrandIcon() {
+  return (
+    <picture className="pv-brand-mark">
+      <source media="(prefers-color-scheme: dark)" srcSet="/brand/pinvoyager-dark.png" />
+      <img src="/brand/pinvoyager-light.png" width={32} height={32} alt="" />
+    </picture>
+  );
+}
 
 export function Brand({ to = "/" }: { to?: string }) {
   return (
     <Link className="pv-brand" to={to}>
-      <img className="pv-brand-mark" src={horizonPin} width={22} height={22} alt="" />
+      <BrandIcon />
       PinVoyager
     </Link>
   );

@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 
 import { signInUrl } from "../api/client";
+import { BrandIcon } from "../components/Brand";
 import { ProviderButton } from "../components/ProviderButton";
 import { PROVIDERS } from "../components/providers";
 import type { Provider } from "../components/ProviderButton";
-import { PinIcon } from "../components/icons";
 import { AuthCard } from "./AuthCard";
 import { DevSignIn } from "./DevSignIn";
 import { REDIRECT_PARAM, destinationOr } from "./redirect";
@@ -42,7 +42,7 @@ export function SignIn() {
           marginBottom: "var(--pv-space-6)",
         }}
       >
-        <PinIcon size={34} strokeWidth={1.8} style={{ color: "var(--pv-accent)" }} />
+        <BrandIcon />
         <div style={{ textAlign: "center" }}>
           <h1 className="pv-h3" id="signin-heading">
             Sign in or create an account

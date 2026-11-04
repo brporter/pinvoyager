@@ -57,18 +57,25 @@ routes are accepted sign-in return destinations. See [site administration](../si
 
 ## Site identity
 
-Every page shows the Horizon Pin logo from `design/logos/horizon-pin.svg` beside
+Every page shows the same lens-and-push-pin icon as the iOS app beside
 PinVoyager, linking to `/`. `Brand` in `web/src/components/Brand.tsx` supplies this
 shared link. `TopNav` uses it on ordinary routes; `AuthShell` uses it on sign-in,
 callback, and legal routes at desktop and mobile widths. `ChooseDisplayName` also
 shows it while profile setup replaces the requested route. The image has empty
 alternative text because the adjacent site name labels the link.
 
-`web/index.html` declares `/favicon.svg` for every route. The favicon in
-`web/public/favicon.svg` copies the Horizon Pin SVG, preserving its teal color
-and transparent background. When changing the artwork, update that copy too.
-`web/src/components/__tests__/branding.test.ts` checks that it matches the source
-and is declared in the HTML. `web/src/shell/__tests__/Shells.test.tsx` checks both
+The brand image renders at 32 × 32 CSS pixels using 64 × 64 PNGs in
+`web/public/brand/`. A `picture` source selects the dark iOS artwork when
+`prefers-color-scheme: dark` matches; the default is the light artwork.
+`web/index.html` declares these same files as appearance-specific favicons for
+every route and `/apple-touch-icon.png` as the 180 × 180 home-screen icon.
+All three images are downsampled from the iOS `BrandIcon.imageset`, preserving
+its artwork and transparent corners. See [artwork sources and regeneration](../../design/logos/README.md).
+`web/src/components/__tests__/branding.test.tsx` checks appearance selection,
+image dimensions, favicon declarations, and the accessible home link.
+The sign-in card also uses the shared `BrandIcon` above its provider choices;
+`web/src/auth/__tests__/SignIn.test.tsx` checks that artwork.
+`web/src/shell/__tests__/Shells.test.tsx` checks both
 shells at both widths; `web/src/auth/__tests__/AuthProvider.test.tsx` checks the
 logo during display-name setup.
 

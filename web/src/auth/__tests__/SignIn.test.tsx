@@ -37,6 +37,16 @@ afterEach(() => {
 });
 
 describe("SignIn", () => {
+  it("uses the iOS app artwork above the provider choices", () => {
+    renderAt("/signin");
+    const card = screen.getByRole("region", { name: "Sign in or create an account" });
+    expect(card.querySelector("picture img")).toHaveAttribute("src", "/brand/pinvoyager-light.png");
+    expect(card.querySelector('source[media="(prefers-color-scheme: dark)"]')).toHaveAttribute(
+      "srcset",
+      "/brand/pinvoyager-dark.png",
+    );
+  });
+
   it.each(["anonymous", "loading", "failed"] as const)(
     "renders the provider choices while auth is %s",
     (status) => {
