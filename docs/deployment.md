@@ -216,10 +216,33 @@ the latter must include `apple` in `providers` and
 with `client_id=com.pinvoyager`, then test a signed iPhone build using the same website
 account. See [iOS setup](ios-running.md#native-apple-sign-in-setup).
 
+If only the Apple button is disabled, inspect `/api/client-capabilities` before
+changing Apple Developer settings. `http/auth/native.rs::capabilities` returns
+`native_authentication` for the native session protocol used by the app, including
+Google and Microsoft browser authorization. The separate
+`native_apple_authentication` flag requires Apple's native authorization support
+and an initialized Apple provider with a native client ID. `SignInView` in
+`ios/PinVoyager/Features/AccountView.swift` requires both flags for Apple.
+
+An absent Apple flag indicates an API version predating that capability. A false
+flag indicates that the API includes the capability but its Apple provider lacks
+native support. Check the running image, the deployment's publish job, the
+container's native client ID, and provider initialization errors. A successful
+push does not mean the new image reached production: failed or canceled checks
+prevent publishing. If a hosted runner could not acquire the job, retry the failed
+jobs after the GitHub Actions service recovers. After deploying, choose
+**Refresh sign-in options** in the app to fetch capabilities again.
+
 On November 4, 2026, the native client ID was added to the production environment
 file with a mode-600 backup. `docker compose config` resolved website ID
-`com.pinvoyager` and native ID `com.pinvoyager.app`. Live native capability still
-requires deploying this API revision and recreating the container as described above.
+`com.pinvoyager` and native ID `com.pinvoyager.app`. The first deployment of commit
+`52daf44` could not acquire a hosted iOS runner, so publishing was skipped and the
+older API kept the Apple button disabled. Retrying the failed jobs completed every
+check and published the images. After pulling the new API image and recreating the
+container, production returned both native capability flags as true. A native Apple
+attempt returned 201 with bound state, a nonce, and `Cache-Control: no-store`; browser
+Apple authorization still used `com.pinvoyager`. `python3 deploy/smoke.py` passed.
+Completing a real Apple login on a signed device remains a separate acceptance check.
 
 Sources: [Apple web configuration](https://developer.apple.com/help/account/capabilities/configure-sign-in-with-apple-for-the-web),
 [Apple private key creation](https://developer.apple.com/help/account/capabilities/create-a-sign-in-with-apple-private-key).
