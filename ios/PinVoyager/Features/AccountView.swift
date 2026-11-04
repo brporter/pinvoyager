@@ -154,9 +154,6 @@ struct SignInView: View {
 
   var linking = false
 
-  @State
-  private var ephemeral = false
-
   private var busy: Bool { presentation?.busy == true }
 
   private var error: String? { presentation?.error }
@@ -196,7 +193,6 @@ struct SignInView: View {
             }
           }
           if busy { ProgressView("Finishing sign-in") }
-          Toggle("Use another Google or Microsoft account", isOn: $ephemeral).disabled(busy)
           if let error { ErrorNotice(message: error) }
           Button("Refresh sign-in options") { Task { await model.checkCapabilities() } }.disabled(
             busy || model.offline
@@ -230,7 +226,7 @@ struct SignInView: View {
       if await presentation.signIn(
         provider: provider,
         linkingAccountId: linking ? account : nil,
-        ephemeral: ephemeral,
+        ephemeral: false,
         accept: { session in
           guard model.activeAccountId == account, model.workspace?.account.generation == generation
           else { throw AuthenticationError.canceled }

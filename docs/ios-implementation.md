@@ -183,7 +183,11 @@ Apple/Microsoft use the native system font with provider-specific metrics. See
 reference differences, artwork provenance, and regression checks. All three
 buttons have equal width and 44-point height, and cancellation leaves the current
 screen open. Linking and deletion verification use the same native Apple adapter.
-The account-switching toggle applies to Google and Microsoft only. The app never
+Google and Microsoft use the normal browser authentication session, allowing reuse
+of an existing provider login. Sign-in and linking offer no account-switching toggle.
+`ios/PinVoyagerUITests/AccountFlowTests.swift` checks that the switch is absent
+while provider buttons remain available in `testSignInDoesNotOfferAccountSwitching`
+and `testAccountNameMethodsBlockingExportAndHelp`. The app never
 falls back to browser Apple authorization when native Apple support is unavailable.
 See [native API behavior](native-api.md#native-apple-authorization) for audience,
 nonce, single-use, and account-binding checks. The entitlement is committed; real

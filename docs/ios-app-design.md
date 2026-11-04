@@ -382,8 +382,9 @@ an old voyage may have changed without moving to the first list page.
 Native sheet with logo, **Sign in with Apple**, **Sign in with Google**,
 **Sign in with Microsoft**, Terms, Privacy, and Cancel. Display only configured
 providers from the capability response; keep a meaningful retry state if none
-are available. Buttons launch `ASWebAuthenticationSession`, not an embedded
-`WKWebView`. A small **Use another account** option requests ephemeral browsing.
+are available. Google and Microsoft launch `ASWebAuthenticationSession` using the
+normal browser session, allowing reuse of an existing provider login. Apple uses
+native Authentication Services. The sheet does not offer a separate account-switching option.
 
 During exchange, disable duplicate starts and show **Finishing sign-in**. Provider
 cancellation returns to the sheet without an alarming error. Network or provider
@@ -1323,8 +1324,8 @@ sequenceDiagram
 
 Apple uses a custom button with official Apple Design Resources artwork and the
 native Authentication Services sheet for sign-in, linking, and deletion verification. Google and Microsoft use
-full-color provider logos and system browser sessions. The account-switching toggle
-applies only to Google and Microsoft; native Apple uses the device's Apple Account.
+full-color provider logos and normal system browser sessions, without an
+account-switching toggle; native Apple uses the device's Apple Account.
 All three buttons use Sign in with wording, aligned logo/title columns, the same
 white outlined shape, equal width, and a 44-point height. See
 [provider button guidelines](provider-sign-in-buttons.md) for brand-specific differences.

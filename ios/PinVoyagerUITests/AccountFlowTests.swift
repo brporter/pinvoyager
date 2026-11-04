@@ -3,6 +3,22 @@ import XCTest
 
 @MainActor
 final class AccountFlowTests: UITestCase {
+  func testSignInDoesNotOfferAccountSwitching() throws {
+    let fixture = try FixtureLaunch()
+    let app = XCUIApplication()
+    app.launchArguments = ["--ui-testing"]
+    app.launchEnvironment["PINVOYAGER_TEST_RESPONSES"] = String(
+      decoding: try JSONSerialization.data(withJSONObject: fixture.replies),
+      as: UTF8.self
+    )
+    app.launchFixture(tab: .account)
+    app.buttons["Sign in"].tap()
+    XCTAssertTrue(app.buttons["Sign in with Apple"].waitUntilExists(timeout: 5))
+    XCTAssertTrue(app.buttons["Sign in with Google"].exists)
+    XCTAssertTrue(app.buttons["Sign in with Microsoft"].exists)
+    XCTAssertFalse(app.switches["Use another Google or Microsoft account"].exists)
+  }
+
   func testAccountNameMethodsBlockingExportAndHelp() throws {
     var fixture = try FixtureLaunch()
     fixture.workspace.blockedAccounts = [UUID()]
@@ -54,7 +70,7 @@ final class AccountFlowTests: UITestCase {
     buttonScreenshot.name = "Branded sign-in buttons"
     buttonScreenshot.lifetime = .keepAlways
     add(buttonScreenshot)
-    app.switches["Use another Google or Microsoft account"].tap()
+    XCTAssertFalse(app.switches["Use another Google or Microsoft account"].exists)
     app.buttons["Sign in with Apple"].tap()
     XCTAssertTrue(app.staticTexts["This content is unavailable."].waitUntilExists(timeout: 5))
     app.buttons["Cancel"].tap()
