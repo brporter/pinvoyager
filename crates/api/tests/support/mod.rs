@@ -195,6 +195,7 @@ struct MockState {
     include_refresh_token: Arc<std::sync::atomic::AtomicBool>,
     microsoft_common: Arc<std::sync::atomic::AtomicBool>,
     revocations: Arc<Mutex<Vec<HashMap<String, String>>>>,
+    token_requests: Arc<Mutex<Vec<HashMap<String, String>>>>,
     fail_revocation: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -238,6 +239,7 @@ impl MockOidcProvider {
             include_refresh_token: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             microsoft_common: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             revocations: Arc::new(Mutex::new(Vec::new())),
+            token_requests: Arc::new(Mutex::new(Vec::new())),
             fail_revocation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
 
@@ -268,6 +270,14 @@ impl MockOidcProvider {
 
     /// The issuer URL to configure the service with, and the base for joining
     /// endpoint paths onto.
+    pub fn token_requests(&self) -> Vec<HashMap<String, String>> {
+        self.state
+            .token_requests
+            .lock()
+            .expect("token requests")
+            .clone()
+    }
+
     pub fn revocations(&self) -> Vec<HashMap<String, String>> {
         self.state.revocations.lock().expect("revocations").clone()
     }
@@ -400,6 +410,11 @@ async fn token(State(state): State<MockState>, body: String) -> Response {
         .into_owned()
         .collect();
 
+    state
+        .token_requests
+        .lock()
+        .expect("token requests")
+        .push(params.clone());
     let Some(code) = params.get("code") else {
         return oauth_error(StatusCode::BAD_REQUEST, "invalid_request", "no code");
     };

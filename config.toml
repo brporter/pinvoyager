@@ -141,6 +141,7 @@ cookie_secure = false
 # (six months maximum). It needs four values rather than two:
 #
 #   PINVOYAGER__AUTH__PROVIDERS__APPLE__CLIENT_ID=...      (Services ID, not App ID)
+#   PINVOYAGER__AUTH__PROVIDERS__APPLE__NATIVE_CLIENT_ID=... (iOS bundle ID; optional)
 #   PINVOYAGER__AUTH__PROVIDERS__APPLE__TEAM_ID=...
 #   PINVOYAGER__AUTH__PROVIDERS__APPLE__KEY_ID=...
 #   PINVOYAGER__AUTH__PROVIDERS__APPLE__PRIVATE_KEY_PEM=...  (contents of the .p8)

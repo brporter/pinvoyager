@@ -81,7 +81,9 @@ Sources: `run_service` in [`main.rs`](../crates/api/src/main.rs), `serve_router`
 Google and Microsoft use OIDC. Microsoft supports personal and organizational
 accounts through the common v2 authority with tenant and signing-key issuer
 validation (see the authentication flow reference). Apple adds signed client secrets and a form-POST
-callback. Accounts match provider and
+callback for browsers; iOS uses native Authentication Services authorization with a
+separately configured bundle ID audience. Both paths resolve the same grouped Apple
+subject. See [native Apple authorization](native-api.md#native-apple-authorization). Accounts match provider and
 subject, never email. Provider-supplied names are not account display names.
 
 Authorization starts by saving state, nonce, PKCE material, and a hash of a

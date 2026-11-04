@@ -26,6 +26,7 @@ const TEST_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\n\
 
 fn test_secret() -> AppleClientSecret {
     AppleClientSecret::new(&AppleProviderConfig {
+        native_client_id: None,
         client_id: "com.example.pinvoyager.service".to_owned(),
         team_id: "ABCDE12345".to_owned(),
         key_id: "KEYID67890".to_owned(),
@@ -138,6 +139,7 @@ fn client_secret_is_cached_and_renewed_before_expiry() {
 #[test]
 fn invalid_private_key_is_rejected_as_a_provider_configuration_error() {
     let result = AppleClientSecret::new(&AppleProviderConfig {
+        native_client_id: None,
         client_id: "com.example.pinvoyager.service".to_owned(),
         team_id: "ABCDE12345".to_owned(),
         key_id: "KEYID67890".to_owned(),
@@ -169,6 +171,7 @@ fn startup_probe_and_client_secret_source_mint_a_valid_token() {
 #[tokio::test]
 async fn apple_discovery_rejects_a_bad_key_before_network_discovery() {
     let config = AppleProviderConfig {
+        native_client_id: None,
         client_id: "com.example.pinvoyager.service".to_owned(),
         team_id: "ABCDE12345".to_owned(),
         key_id: "KEYID67890".to_owned(),
@@ -190,6 +193,7 @@ async fn apple_discovery_probes_its_key_and_uses_the_fixed_form_post_parameters(
 
     let mock = support::MockOidcProvider::start().await;
     let config = AppleProviderConfig {
+        native_client_id: None,
         client_id: "com.example.pinvoyager.service".to_owned(),
         team_id: "ABCDE12345".to_owned(),
         key_id: "KEYID67890".to_owned(),
@@ -224,7 +228,10 @@ async fn apple_provider_against_mock(mock: &support::MockOidcProvider) -> AppleP
     .await
     .expect("mock OIDC discovery should succeed");
 
-    AppleProvider { core }
+    AppleProvider {
+        core,
+        native_core: None,
+    }
 }
 
 #[tokio::test]
@@ -329,4 +336,44 @@ async fn deletion_prefers_revoking_a_fresh_refresh_token_when_apple_returns_one(
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0]["token_type_hint"], "refresh_token");
     assert_eq!(calls[0]["token"], format!("fresh-refresh-{code}"));
+}
+
+#[tokio::test]
+async fn native_apple_requires_a_distinct_bundle_id_and_never_changes_the_web_audience() {
+    use crate::auth::AuthProvider as _;
+    let mock = support::MockOidcProvider::start().await;
+    for native_id in [Some(""), Some("com.example.pinvoyager.service"), None] {
+        let config = AppleProviderConfig {
+            client_id: "com.example.pinvoyager.service".into(),
+            native_client_id: native_id.map(str::to_owned),
+            team_id: "ABCDE12345".into(),
+            key_id: "KEYID67890".into(),
+            private_key_pem: SecretString::from(TEST_KEY_PEM),
+        };
+        let result = AppleProvider::discover(
+            &config,
+            &Url::parse("https://pinvoyager.test").expect("valid test fixture"),
+            mock.issuer().as_str(),
+        )
+        .await;
+        if native_id.is_some() {
+            assert!(result.is_err());
+        } else {
+            let apple = result.expect("valid test fixture");
+            assert!(!apple.supports_native_apple());
+            assert!(
+                apple
+                    .exchange_native_apple("code", "nonce", None)
+                    .await
+                    .is_err()
+            );
+            let redirect = apple.authorize().expect("valid test fixture");
+            assert!(
+                redirect
+                    .url
+                    .query_pairs()
+                    .any(|(k, v)| k == "client_id" && v == "com.example.pinvoyager.service")
+            );
+        }
+    }
 }

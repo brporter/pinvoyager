@@ -58,6 +58,9 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 | [Contributor guide](../AGENTS.md) | Repository constraints, communication and writing guidance, test-first delivery, and coverage requirements. |
 | [This inventory](documentation-inventory.md) | Index of maintained Markdown documents. |
 
+[Root TODO](../TODO.md) tracks deferred Apple credential lifecycle handling and
+account deletion when fresh Apple authorization is unavailable.
+
 ## Supporting implementation references
 
 | Artifact | Purpose |
@@ -78,5 +81,8 @@ Start with [architecture](architecture.md) and [running locally](running.md).
 
 Generated coverage, build output, dependencies, local traces, and benchmark outputs are
 generated files outside this documentation inventory.
+
+[Provider sign-in buttons](provider-sign-in-buttons.md) records the shared iOS layout,
+provider guideline differences, and official artwork sources.
 
 [Native API behavior](native-api.md) records implemented native server contracts and verification.

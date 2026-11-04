@@ -512,3 +512,31 @@ profiles collected from the same production sources and build. The regression ch
 showed the previous single-device parser discarded iPhone coverage when passed two
 IDs; the combined report preserves the phone counts and adds the iPad layout paths.
 A failed test or coverage percentage still makes the script fail.
+
+## Native Apple sign-in setup
+
+Enable Sign in with Apple for the signed app's App ID. The project includes the
+`com.apple.developer.applesignin` entitlement; regenerate provisioning profiles if
+needed. Set `PINVOYAGER__AUTH__PROVIDERS__APPLE__NATIVE_CLIENT_ID` to the exact bundle ID
+in addition to the existing Services ID, team ID, key ID, and signing key settings.
+Associate the web Services ID with this primary App ID in Apple's portal before
+signing in an existing website user. Verify both clients receive the same Apple
+subject and retain the same PinVoyager account. The owner verified on November 4,
+2026 that production Services ID `com.pinvoyager` is associated with App ID
+`com.pinvoyager.app`. See [production deployment](deployment.md#apple) for the exact
+environment settings and API recreation command. Never configure the Services ID as
+the native audience. Production uses Apple's fixed issuer and HTTPS API origin.
+
+A server without a native client ID still supports web Apple sign-in, but advertises
+`native_apple_authentication: false`; iOS disables Apple sign-in on that server.
+The native app fetches a nonce before showing Apple's system sheet. The custom Apple
+entry button uses official artwork supplied by Apple Design Resources; see
+[provider button guidelines](provider-sign-in-buttons.md) for provenance and layout. Google and
+Microsoft still use `ASWebAuthenticationSession`; the account-switch toggle affects
+only those browser sessions. See [native protocol](native-api.md#native-apple-authorization).
+
+Provider artwork comes from [Google's approved assets](https://developers.google.com/identity/branding-guidelines)
+and [Microsoft's sign-in assets](https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-branding-in-apps).
+The bundled Google glyph preserves the supplied artwork at 3x resolution, extracted
+from the center of Google's iOS icon button. Microsoft's SVG is unchanged. Google
+Sans is bundled under the SIL Open Font License; see `ios/PinVoyager/Resources/Fonts`.

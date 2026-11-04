@@ -13,12 +13,18 @@ protocol BrowserAuthenticating {
 final class AuthenticationPresentation {
   private let authentication: NativeAuthentication
   private let browser: any BrowserAuthenticating
+  private let apple: (any AppleAuthorizing)?
   private(set) var busy = false
   private(set) var error: String?
 
-  init(authentication: NativeAuthentication, browser: any BrowserAuthenticating) {
+  init(
+    authentication: NativeAuthentication,
+    browser: any BrowserAuthenticating,
+    apple: (any AppleAuthorizing)? = nil
+  ) {
     self.authentication = authentication
     self.browser = browser
+    self.apple = apple
   }
 
   func signIn(
@@ -27,14 +33,32 @@ final class AuthenticationPresentation {
     ephemeral: Bool,
     accept: @MainActor (SessionExchange) async throws -> Void
   ) async -> Bool {
-    await perform(
-      ephemeral: ephemeral,
+    if provider == "apple" {
+      return await perform(
+        begin: { try await authentication.beginApple(linkingAccountId: linkingAccountId) },
+        complete: { pending in
+          guard let apple else { throw AuthenticationError.invalidAttempt }
+          let credential = try await apple.authorize(nonce: pending.nonce, state: pending.state)
+          try await accept(
+            authentication.completeApple(
+              code: credential.code,
+              state: credential.state,
+              pending: pending
+            )
+          )
+        },
+        cancel: { await authentication.cancel($0) }
+      )
+    }
+    return await perform(
       begin: {
         try await authentication.begin(provider: provider, linkingAccountId: linkingAccountId)
       },
-      finish: { callback, pending in
+      complete: { pending in
+        let callback = try await browser.open(pending.browserStartUrl, ephemeral: ephemeral)
         try await accept(authentication.complete(callback, pending: pending))
-      }
+      },
+      cancel: { await authentication.cancel($0) }
     )
   }
 
@@ -43,38 +67,55 @@ final class AuthenticationPresentation {
     accountId: UUID,
     accept: @MainActor (DeletionProof) async throws -> Void
   ) async -> Bool {
-    await perform(
-      ephemeral: false,
+    if provider == "apple" {
+      return await perform(
+        begin: { try await authentication.beginApple(deletionAccountId: accountId) },
+        complete: { pending in
+          guard let apple else { throw AuthenticationError.invalidAttempt }
+          let credential = try await apple.authorize(nonce: pending.nonce, state: pending.state)
+          try await accept(
+            authentication.completeAppleReauthentication(
+              code: credential.code,
+              state: credential.state,
+              pending: pending
+            )
+          )
+        },
+        cancel: { await authentication.cancel($0) }
+      )
+    }
+    return await perform(
       begin: {
         try await authentication.beginReauthentication(provider: provider, accountId: accountId)
       },
-      finish: { callback, pending in
+      complete: { pending in
+        let callback = try await browser.open(pending.browserStartUrl, ephemeral: false)
         try await accept(authentication.completeReauthentication(callback, pending: pending))
-      }
+      },
+      cancel: { await authentication.cancel($0) }
     )
   }
 
-  private func perform(
-    ephemeral: Bool,
-    begin: () async throws -> PendingAuthentication,
-    finish: (URL, PendingAuthentication) async throws -> Void
+  private func perform<Pending>(
+    begin: () async throws -> Pending,
+    complete: (Pending) async throws -> Void,
+    cancel: (Pending) async -> Void
   ) async -> Bool {
     guard !busy else { return false }
     busy = true
     error = nil
     defer { busy = false }
-    var pending: PendingAuthentication?
+    var pending: Pending?
     do {
       let attempt = try await begin()
       pending = attempt
-      let callback = try await browser.open(attempt.browserStartUrl, ephemeral: ephemeral)
-      try await finish(callback, attempt)
+      try await complete(attempt)
       return true
     } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
-      // Closing the system browser returns to the current screen without an error alert.
+    } catch let failure as ASAuthorizationError where failure.code == .canceled {
     } catch AuthenticationError.canceled {
     } catch { self.error = error.localizedDescription }
-    if let pending { await authentication.cancel(pending) }
+    if let pending { await cancel(pending) }
     return false
   }
 }

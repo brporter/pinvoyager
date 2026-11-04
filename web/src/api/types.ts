@@ -322,6 +322,7 @@ export interface PublicationIntent {
 /** The native client and website share these server response contracts. */
 export interface NativeCapabilities {
   native_authentication: boolean;
+  native_apple_authentication?: boolean;
   native_protocol_versions: number[];
   providers: string[];
   formats: string[];

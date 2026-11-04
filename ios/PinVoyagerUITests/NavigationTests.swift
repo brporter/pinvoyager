@@ -36,7 +36,7 @@ final class NavigationTests: UITestCase {
     XCTAssertTrue(app.buttons["Discover"].waitUntilExists(timeout: 10))
     app.buttons["Account"].tap()
     XCTAssertTrue(app.staticTexts["Sign in to your account"].waitUntilExists(timeout: 5))
-    XCTAssertFalse(app.buttons["Continue with Apple"].exists)
+    XCTAssertFalse(app.buttons["Sign in with Apple"].exists)
     app.buttons["My Voyages"].tap()
     XCTAssertTrue(app.staticTexts["Sign in to see your voyages"].exists)
     app.buttons["Sync"].tap()

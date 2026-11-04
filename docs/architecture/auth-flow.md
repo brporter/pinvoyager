@@ -3,7 +3,10 @@
 [`http/auth.rs::routes`](../../crates/api/src/http/auth.rs) registers provider start,
 GET/POST callback, provider-link start, logout, and current-user endpoints.
 Google and Microsoft use OpenID Connect; Apple uses an OIDC form callback and
-signed client secret. These are the three supported authentication providers.
+signed client secret for browser sign-in. These are the three supported authentication providers.
+iOS uses native Apple authorization with a separate bundle ID audience, server nonce,
+and the same account/session policy; see [native Apple authorization](../native-api.md#native-apple-authorization).
+The sequence below describes browser sign-in.
 
 ```mermaid
 sequenceDiagram

@@ -19,7 +19,8 @@ an older server, a capabilities 404 permits public browsing and reports unavaila
 native authentication/synchronization. Existing-account local editing remains durable.
 
 The API keeps browser cookies and native bearer sessions separate. Native authentication
-reuses provider verification, browser binding, account policy, and identity linking.
+reuses provider verification, account policy, and identity linking. Google/Microsoft
+use browser binding; native Apple uses a server nonce and bundle ID audience.
 Mutation receipts survive resource deletion. Every voyage writer increments the
 content revision; variant processing does not. Publication waits for exactly the
 reviewed membership and order and stops after unrelated edits. A historical publication
@@ -162,7 +163,8 @@ offline example. Public photo grids use one column at accessibility text sizes.
 offline review and confirmation flow.
 
 `AuthenticationPresentation` composes the native exchange actor with a
-`BrowserAuthenticating` interface and shares sign-in, linking and deletion
+`BrowserAuthenticating` interface for Google/Microsoft and an `AppleAuthorizing`
+interface for native Apple authorization, and shares sign-in, linking and deletion
 reauthentication handling. It prevents concurrent button presses, clears canceled
 attempts, keeps failures visible and stops its progress state after every outcome.
 `BrowserAuthentication` uses the invoking window captured by `WindowContext`, and
@@ -170,6 +172,24 @@ settles its continuation once even if session startup and completion overlap.
 `AuthenticationPresentationTests` covers completed exchanges, linking, browser
 cancellation/start failure, and purpose-bound deletion proofs with synthetic sessions.
 These tests do not establish real-provider acceptance.
+
+`SystemAppleAuthorization` requests an Apple authorization code with a server nonce
+and app state through `ASAuthorizationController`. `ProviderSignInButton` renders
+Apple, Google, and Microsoft in one custom layout with official artwork, Sign in with
+titles, aligned logo/title columns, and a white outlined background. Apple uses the
+unchanged padded SVG from Apple Design Resources. Google uses Google Sans;
+Apple/Microsoft use the native system font with provider-specific metrics. See
+[button guidelines and layout](provider-sign-in-buttons.md) for requirements,
+reference differences, artwork provenance, and regression checks. All three
+buttons have equal width and 44-point height, and cancellation leaves the current
+screen open. Linking and deletion verification use the same native Apple adapter.
+The account-switching toggle applies to Google and Microsoft only. The app never
+falls back to browser Apple authorization when native Apple support is unavailable.
+See [native API behavior](native-api.md#native-apple-authorization) for audience,
+nonce, single-use, and account-binding checks. The entitlement is committed; real
+App ID provisioning and native/web grouping still require developer-portal setup.
+[Root TODO](../TODO.md) records deferred lifecycle and deletion fallback work.
+
 
 Network/storage toggles update one `SyncPreference` in a store transaction. They read
 the current policy instead of retaining a screen-local snapshot, and ignore actions
@@ -524,3 +544,58 @@ with every production file included and no exclusions. The matching report is
 coverage suites were not rerun for this formatting change. The hosted CI job and
 a new Release build were not run locally for this pass.
 
+
+## Native Apple authorization verification — November 3, 2026
+
+The new native Apple API tests first returned 404 for the missing routes. The Swift
+client test first failed to compile because `beginApple` did not exist. The branding
+checks reproduced missing logo/font assets and a narrower Apple touch area before
+implementation; the focused authentication, asset, and geometry checks now pass.
+
+Verification on stable toolchains:
+
+- `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` passed.
+- `cargo coverage -- --test-threads=1` passed with 98.68% lines, 98.92% functions,
+  and 95.12% regions across the backend. The new SQL uses runtime queries; no checked
+  SQL query changed, so no `.sqlx` metadata regeneration was needed.
+- Web type checking, lint, tests with coverage, and build passed. Coverage was
+  99.10% statements, 98.88% branches, 98.32% functions, and 99.34% lines.
+- `swift test --package-path ios --scratch-path ios/.build-xcode --enable-code-coverage`
+  passed all 164 package tests.
+- The full iPhone run (`ios/Scripts/test.sh`) passed 321 tests and failed one
+  notification-permission test while iOS was still returning its initial authorization
+  status. The same test passed alone on a fresh simulator with no code change.
+  The iPad guest-navigation check also passed. The sign-in tests passed in the full run.
+- Combined production Swift coverage was 19,114 / 19,996 executable lines (95.59%),
+  with every production Swift file measured and no new exclusions. The retained
+  initial result is `ios/TestResults/20261103-070236.xcresult`; isolated notification
+  and iPad results are `20261103-apple-notification.xcresult` and
+  `20261103-apple-ipad.xcresult`. Their profile snapshots were merged using
+  `ios/Scripts/coverage.py --profile-directory` for those three runs. The summary is
+  `ios/TestResults/20261103-070236-coverage-swift.json`.
+- The simulator screenshot retained by `AccountFlowTests` was visually checked for
+  Apple control appearance, full-color Google/Microsoft logos, text, spacing, and
+  equal button dimensions. Property lists and touched Swift formatting passed checks.
+
+Live Apple verification still needs portal capability/provisioning, the configured
+native bundle ID, grouping with the existing website Services ID, and a signed
+physical-device run. [iOS setup](ios-running.md#native-apple-sign-in-setup) describes
+that configuration. This verification does not implement the deferred credential
+lifecycle or deletion fallback in [TODO.md](../TODO.md).
+
+## Shared provider button verification — November 3, 2026
+
+The follow-up button checks began red on the missing Apple artwork and Sign in with
+wording. `ProviderSignInButton` now supplies one shared layout for all three providers,
+with brand-specific artwork, color, and typography. `AccountFlowTests` verifies equal
+44-point heights and widths, aligned titles, provider ordering, and 12-point row gaps.
+The focused authentication/artwork/UI run passed, and the screenshot was reviewed.
+
+The full `ios/Scripts/test.sh` run passed all 322 iPhone tests and the iPad navigation
+check without retries. Production Swift coverage was 19,093 / 19,977 executable lines
+(95.57%), with no exclusions added. The results are
+`ios/TestResults/20261103-125519.xcresult` and `20261103-125519-ipad.xcresult`.
+Backend/web code did not change in this follow-up; their previously recorded coverage
+measurements remain applicable and those suites were not rerun. See
+[provider button guidelines](provider-sign-in-buttons.md) for the provider comparison,
+source artwork, intentional differences, and complete verification details.

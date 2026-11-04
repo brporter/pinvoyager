@@ -224,6 +224,11 @@ impl OidcCore {
     /// Builds a client from cached metadata and the supplied secret without I/O.
     /// Each exchange uses current signing keys and, for Apple, a current secret.
     fn client(&self, secret: Option<ClientSecret>) -> DiscoveredClient {
+        self.client_without_redirect(secret)
+            .set_redirect_uri(self.redirect_uri.clone())
+    }
+
+    fn client_without_redirect(&self, secret: Option<ClientSecret>) -> DiscoveredClient {
         let metadata = {
             let cached = self
                 .metadata
@@ -233,7 +238,6 @@ impl OidcCore {
         };
 
         CoreClient::from_provider_metadata(metadata, self.client_id.clone(), secret)
-            .set_redirect_uri(self.redirect_uri.clone())
             // `client_secret_post` is the one method all three of these
             // providers advertise: Apple supports *only* it, and Google and
             // Microsoft support it alongside HTTP Basic. `oauth2` defaults to
@@ -312,7 +316,7 @@ impl OidcCore {
         pkce_verifier: &str,
         nonce: &str,
     ) -> Result<VerifiedIdentity, AuthError> {
-        self.exchange_with_revocation(code, pkce_verifier, nonce, None)
+        self.exchange_with_revocation(code, Some(pkce_verifier), nonce, None)
             .await
     }
 
@@ -323,29 +327,42 @@ impl OidcCore {
         nonce: &str,
         expected_subject: &str,
     ) -> Result<VerifiedIdentity, AuthError> {
-        self.exchange_with_revocation(code, verifier, nonce, Some(expected_subject))
+        self.exchange_with_revocation(code, Some(verifier), nonce, Some(expected_subject))
+            .await
+    }
+
+    pub(crate) async fn exchange_native_apple(
+        &self,
+        code: &str,
+        nonce: &str,
+        expected_subject: Option<&str>,
+    ) -> Result<VerifiedIdentity, AuthError> {
+        self.exchange_with_revocation(code, None, nonce, expected_subject)
             .await
     }
 
     async fn exchange_with_revocation(
         &self,
         code: &str,
-        pkce_verifier: &str,
+        pkce_verifier: Option<&str>,
         nonce: &str,
         revoke_subject: Option<&str>,
     ) -> Result<VerifiedIdentity, AuthError> {
-        let client = self.client(Some(self.secret.client_secret()?));
-
-        let token_response = client
+        let secret = Some(self.secret.client_secret()?);
+        let client = if pkce_verifier.is_some() {
+            self.client(secret)
+        } else {
+            self.client_without_redirect(secret)
+        };
+        let mut request = client
             .exchange_code(AuthorizationCode::new(code.to_owned()))
             .map_err(|err| {
                 AuthError::Configuration(format!("provider published no token endpoint: {err}"))
-            })?
-            // PKCE: the provider recomputes the challenge from this verifier and
-            // rejects the exchange unless it matches the one sent at `/start`,
-            // which is what stops an intercepted code being redeemed by anyone
-            // but us.
-            .set_pkce_verifier(PkceCodeVerifier::new(pkce_verifier.to_owned()))
+            })?;
+        if let Some(verifier) = pkce_verifier {
+            request = request.set_pkce_verifier(PkceCodeVerifier::new(verifier.to_owned()));
+        }
+        let token_response = request
             .request_async(&self.http)
             .await
             .map_err(|err| AuthError::Provider(format!("code exchange failed: {err}")))?;

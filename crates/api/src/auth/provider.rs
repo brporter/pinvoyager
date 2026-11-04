@@ -86,6 +86,22 @@ pub trait AuthProvider: Send + Sync {
         pkce_verifier: &str,
         nonce: &str,
     ) -> Result<VerifiedIdentity, AuthError>;
+    /// Native Apple codes use the bundle ID audience and no browser redirect or PKCE.
+    fn supports_native_apple(&self) -> bool {
+        false
+    }
+
+    async fn exchange_native_apple(
+        &self,
+        _code: &str,
+        _nonce: &str,
+        _expected_subject: Option<&str>,
+    ) -> Result<VerifiedIdentity, AuthError> {
+        Err(AuthError::Provider(
+            "Native Apple authorization is unavailable".into(),
+        ))
+    }
+
     /// Same-account deletion proof. Apple overrides this to revoke freshly exchanged tokens.
     async fn exchange_for_deletion(
         &self,

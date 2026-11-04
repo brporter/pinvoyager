@@ -29,9 +29,33 @@ final class AccountFlowTests: UITestCase {
     app.buttons["Sign-in methods"].tap()
     XCTAssertTrue(app.staticTexts["Linked"].waitUntilExists(timeout: 5))
     app.buttons["Link"].firstMatch.tap()
-    XCTAssertTrue(app.buttons["Continue with Apple"].waitUntilExists(timeout: 5))
-    app.switches["Use another account"].tap()
-    app.buttons["Continue with Apple"].tap()
+    XCTAssertTrue(app.buttons["Sign in with Apple"].waitUntilExists(timeout: 5))
+    XCTAssertTrue(app.buttons["Sign in with Google"].exists)
+    XCTAssertTrue(app.buttons["Sign in with Microsoft"].exists)
+    let apple = app.buttons["Sign in with Apple"]
+    XCTAssertEqual(apple.frame.height, 44, accuracy: 1)
+    XCTAssertGreaterThanOrEqual(apple.frame.width, app.buttons["Sign in with Google"].frame.width)
+    let google = app.buttons["Sign in with Google"]
+    let microsoft = app.buttons["Sign in with Microsoft"]
+    for button in [google, microsoft] {
+      XCTAssertEqual(button.frame.minX, apple.frame.minX, accuracy: 1)
+      XCTAssertEqual(button.frame.width, apple.frame.width, accuracy: 1)
+      XCTAssertEqual(button.frame.height, apple.frame.height, accuracy: 1)
+    }
+    let appleTitle = apple.staticTexts["Sign in with Apple"]
+    XCTAssertTrue(appleTitle.exists)
+    for (button, title) in [(google, "Sign in with Google"), (microsoft, "Sign in with Microsoft")]
+    {
+      XCTAssertEqual(button.staticTexts[title].frame.minX, appleTitle.frame.minX, accuracy: 1)
+    }
+    XCTAssertEqual(google.frame.minY - apple.frame.maxY, 12, accuracy: 1)
+    XCTAssertEqual(microsoft.frame.minY - google.frame.maxY, 12, accuracy: 1)
+    let buttonScreenshot = XCTAttachment(screenshot: app.screenshot())
+    buttonScreenshot.name = "Branded sign-in buttons"
+    buttonScreenshot.lifetime = .keepAlways
+    add(buttonScreenshot)
+    app.switches["Use another Google or Microsoft account"].tap()
+    app.buttons["Sign in with Apple"].tap()
     XCTAssertTrue(app.staticTexts["This content is unavailable."].waitUntilExists(timeout: 5))
     app.buttons["Cancel"].tap()
     app.navigationBars.buttons.element(boundBy: 0).tap()

@@ -140,6 +140,7 @@ public struct DiscoveryResponse: Codable, Sendable {
 
 public struct ClientCapabilities: Codable, Sendable {
   public let nativeAuthentication: Bool?
+  public let nativeAppleAuthentication: Bool?
   public let nativeProtocolVersions: [Int]
   public let providers: [String]
   public let formats: [String]

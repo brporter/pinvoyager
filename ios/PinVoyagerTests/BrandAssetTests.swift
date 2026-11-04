@@ -3,6 +3,15 @@ import XCTest
 
 @MainActor
 final class BrandAssetTests: XCTestCase {
+  func testProviderLogosLoadAsFullColorOriginalArtwork() throws {
+    XCTAssertNotNil(UIFont(name: "GoogleSans-Regular", size: 17))
+    for name in ["AppleSignIn", "GoogleSignIn", "MicrosoftSignIn"] {
+      let image = try XCTUnwrap(UIImage(named: name))
+      XCTAssertGreaterThan(image.size.width, 0)
+      XCTAssertEqual(image.renderingMode, .alwaysOriginal)
+    }
+  }
+
   func testAccountBrandIconLoadsDistinctLightAndDarkArtwork() throws {
     let light = try XCTUnwrap(
       UIImage(

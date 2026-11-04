@@ -7,6 +7,10 @@ records implemented behavior; [the iOS design](ios-app-design.md) records the fu
 
 ## Authentication
 
+Google and Microsoft use the system browser handoff described below. Apple uses
+[direct native authorization](#native-apple-authorization) in the current iOS app;
+existing browser handoff endpoints remain compatible with earlier clients.
+
 `http/auth/native.rs::{create_attempt,start,complete_verified,exchange,logout}` wraps
 existing provider verification in a ten-minute, one-use native attempt. The browser
 bootstrap retains provider state, nonce, provider PKCE, and the browser-binding
@@ -298,3 +302,59 @@ starting revision. The native cancellation request does not require a metadata
 revision. `native_publication::cancellation_does_not_claim_to_have_checked_a_stale_content_revision`
 and `WorkflowTests.cancelingKnownPublicationNeverRequiresAMetadataRevision` cover
 this distinction.
+
+## Native Apple authorization
+
+`http/auth/native/apple.rs::{create,complete}` provides a native Apple path alongside
+the browser handoff used by Google and Microsoft:
+
+| Route | Behavior |
+| --- | --- |
+| `POST /auth/native/apple/attempts` | Accept `mode` (`sign_in`, `link`, `reauth_delete`), app `state`, and S256 `challenge`. Return `attempt_id`, echoed `state`, and random server `nonce`; expire after ten minutes. Linking and deletion require a native bearer session. |
+| `POST /auth/native/apple/complete` | Accept `attempt_id`, `state`, `verifier`, and `authorization_code`. Consume the saved nonce before contacting Apple. Verify the code and returned ID token, then return the existing session-exchange response or a deletion proof. No browser callback, cookie, provider token, or app session appears in a URL. |
+
+Both successful responses use `Cache-Control: no-store`. `/api/client-capabilities`
+adds `native_apple_authentication`, true only when Apple initialized with a native
+client ID. Older servers omit it; iOS disables the Apple button rather than starting
+browser Apple sign-in. Native Apple attempts cannot enter the browser bootstrap.
+
+`AppleProvider` has separate OIDC clients and signed client secrets for the web
+Services ID and native bundle ID. `OidcCore::exchange_native_apple` omits browser
+redirect URI and provider PKCE: the system Apple request uses a server nonce, while
+the app verifier protects the PinVoyager attempt and session exchange. The server
+verifies signature, issuer, native audience, expiry, and nonce before creating or
+linking an identity. Apple credentials are never accepted based on an app-supplied
+subject, email, or unverified ID token. Reauthentication matches the existing Apple
+subject before revoking freshly exchanged tokens and returning deletion-only proof.
+Lost responses, consumed attempts, and failed provider verification require a fresh
+native authorization. No persistent provider-token storage is added.
+
+The iOS `NativeAuthentication::{beginApple,completeApple,completeAppleReauthentication}`
+validates echoed state, nonce length, returned authorization state, and single use. It saves only
+the opaque PinVoyager session in Keychain, and does not replace that session during
+deletion verification. `AuthenticationPresentation` keeps operations exclusive and
+handles system cancellation without an error alert.
+
+Configure `auth.providers.apple.native_client_id` to the signed application's bundle
+ID. Enable Sign in with Apple for that App ID and group the website Services ID with
+it in Apple's developer portal. Grouping preserves Apple subjects across website and
+native login; there is no automatic email-based migration. Keep the existing Services
+ID in `auth.providers.apple.client_id`. The committed entitlement alone cannot configure
+portal grouping or provisioning.
+
+Tests: `http::auth::native::apple_tests` covers existing web identity reuse, single
+use, nonce/state/verifier/audience/issuer/expiry/signature rejection, native-only
+configuration, authenticated linking, and same-account deletion revocation.
+`ios/Tests/PinVoyagerDataTests/AuthenticationTests.swift` checks request binding,
+credential saving, replay/cancellation, account mismatches, and deletion proof handling.
+`AuthenticationPresentationTests` checks native versus browser dispatch and cancellation;
+`BrandAssetTests` and `AccountFlowTests` check bundled assets and button geometry.
+Live Apple authorization and grouped-subject acceptance require a configured signed
+device build. Credential lifecycle and deletion without fresh Apple access remain
+in [TODO.md](../TODO.md).
+
+The new native Apple route tests began red with 404 and now pass in the complete
+backend coverage run. November 3, 2026 verification measured 98.68% lines, 98.92%
+functions, and 95.12% regions on stable Rust. See the
+[iOS verification record](ios-implementation.md#native-apple-authorization-verification--november-3-2026)
+for client tests, branding checks, simulator retry, and Swift/web coverage.

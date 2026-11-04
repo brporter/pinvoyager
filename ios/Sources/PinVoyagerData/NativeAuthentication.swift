@@ -25,6 +25,15 @@ public struct PendingAuthentication: Sendable {
   public let deletionAccountId: UUID?
 }
 
+public struct PendingAppleAuthentication: Sendable {
+  public let id: UUID
+  public let nonce: String
+  public let state: String
+  let verifier: String
+  let linkingAccountId: UUID?
+  let deletionAccountId: UUID?
+}
+
 public struct SessionExchange: Decodable, Sendable {
   public let sessionToken: String
   public let user: UserProfile
@@ -42,6 +51,105 @@ public actor NativeAuthentication {
     self.client = client
     self.credentials = credentials
   }
+
+  public func beginApple(
+    linkingAccountId: UUID? = nil,
+    deletionAccountId: UUID? = nil
+  )
+    async throws -> PendingAppleAuthentication
+  {
+    guard linkingAccountId == nil || deletionAccountId == nil else {
+      throw AuthenticationError.invalidAttempt
+    }
+    let state = try Self.randomToken()
+    let verifier = try Self.randomToken()
+    struct Body: Encodable { let mode: String; let state: String; let challenge: String }
+    struct Reply: Decodable, Sendable { let attemptId: UUID; let nonce: String; let state: String }
+    let reply: Reply = try await client.send(
+      method: "POST",
+      path: "/auth/native/apple/attempts",
+      body: APIJSON.encode(
+        Body(
+          mode: deletionAccountId != nil
+            ? "reauth_delete" : (linkingAccountId != nil ? "link" : "sign_in"),
+          state: state,
+          challenge: Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
+        )
+      ),
+      accountId: linkingAccountId ?? deletionAccountId
+    )
+    guard reply.state == state, reply.nonce.count >= 43, reply.nonce.count <= 128 else {
+      throw AuthenticationError.invalidAttempt
+    }
+    pendingIds.insert(reply.attemptId)
+    return PendingAppleAuthentication(
+      id: reply.attemptId,
+      nonce: reply.nonce,
+      state: state,
+      verifier: verifier,
+      linkingAccountId: linkingAccountId,
+      deletionAccountId: deletionAccountId
+    )
+  }
+
+  public func completeApple(
+    code: String,
+    state: String?,
+    pending: PendingAppleAuthentication
+  )
+    async throws -> SessionExchange
+  {
+    guard pending.deletionAccountId == nil else { throw AuthenticationError.invalidAttempt }
+    let reply: SessionExchange = try await client.send(
+      method: "POST",
+      path: "/auth/native/apple/complete",
+      body: appleBody(code: code, state: state, pending: pending)
+    )
+    return try await saveSession(reply, linkingAccountId: pending.linkingAccountId)
+  }
+
+  public func completeAppleReauthentication(
+    code: String,
+    state: String?,
+    pending: PendingAppleAuthentication
+  )
+    async throws -> DeletionProof
+  {
+    guard let account = pending.deletionAccountId else { throw AuthenticationError.invalidAttempt }
+    let proof: DeletionProof = try await client.send(
+      method: "POST",
+      path: "/auth/native/apple/complete",
+      body: appleBody(code: code, state: state, pending: pending)
+    )
+    guard proof.accountId == account, proof.provider == "apple",
+      proof.purpose == "account_deletion",
+      !proof.proofToken.isEmpty
+    else { throw WorkspaceError.wrongAccount }
+    return proof
+  }
+
+  private func appleBody(
+    code: String,
+    state: String?,
+    pending: PendingAppleAuthentication
+  ) throws -> Data {
+    guard state == pending.state, !code.isEmpty, code.utf8.count <= 4096,
+      pendingIds.remove(pending.id) != nil
+    else { throw AuthenticationError.invalidAttempt }
+    struct Body: Encodable {
+      let attemptId: UUID; let state: String; let verifier: String; let authorizationCode: String
+    }
+    return try APIJSON.encode(
+      Body(
+        attemptId: pending.id,
+        state: pending.state,
+        verifier: pending.verifier,
+        authorizationCode: code
+      )
+    )
+  }
+
+  public func cancel(_ pending: PendingAppleAuthentication) { pendingIds.remove(pending.id) }
 
   public func begin(
     provider: String,
@@ -130,8 +238,15 @@ public actor NativeAuthentication {
       path: "/auth/native/exchange",
       body: APIJSON.encode(body)
     )
+    return try await saveSession(reply, linkingAccountId: pending.linkingAccountId)
+  }
+
+  private func saveSession(
+    _ reply: SessionExchange,
+    linkingAccountId: UUID?
+  ) async throws -> SessionExchange {
     guard !reply.sessionToken.isEmpty,
-      pending.linkingAccountId == nil || pending.linkingAccountId == reply.user.id
+      linkingAccountId == nil || linkingAccountId == reply.user.id
     else { throw WorkspaceError.wrongAccount }
     var credential = SessionCredential(accountId: reply.user.id, token: reply.sessionToken)
     credential.idleDeadline = reply.idleDeadline

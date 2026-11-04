@@ -30,6 +30,7 @@ async fn configured_apple_provider_is_discovered_and_registered() {
         session: Default::default(),
         providers: ProvidersConfig {
             apple: Some(AppleProviderConfig {
+                native_client_id: None,
                 client_id: support::CLIENT_ID.to_owned(),
                 team_id: "ABCDE12345".to_owned(),
                 key_id: "KEYID67890".to_owned(),
@@ -71,6 +72,7 @@ async fn every_configured_provider_is_discovered_registered_and_authorizable() {
                 issuer: mock.issuer().clone(),
             }),
             apple: Some(AppleProviderConfig {
+                native_client_id: None,
                 client_id: support::CLIENT_ID.to_owned(),
                 team_id: "ABCDE12345".to_owned(),
                 key_id: "KEYID67890".to_owned(),
@@ -105,6 +107,7 @@ async fn a_provider_that_fails_startup_discovery_is_disabled_without_stopping_st
         session: Default::default(),
         providers: ProvidersConfig {
             apple: Some(AppleProviderConfig {
+                native_client_id: None,
                 client_id: "service.example".to_owned(),
                 team_id: "ABCDE12345".to_owned(),
                 key_id: "KEYID67890".to_owned(),
@@ -140,4 +143,19 @@ fn every_protocol_provider_maps_to_its_storage_provider() {
 fn removed_provider_is_not_recognized() {
     assert_eq!(ProviderKind::parse("facebook"), None);
     assert_eq!(DISPLAY_ORDER.len(), 3);
+}
+
+#[tokio::test]
+async fn browser_providers_reject_direct_native_apple_exchange() {
+    let mock = support::MockOidcProvider::start().await;
+    let config: AuthConfig = serde_json::from_value(serde_json::json!({"base_url":"https://pinvoyager.test","providers":{"google":{"client_id":support::CLIENT_ID,"client_secret":support::CLIENT_SECRET,"issuer":mock.issuer().as_str()}}})).expect("config");
+    let providers = ProviderRegistry::from_config(&config).await;
+    let provider = providers.get(ProviderKind::Google).expect("Google");
+    assert!(!provider.supports_native_apple());
+    assert!(
+        provider
+            .exchange_native_apple("code", "nonce", None)
+            .await
+            .is_err()
+    );
 }

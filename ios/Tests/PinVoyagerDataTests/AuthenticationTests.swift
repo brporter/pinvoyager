@@ -122,3 +122,188 @@ func authenticationAcceptsCanonicalLowercaseServerUUIDs() async throws {
     #expect(try await keychain.read(accountId: accountId) == nil)
   }
 #endif
+
+@Test
+func nativeAppleBindsStateAndNonceAndRedeemsOnlyOnce() async throws {
+  let id = UUID()
+  let account = UUID()
+  let credentials = TestCredentials()
+  let transport = StubHTTP([
+    response(
+      201,
+      "{\"attempt_id\":\"\(id)\",\"nonce\":\"server-nonce-with-at-least-forty-three-characters\",\"state\":\"placeholder\"}"
+    )
+  ])
+  let auth = NativeAuthentication(
+    client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+    credentials: credentials
+  )
+  // The server must echo the app state; an unrelated response cannot start authorization.
+  await #expect(throws: AuthenticationError.self) { try await auth.beginApple() }
+  #expect(await credentials.read(accountId: account) == nil)
+}
+
+actor AppleHTTP: HTTPTransport {
+  var requests: [URLRequest] = []
+  let account: UUID
+  var reply: HTTPResponse?
+  let nonce: String
+
+  init(
+    account: UUID = UUID(),
+    reply: HTTPResponse? = nil,
+    nonce: String = "server-nonce-with-at-least-forty-three-characters"
+  ) {
+    self.account = account
+    self.reply = reply
+    self.nonce = nonce
+  }
+
+  func send(_ request: URLRequest) async throws -> HTTPResponse {
+    requests.append(request)
+    if request.url?.path == "/auth/native/apple/attempts" {
+      let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: String]
+      return HTTPResponse(
+        status: 201,
+        body: try JSONSerialization.data(withJSONObject: [
+          "attempt_id": UUID().uuidString, "state": body["state"]!,
+          "nonce": nonce,
+        ])
+      )
+    }
+    if let reply { return reply }
+    return response(
+      200,
+      "{\"session_token\":\"native-apple-session\",\"user\":{\"id\":\"\(account)\",\"display_name\":\"alice\"},\"identities\":[],\"idle_deadline\":\"2026-11-04T00:00:00Z\",\"absolute_deadline\":\"2027-01-01T00:00:00Z\"}"
+    )
+  }
+}
+
+@Test
+func nativeAppleRejectsStateCodeAndReplayBeforeSendingCredentials() async throws {
+  let transport = AppleHTTP()
+  let credentials = TestCredentials()
+  let auth = NativeAuthentication(
+    client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+    credentials: credentials
+  )
+  let pending = try await auth.beginApple()
+  for (code, state) in [
+    ("code", "wrong"), ("", pending.state), (String(repeating: "a", count: 4097), pending.state),
+  ] {
+    await #expect(throws: AuthenticationError.self) {
+      try await auth.completeApple(code: code, state: state, pending: pending)
+    }
+  }
+  #expect(await transport.requests.count == 1)
+  let result = try await auth.completeApple(
+    code: "apple-code",
+    state: pending.state,
+    pending: pending
+  )
+  #expect(await credentials.read(accountId: result.user.id)?.token == "native-apple-session")
+  await #expect(throws: AuthenticationError.self) {
+    try await auth.completeApple(code: "apple-code", state: pending.state, pending: pending)
+  }
+  #expect(await transport.requests.count == 2)
+  let body = try #require(
+    JSONSerialization.jsonObject(with: await transport.requests[1].httpBody!) as? [String: String]
+  )
+  #expect(body["authorization_code"] == "apple-code")
+  #expect(body["verifier"]?.count == 43)
+  #expect(body["nonce"] == nil)
+}
+
+@Test
+func nativeAppleLinkingAndDeletionNeverAcceptAnotherAccountOrReplaceDeletionSession() async throws {
+  let account = UUID()
+  let credentials = TestCredentials()
+  await credentials.save(SessionCredential(accountId: account, token: "existing"))
+  let proof = response(
+    200,
+    "{\"proof_token\":\"purpose-bound\",\"account_id\":\"\(account)\",\"purpose\":\"account_deletion\",\"provider\":\"apple\",\"expires_at\":\"2026-11-04T00:00:00Z\"}"
+  )
+  let transport = AppleHTTP(reply: proof)
+  let auth = NativeAuthentication(
+    client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+    credentials: credentials
+  )
+  let pending = try await auth.beginApple(deletionAccountId: account)
+  await #expect(throws: AuthenticationError.self) {
+    try await auth.completeApple(code: "code", state: pending.state, pending: pending)
+  }
+  let result = try await auth.completeAppleReauthentication(
+    code: "code",
+    state: pending.state,
+    pending: pending
+  )
+  #expect(result.proofToken == "purpose-bound")
+  #expect(await credentials.read(accountId: account)?.token == "existing")
+  let first = await transport.requests[0]
+  #expect(first.value(forHTTPHeaderField: "Authorization") == "Bearer existing")
+  let body = try #require(JSONSerialization.jsonObject(with: first.httpBody!) as? [String: String])
+  #expect(body["mode"] == "reauth_delete")
+  let linkHTTP = AppleHTTP()
+  let linking = NativeAuthentication(
+    client: APIClient(origin: try testOrigin(), transport: linkHTTP, credentials: credentials),
+    credentials: credentials
+  )
+  let link = try await linking.beginApple(linkingAccountId: account)
+  await #expect(throws: WorkspaceError.self) {
+    try await linking.completeApple(code: "code", state: link.state, pending: link)
+  }
+  let canceled = try await linking.beginApple()
+  await linking.cancel(canceled)
+  await #expect(throws: AuthenticationError.self) {
+    try await linking.completeApple(code: "code", state: canceled.state, pending: canceled)
+  }
+  await #expect(throws: AuthenticationError.self) {
+    try await linking.beginApple(linkingAccountId: account, deletionAccountId: account)
+  }
+}
+
+@Test
+func nativeAppleRejectsMalformedNoncesAndDeletionProofs() async throws {
+  let account = UUID()
+  let credentials = TestCredentials()
+  await credentials.save(SessionCredential(accountId: account, token: "existing"))
+  for nonce in [String(repeating: "a", count: 42), String(repeating: "a", count: 129)] {
+    let transport = AppleHTTP(nonce: nonce)
+    let auth = NativeAuthentication(
+      client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+      credentials: credentials
+    )
+    await #expect(throws: AuthenticationError.self) { try await auth.beginApple() }
+  }
+  for field in ["account_id", "provider", "purpose", "proof_token"] {
+    var proof = [
+      "account_id": account.uuidString, "provider": "apple", "purpose": "account_deletion",
+      "proof_token": "proof", "expires_at": "2026-11-04T00:00:00Z",
+    ]
+    proof[field] = field == "account_id" ? UUID().uuidString : ""
+    let transport = AppleHTTP(
+      reply: HTTPResponse(status: 200, body: try JSONSerialization.data(withJSONObject: proof))
+    )
+    let auth = NativeAuthentication(
+      client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+      credentials: credentials
+    )
+    let pending = try await auth.beginApple(deletionAccountId: account)
+    await #expect(throws: WorkspaceError.self) {
+      try await auth.completeAppleReauthentication(
+        code: "code",
+        state: pending.state,
+        pending: pending
+      )
+    }
+    let signIn = try await auth.beginApple()
+    await #expect(throws: AuthenticationError.self) {
+      try await auth.completeAppleReauthentication(
+        code: "code",
+        state: signIn.state,
+        pending: signIn
+      )
+    }
+  }
+  #expect(await credentials.read(accountId: account)?.token == "existing")
+}

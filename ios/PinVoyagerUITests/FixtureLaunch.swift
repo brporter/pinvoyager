@@ -17,7 +17,8 @@ struct FixtureLaunch {
       try JSONSerialization.jsonObject(with: Self.fixture("native_capabilities")) as? [String: Any]
     )
     capabilities["native_protocol_versions"] = []
-    capabilities["providers"] = ["apple", "google", "microsoft"]
+    capabilities["providers"] = ["microsoft", "google", "apple"]
+    capabilities["native_apple_authentication"] = true
     reply(
       "/api/client-capabilities",
       body: try JSONSerialization.data(withJSONObject: capabilities)

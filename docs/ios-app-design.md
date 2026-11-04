@@ -379,8 +379,8 @@ an old voyage may have changed without moving to the first list page.
 
 ### S06 Sign in and authentication result
 
-Native sheet with logo, **Continue with Apple**, **Continue with Google**,
-**Continue with Microsoft**, Terms, Privacy, and Cancel. Display only configured
+Native sheet with logo, **Sign in with Apple**, **Sign in with Google**,
+**Sign in with Microsoft**, Terms, Privacy, and Cancel. Display only configured
 providers from the capability response; keep a meaningful retry state if none
 are available. Buttons launch `ASWebAuthenticationSession`, not an embedded
 `WKWebView`. A small **Use another account** option requests ephemeral browsing.
@@ -1321,12 +1321,29 @@ sequenceDiagram
     App->>API: GET me with native bearer
 ```
 
-Refactor shared verification/sign-in policy rather than cloning it. Keep provider
-tokens transient. Version one continues Apple's existing web provider/service
-identity path; adding direct native Sign in with Apple later requires explicit
-audience/subject grouping and migration tests so existing users do not get a
-second account. Native linking must carry the authenticated account through its
-server attempt and never rely on which account happens to be signed into Safari.
+Apple uses a custom button with official Apple Design Resources artwork and the
+native Authentication Services sheet for sign-in, linking, and deletion verification. Google and Microsoft use
+full-color provider logos and system browser sessions. The account-switching toggle
+applies only to Google and Microsoft; native Apple uses the device's Apple Account.
+All three buttons use Sign in with wording, aligned logo/title columns, the same
+white outlined shape, equal width, and a 44-point height. See
+[provider button guidelines](provider-sign-in-buttons.md) for brand-specific differences.
+
+The app starts `/auth/native/apple/attempts` before requesting native Apple
+credentials, binds the request to the server nonce and app state, and submits the
+authorization code and app verifier to `/auth/native/apple/complete`. The server
+exchanges the code with the configured bundle ID, verifies the returned ID token,
+and reuses the existing account/session or deletion-proof pipeline. Native Apple
+requests include no name or email scopes. Provider tokens remain transient.
+
+The Apple App ID and web Services ID must be grouped in the developer portal so
+Apple returns the same subject for existing users. Configure the native bundle ID
+separately from the web Services ID. Never merge identities by email or accept the
+web audience on the native endpoint. `native::apple_tests` verifies that an existing
+web Apple identity retains its account and rejects the web audience for native codes.
+Native linking carries the authenticated account through the saved server attempt.
+See [native API behavior](native-api.md#native-apple-authorization) and
+[remaining Apple work](../TODO.md) for deferred credential lifecycle and deletion fallback.
 
 ### Operation receipts and revisions
 

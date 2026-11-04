@@ -177,7 +177,8 @@ Create a Sign in with Apple private key associated with the primary App ID,
 download the `.p8` file, and record its Key ID and your Team ID.
 
 ```dotenv
-PINVOYAGER__AUTH__PROVIDERS__APPLE__CLIENT_ID=your-services-id
+PINVOYAGER__AUTH__PROVIDERS__APPLE__CLIENT_ID=com.pinvoyager
+PINVOYAGER__AUTH__PROVIDERS__APPLE__NATIVE_CLIENT_ID=com.pinvoyager.app
 PINVOYAGER__AUTH__PROVIDERS__APPLE__TEAM_ID=your-team-id
 PINVOYAGER__AUTH__PROVIDERS__APPLE__KEY_ID=your-key-id
 PINVOYAGER__AUTH__PROVIDERS__APPLE__PRIVATE_KEY_PEM='-----BEGIN PRIVATE KEY-----
@@ -188,6 +189,37 @@ your-key-contents
 Compose supports a multiline single-quoted value in `.env`. The API's
 `auth/providers/apple.rs::AppleProvider` signs its own expiring client secrets
 from this key; do not create a static Apple client-secret value.
+
+The production website uses Services ID `com.pinvoyager`; the native app uses bundle
+ID `com.pinvoyager.app`. The owner verified their association in Apple Developer on
+November 4, 2026. Use the existing web credentials and signing key for that associated
+App ID/group. The signed iOS provisioning profile must include Sign in with Apple;
+the entitlement is already in `ios/PinVoyager/PinVoyager.entitlements`.
+
+To activate native Apple sign-in on the existing VM, add the non-secret
+`PINVOYAGER__AUTH__PROVIDERS__APPLE__NATIVE_CLIENT_ID=com.pinvoyager.app` setting to
+`/opt/pinvoyager/.env`. Deploy an API image containing
+`http/auth/native/apple.rs::{create,complete}` and migration
+`20261103000001_native_apple_authorization.sql`; migrations run at startup. After
+the image is published, recreate the API so it receives the environment update:
+
+```sh
+cd /opt/pinvoyager
+sudo docker compose pull api
+sudo docker compose up -d --no-deps --force-recreate --wait api
+```
+
+Watchtower image updates alone do not load edits from the host's `.env` into an
+existing container configuration. Check `/ready` and `/api/client-capabilities`:
+the latter must include `apple` in `providers` and
+`"native_apple_authentication": true`. Confirm that web Apple sign-in still redirects
+with `client_id=com.pinvoyager`, then test a signed iPhone build using the same website
+account. See [iOS setup](ios-running.md#native-apple-sign-in-setup).
+
+On November 4, 2026, the native client ID was added to the production environment
+file with a mode-600 backup. `docker compose config` resolved website ID
+`com.pinvoyager` and native ID `com.pinvoyager.app`. Live native capability still
+requires deploying this API revision and recreating the container as described above.
 
 Sources: [Apple web configuration](https://developer.apple.com/help/account/capabilities/configure-sign-in-with-apple-for-the-web),
 [Apple private key creation](https://developer.apple.com/help/account/capabilities/create-a-sign-in-with-apple-private-key).

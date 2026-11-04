@@ -102,7 +102,7 @@ final class AuthenticationPresentationTests: XCTestCase {
       XCTAssertFalse(concurrent)
       throw ASWebAuthenticationSessionError(.canceledLogin)
     }
-    let result = await presentation.signIn(provider: "apple", ephemeral: false) { _ in
+    let result = await presentation.signIn(provider: "google", ephemeral: false) { _ in
       XCTFail("Canceled acceptance")
     }
     XCTAssertFalse(result)
@@ -191,7 +191,7 @@ final class AuthenticationPresentationTests: XCTestCase {
     let browser = PresentationBrowser { _ in try await self.callback(transport) }
     let presentation = AuthenticationPresentation(authentication: auth, browser: browser)
     var proof: String?
-    let completed = await presentation.reauthenticate(provider: "apple", accountId: account) {
+    let completed = await presentation.reauthenticate(provider: "google", accountId: account) {
       proof = $0.proofToken
     }
     XCTAssertTrue(completed)
@@ -262,5 +262,160 @@ extension AuthenticationPresentationTests {
       _ = try await canceled.open(url, ephemeral: false)
       XCTFail("A missing callback must report cancellation")
     } catch is AuthenticationError {} catch { XCTFail("Unexpected error: \(error)") }
+  }
+}
+
+@MainActor
+private final class StubAppleAuthorization: AppleAuthorizing {
+  var requests: [(String, String)] = []
+  var failure: (any Error)?
+
+  func authorize(nonce: String, state: String) async throws -> AppleAuthorization {
+    requests.append((nonce, state))
+    if let failure { throw failure }
+    return AppleAuthorization(code: "native-apple-code", state: state)
+  }
+}
+
+extension AuthenticationPresentationTests {
+  func testAppleUsesNativeAuthorizationAndNeverOpensTheBrowser() async throws {
+    let credentials = TestCredentials()
+    let transport = AppleHTTP()
+    let auth = NativeAuthentication(
+      client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+      credentials: credentials
+    )
+    let apple = StubAppleAuthorization()
+    let browser = PresentationBrowser { _ in
+      XCTFail("Apple must not open a browser"); throw AuthenticationError.invalidAttempt
+    }
+    let presentation = AuthenticationPresentation(
+      authentication: auth,
+      browser: browser,
+      apple: apple
+    )
+    var accepted = false
+    let result = await presentation.signIn(provider: "apple", ephemeral: true) { _ in
+      accepted = true
+    }
+    XCTAssertTrue(result)
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(apple.requests.count, 1)
+    XCTAssertEqual(apple.requests[0].0, "server-nonce-with-at-least-forty-three-characters")
+    XCTAssertTrue(browser.opened.isEmpty)
+    apple.failure = ASAuthorizationError(.canceled)
+    let canceled = await presentation.signIn(provider: "apple", ephemeral: false) { _ in
+      XCTFail("Canceled authorization")
+    }
+    XCTAssertFalse(canceled)
+    XCTAssertNil(presentation.error)
+    XCTAssertFalse(presentation.busy)
+  }
+}
+
+@MainActor
+private final class StubAppleController: AppleAuthorizationControlling {
+  var delegate: (any ASAuthorizationControllerDelegate)?
+  var presentationContextProvider: (any ASAuthorizationControllerPresentationContextProviding)?
+  var action: (() -> Void)?
+  func performRequests() { action?() }
+}
+
+extension AuthenticationPresentationTests {
+  func testSystemAppleRequestsBoundCredentialsAndIgnoresDuplicateCompletion() async throws {
+    let window = UIWindow()
+    let native = ASAuthorizationController(authorizationRequests: [
+      ASAuthorizationAppleIDProvider().createRequest()
+    ])
+    let stub = StubAppleController()
+    let apple = SystemAppleAuthorization(
+      anchor: { window },
+      factory: { request in
+        XCTAssertEqual(request.nonce, "server-nonce")
+        XCTAssertEqual(request.state, "app-state")
+        XCTAssertEqual(request.requestedScopes, [])
+        stub.action = {
+          stub.delegate?.authorizationController?(
+            controller: native,
+            didCompleteWithError: ASAuthorizationError(.canceled)
+          )
+          stub.delegate?.authorizationController?(
+            controller: native,
+            didCompleteWithError: AuthenticationError.invalidAttempt
+          )
+        }
+        return stub
+      }
+    )
+    do {
+      _ = try await apple.authorize(nonce: "server-nonce", state: "app-state"); XCTFail("Canceled")
+    } catch let error as ASAuthorizationError { XCTAssertEqual(error.code, .canceled) }
+    XCTAssertTrue(apple.presentationAnchor(for: native) === window)
+    for code in [nil, Data(), Data([0xff])] as [Data?] {
+      XCTAssertThrowsError(
+        try SystemAppleAuthorization.credential(code: code, state: "state").get()
+      )
+    }
+    let credential = try SystemAppleAuthorization.credential(
+      code: Data("code".utf8),
+      state: "state"
+    ).get()
+    XCTAssertEqual(credential.code, "code")
+    XCTAssertEqual(credential.state, "state")
+  }
+
+  func testNativeAppleLinkAndDeletionUseTheSavedAccountAndNeverOpenBrowser() async throws {
+    let account = UUID()
+    let credentials = TestCredentials()
+    await credentials.save(SessionCredential(accountId: account, token: "existing"))
+    let apple = StubAppleAuthorization()
+    let browser = PresentationBrowser { _ in
+      XCTFail("Unexpected browser"); throw AuthenticationError.invalidAttempt
+    }
+    let proof = response(
+      200,
+      "{\"proof_token\":\"native-proof\",\"account_id\":\"\(account)\",\"purpose\":\"account_deletion\",\"provider\":\"apple\",\"expires_at\":\"2026-11-04T00:00:00Z\"}"
+    )
+    let transport = AppleHTTP(reply: proof)
+    let auth = NativeAuthentication(
+      client: APIClient(origin: try testOrigin(), transport: transport, credentials: credentials),
+      credentials: credentials
+    )
+    let presentation = AuthenticationPresentation(
+      authentication: auth,
+      browser: browser,
+      apple: apple
+    )
+    var accepted: String?
+    let result = await presentation.reauthenticate(provider: "apple", accountId: account) {
+      accepted = $0.proofToken
+    }
+    XCTAssertTrue(result)
+    XCTAssertEqual(accepted, "native-proof")
+    XCTAssertTrue(browser.opened.isEmpty)
+    let linkHTTP = AppleHTTP(account: account)
+    let linkAuth = NativeAuthentication(
+      client: APIClient(origin: try testOrigin(), transport: linkHTTP, credentials: credentials),
+      credentials: credentials
+    )
+    let linking = AuthenticationPresentation(
+      authentication: linkAuth,
+      browser: browser,
+      apple: apple
+    )
+    let linked = await linking.signIn(
+      provider: "apple",
+      linkingAccountId: account,
+      ephemeral: false
+    ) { XCTAssertEqual($0.user.id, account) }
+    XCTAssertTrue(linked)
+    let request = await linkHTTP.requests[0]
+    XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer existing")
+    apple.failure = AuthenticationError.invalidAttempt
+    let failed = await linking.signIn(provider: "apple", ephemeral: false) { _ in
+      XCTFail("Failed authorization")
+    }
+    XCTAssertFalse(failed)
+    XCTAssertNotNil(linking.error)
   }
 }

@@ -2,7 +2,7 @@
 //!
 //! Apple requires an ES256 JWT as the client secret. `AppleClientSecret`
 //! caches that signature and renews it before expiry. Authorization uses a
-//! form-POST callback.
+//! form-POST callback for browsers; native codes use a separate bundle ID audience.
 
 use std::sync::{Arc, Mutex};
 
@@ -22,7 +22,7 @@ use crate::config::AppleProviderConfig;
 pub(crate) const APPLE_ISSUER: &str = "https://appleid.apple.com";
 
 /// `aud` of the client-secret JWT. Fixed by Apple, and *not* the same thing as
-/// the `aud` of the ID token, which is our Services ID.
+/// the `aud` of the ID token, which is our Services ID or native bundle ID.
 const CLIENT_SECRET_AUDIENCE: &str = "https://appleid.apple.com";
 
 /// Lifetime of a generated client-secret JWT: two weeks.
@@ -33,6 +33,7 @@ const CLIENT_SECRET_RENEW_BEFORE: Duration = Duration::hours(1);
 
 pub(crate) struct AppleProvider {
     core: OidcCore,
+    native_core: Option<OidcCore>,
 }
 
 impl AppleProvider {
@@ -61,7 +62,32 @@ impl AppleProvider {
         )
         .await?;
 
-        Ok(Self { core })
+        let native_core = if let Some(client_id) = &config.native_client_id {
+            if client_id.trim().is_empty() || client_id == &config.client_id {
+                return Err(AuthError::Configuration(
+                    "Apple native_client_id must be a bundle ID distinct from the Services ID"
+                        .into(),
+                ));
+            }
+            let mut native_secret = AppleClientSecret::new(config)?;
+            native_secret.client_id = client_id.clone();
+            native_secret.probe()?;
+            Some(
+                OidcCore::discover(
+                    ProviderKind::Apple,
+                    &issuer,
+                    client_id,
+                    Arc::new(native_secret),
+                    super::callback_uri(base_url, ProviderKind::Apple)?,
+                    vec![],
+                    vec![],
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        Ok(Self { core, native_core })
     }
 }
 
@@ -83,6 +109,23 @@ impl crate::auth::AuthProvider for AppleProvider {
     ) -> Result<VerifiedIdentity, AuthError> {
         self.core.exchange(code, pkce_verifier, nonce).await
     }
+    fn supports_native_apple(&self) -> bool {
+        self.native_core.is_some()
+    }
+
+    async fn exchange_native_apple(
+        &self,
+        code: &str,
+        nonce: &str,
+        expected_subject: Option<&str>,
+    ) -> Result<VerifiedIdentity, AuthError> {
+        let core = self.native_core.as_ref().ok_or_else(|| {
+            AuthError::Provider("Native Apple authorization is unavailable".into())
+        })?;
+        core.exchange_native_apple(code, nonce, expected_subject)
+            .await
+    }
+
     async fn exchange_for_deletion(
         &self,
         code: &str,
@@ -119,7 +162,7 @@ struct ClientSecretClaims {
     exp: i64,
     /// Always Apple, never our own service.
     aud: String,
-    /// The Services ID — the same value as the ID token's `aud`.
+    /// The client ID (Services ID or native bundle ID), matching the ID token audience.
     sub: String,
 }
 

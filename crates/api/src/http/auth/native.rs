@@ -1,4 +1,4 @@
-//! App PKCE handoff around the shared, browser-bound provider verification.
+//! Native sessions with browser provider handoff and direct Apple authorization.
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -24,9 +24,13 @@ use crate::{
     db::repo::users,
 };
 
+mod apple;
+
 pub(super) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/client-capabilities", get(capabilities))
+        .route("/auth/native/apple/attempts", post(apple::create))
+        .route("/auth/native/apple/complete", post(apple::complete))
         .route("/auth/native/attempts", post(create_attempt))
         .route("/auth/native/reauth-attempts", post(create_reauth))
         .route("/auth/native/attempts/{id}/start", get(start))
@@ -43,6 +47,7 @@ async fn capabilities(State(state): State<AppState>) -> Response {
         StatusCode::OK,
         serde_json::json!({
             "native_authentication": true,
+            "native_apple_authentication": state.providers.get(ProviderKind::Apple).is_some_and(|provider| provider.supports_native_apple()),
             "native_protocol_versions": [1],
             "providers":state.providers.configured().iter().map(|kind|kind.as_str()).collect::<Vec<_>>(),
             "formats":["heic","jpeg","png","webp"],
@@ -372,3 +377,7 @@ pub(super) async fn reauth_subject(
     let subject: String = sqlx::query_scalar("SELECT i.subject FROM identities i JOIN users u ON u.id=i.user_id WHERE i.user_id=$1 AND i.provider=$2 AND NOT u.suspended").bind(attempt.user_id).bind(provider.as_str()).fetch_optional(&state.pool).await?.ok_or_else(invalid)?;
     Ok(Some(subject))
 }
+
+#[cfg(test)]
+#[path = "native/apple_tests.rs"]
+mod apple_tests;

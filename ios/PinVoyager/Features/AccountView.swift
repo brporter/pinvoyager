@@ -182,17 +182,21 @@ struct SignInView: View {
               "Native sign-in is not available on this server yet. Public voyages remain available in Discover."
             )
           }
-          ForEach(
-            model.capabilities?.providers.filter { ["apple", "google", "microsoft"].contains($0) }
-              ?? [],
-            id: \.self
-          ) { provider in
-            Button("Continue with \(provider.capitalized)") { signIn(provider) }.disabled(
-              busy || model.offline || !model.nativeAuthenticationAvailable
-            ).frame(minHeight: 44)
+          VStack(spacing: 12) {
+            ForEach(
+              ["apple", "google", "microsoft"].filter {
+                model.capabilities?.providers.contains($0) == true
+              },
+              id: \.self
+            ) { provider in
+              ProviderSignInButton(provider: provider) { signIn(provider) }.disabled(
+                busy || model.offline || !model.nativeAuthenticationAvailable
+                  || (provider == "apple" && model.capabilities?.nativeAppleAuthentication != true)
+              ).listRowSeparator(.hidden)
+            }
           }
           if busy { ProgressView("Finishing sign-in") }
-          Toggle("Use another account", isOn: $ephemeral).disabled(busy)
+          Toggle("Use another Google or Microsoft account", isOn: $ephemeral).disabled(busy)
           if let error { ErrorNotice(message: error) }
           Button("Refresh sign-in options") { Task { await model.checkCapabilities() } }.disabled(
             busy || model.offline
@@ -216,7 +220,8 @@ struct SignInView: View {
       self.presentation
       ?? AuthenticationPresentation(
         authentication: model.authentication,
-        browser: BrowserAuthentication(anchor: { window.anchor() })
+        browser: BrowserAuthentication(anchor: { window.anchor() }),
+        apple: SystemAppleAuthorization(anchor: { window.anchor() })
       )
     self.presentation = presentation
     let account = model.activeAccountId
@@ -474,7 +479,8 @@ struct DeleteAccountView: View {
       self.presentation
       ?? AuthenticationPresentation(
         authentication: model.authentication,
-        browser: BrowserAuthentication(anchor: { window.anchor() })
+        browser: BrowserAuthentication(anchor: { window.anchor() }),
+        apple: SystemAppleAuthorization(anchor: { window.anchor() })
       )
     self.presentation = presentation
     error = nil

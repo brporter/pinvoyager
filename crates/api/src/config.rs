@@ -136,6 +136,9 @@ pub struct OidcProviderConfig {
 pub struct AppleProviderConfig {
     /// The Services ID, not the App ID.
     pub client_id: String,
+    /// Bundle ID of the native app, grouped with the web Services ID at Apple.
+    #[serde(default)]
+    pub native_client_id: Option<String>,
     pub team_id: String,
     /// Key ID of the .p8 signing key.
     pub key_id: String,
