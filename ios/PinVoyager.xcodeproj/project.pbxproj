@@ -318,6 +318,7 @@
 				CODE_SIGN_ENTITLEMENTS = PinVoyager/PinVoyager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = HKZTL8G4EG;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PinVoyager/Info.plist;
@@ -429,6 +430,7 @@
 				CODE_SIGN_ENTITLEMENTS = PinVoyager/PinVoyager.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = HKZTL8G4EG;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PinVoyager/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PinVoyager;
